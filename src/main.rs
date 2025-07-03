@@ -23,6 +23,7 @@ use {defmt_rtt as _, panic_probe as _};
 // Add imports for INA226 and shared bus I2C device
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as EmbassyI2cDevice; // Alias for clarity
 use ina226::INA226;
+use tca6424::{Tca6424, Pin, PinDirection, PinState};
 // Removed unused imports: AsyncI2c
 
 use defmt::*;
@@ -120,6 +121,17 @@ async fn main(_spawner: Spawner) {
     ina226_3.callibrate(0.010, 4.0).await.unwrap();
 
     info!("INA226 sensors initialized.");
+
+    // Create I2cDevice instance for TCA6424
+    static I2C_DEVICE_TCA6424_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();
+    let mut i2c_device_tca6424 = I2C_DEVICE_TCA6424_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
+    let mut tca6424_expander = Tca6424::new(&mut i2c_device_tca6424, tca6424::DEFAULT_ADDRESS).unwrap();
+    info!("TCA6424 expander initialized.");
+
+    // Configure P01 (Port 2 UFP) and P25 (Port 3 UFP) as inputs
+    tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap();
+    tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap();
+    info!("TCA6424 P01 and P25 configured as inputs.");
 
     struct EmbassyDisplayTimer;
     impl Gc9d01Timer for EmbassyDisplayTimer {
@@ -260,6 +272,14 @@ async fn main(_spawner: Spawner) {
         let current3 = ina226_3.current_amps().await.unwrap_or(None).unwrap_or(0.0);
         let power3 = ina226_3.power_watts().await.unwrap_or(None).unwrap_or(0.0);
 
+        // Read P2_UFP (P01) and P3_UFP (P25) states
+        let p2_ufp_state = tca6424_expander.get_pin_input_state(Pin::P01).await.unwrap();
+        let p3_ufp_state = tca6424_expander.get_pin_input_state(Pin::P25).await.unwrap();
+
+        // Px_UFP is Low Active, so Low means connected
+        let port2_connected = p2_ufp_state == PinState::Low;
+        let port3_connected = p3_ufp_state == PinState::Low;
+
         // Prepare data for Dashboard, converting f64 to f32
         let sensor_data = [
             ((voltage1 / 1000.0) as f32, current1 as f32, power1 as f32),
@@ -267,8 +287,11 @@ async fn main(_spawner: Spawner) {
             ((voltage3 / 1000.0) as f32, current3 as f32, power3 as f32),
         ];
 
+        // Prepare connection status for Dashboard
+        let connection_status = [true, port2_connected, port3_connected]; // Assuming Port 1 is always connected or not relevant for this check
+
         // Update Dashboard data
-        dashboard.update_data(sensor_data);
+        dashboard.update_data(sensor_data, connection_status);
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut display).await.unwrap();

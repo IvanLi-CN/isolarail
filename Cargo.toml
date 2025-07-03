@@ -75,6 +75,7 @@ binrw = { version = "0.15", default-features = false }
 # Changed embedded-graphics version and features
 embedded-graphics = "0.8.1" # Changed version and removed features
 gc9d01 = { version = "*", path = "./gc9d01", features = ["async", "defmt"] }
+tca6424 = { version = "*", path = "./tca6424", features = ["async", "defmt"] }
 ina226 = { version = "0.3.0", features = ["async"] }
 
 [profile.dev]

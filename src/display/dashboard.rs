@@ -43,6 +43,8 @@ const COLOR_BLUE: Rgb565 = Rgb565::BLUE; // 定义蓝色
 pub struct Dashboard {
     // Data for 3 USB ports: (voltage, current, power)
     port_data: [(f32, f32, f32); 3],
+    // Connection status for each port (true if connected, false if not)
+    port_connected: [bool; 3],
     // Counter for draw calls to control screen clearing frequency
     draw_count: u32,
 }
@@ -52,13 +54,15 @@ impl Dashboard {
     pub fn new() -> Self {
         Self {
             port_data: [(0.0, 0.0, 0.0); 3],
+            port_connected: [false; 3], // Initialize all ports as disconnected
             draw_count: 0, // Initialize draw counter
         }
     }
 
     // Update Dashboard display data for 3 ports: [(V1, A1, W1), (V2, A2, W2), (V3, A3, W3)]
-    pub fn update_data(&mut self, data: [(f32, f32, f32); 3]) {
+    pub fn update_data(&mut self, data: [(f32, f32, f32); 3], connection_status: [bool; 3]) {
         self.port_data = data;
+        self.port_connected = connection_status;
     }
 
     // Draw Dashboard directly to the display driver using write_area
@@ -177,18 +181,31 @@ impl Dashboard {
                 (COLOR_CURRENT, p_color) // Red for current
             };
 
+            // Determine final colors based on connection status and port index
+            let (final_voltage_color, final_current_color, final_power_color) = if i == 0 { // Port 1 (index 0) retains old dynamic logic
+                (voltage_color, current_color, power_color)
+            } else { // Port 2 and 3 (index 1 and 2) use connection-based fixed colors
+                if self.port_connected[i] {
+                    // 如果端口已连接，则电压黄色，电流红色，功率绿色
+                    (COLOR_VOLTAGE, COLOR_CURRENT, COLOR_POWER)
+                } else {
+                    // 如果端口未连接，则全部显示为灰色
+                    (COLOR_GRAY, COLOR_GRAY, COLOR_GRAY)
+                }
+            };
+
 
             // Draw Voltage (Row 1)
             let voltage_str = self.float_to_string(&mut buffer, port_voltage);
-            draw_string(display, &format!("{}V", voltage_str), col_right_edge_x as usize, 0, voltage_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}V", voltage_str), col_right_edge_x as usize, 0, final_voltage_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
 
             // Draw Current (Row 2)
             let current_str = self.float_to_string(&mut buffer, port_current);
-            draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, actual_row_height as usize, current_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, actual_row_height as usize, final_current_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
 
             // Draw Power (Row 3)
             let power_str = self.float_to_string(&mut buffer, port_power);
-            draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, (actual_row_height * 2) as usize, power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, (actual_row_height * 2) as usize, final_power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
         }
 
         Ok(())

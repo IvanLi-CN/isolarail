@@ -93,7 +93,7 @@ impl Dashboard {
 
 
         // Layout: 3 columns, 2 rows
-        let col_width = screen_width / 3; // Approx 53
+        let col_width: usize = screen_width / 3; // Approx 53
         let _row_height = screen_height / 3; // Approx 13 // Mark as unused
         let row_spacing = 1; // Additional spacing between rows
         let actual_row_height = FONT_8X12_HEIGHT + row_spacing; // 12 + 1 = 13
@@ -128,21 +128,19 @@ impl Dashboard {
 
                     let x0 = current_x;
                     let y0 = start_y;
-                    let _x1 = x0 + FONT_8X12_WIDTH - 1; // Updated constant name
-                    let _y1 = y0 + FONT_8X12_HEIGHT - 1; // Updated constant name
 
                     display.write_area(
                         x0.try_into().unwrap(),
                         y0.try_into().unwrap(),
-                        FONT_8X12_WIDTH.try_into().unwrap(), // Updated constant name
-                        FONT_8X12_HEIGHT.try_into().unwrap(), // Updated constant name
+                        FONT_8X12_WIDTH.try_into().unwrap(),
+                        FONT_8X12_HEIGHT.try_into().unwrap(),
                         char_pixel_buffer,
                     ).await.map_err(|_| Error::DriverError)?;
 
-                    current_x += FONT_8X12_WIDTH; // Updated constant name
+                    current_x += FONT_8X12_WIDTH;
                 } else {
                     // Handle characters not in font (e.g., draw a blank space)
-                    current_x += FONT_8X12_WIDTH; // Updated constant name // Just advance cursor for now
+                    current_x += FONT_8X12_WIDTH; // Just advance cursor for now
                 }
             }
             Ok(())
@@ -154,7 +152,15 @@ impl Dashboard {
         // Draw data for each port (column)
         for i in 0..3 {
             let _col_start_x = i * col_width; // Mark as unused
-            let col_right_edge_x = (i + 1) * col_width;
+            let col_right_edge_x = if i == 0 {
+                // 第一列往左移动1个像素
+                ((i + 1) * col_width).saturating_sub(1)
+            } else if i == 2 {
+                // 第三列往右移动1个像素
+                (i + 1) * col_width + 1
+            } else {
+                (i + 1) * col_width
+            };
 
             let port_voltage = self.port_data[i].0;
             let port_current = self.port_data[i].1;

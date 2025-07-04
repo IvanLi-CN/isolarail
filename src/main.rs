@@ -7,6 +7,7 @@ use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::i2c::{self, I2c}; // Import i2c module, I2c struct
 use embassy_stm32::spi::{Config as SpiConfig, Spi as Stm32Spi};
+use embassy_stm32::timer::{simple_pwm::{PwmPin, SimplePwm}, low_level::CountingMode};
 use embassy_stm32::time::{Hertz, khz}; // Import khz and Hertz
 use embassy_stm32::{bind_interrupts, mode, peripherals}; // Import bind_interrupts, mode, peripherals
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -42,6 +43,20 @@ bind_interrupts!(
         I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
     }
 );
+
+/// Buzzer control function to emit a beep sound
+async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, duration_ms: u64) {
+    // Enable PWM channel and set 80% duty cycle for louder beep
+    buzzer_pwm.ch1().enable();
+    buzzer_pwm.ch1().set_duty_cycle_percent(80);
+
+    // Wait for the specified duration
+    embassy_time::Timer::after_millis(duration_ms).await;
+
+    // Turn off the buzzer
+    buzzer_pwm.ch1().set_duty_cycle_percent(0);
+    buzzer_pwm.ch1().disable();
+}
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -132,6 +147,26 @@ async fn main(_spawner: Spawner) {
     tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap();
     tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap();
     info!("TCA6424 P01 and P25 configured as inputs.");
+
+    // Initialize buzzer PWM on TIM3_CH1 (PC6)
+    let buzzer_pin = PwmPin::new_ch1(p.PC6, embassy_stm32::gpio::OutputType::PushPull);
+    let mut buzzer_pwm = SimplePwm::new(
+        p.TIM3,
+        Some(buzzer_pin),
+        None,
+        None,
+        None,
+        Hertz(2000),
+        CountingMode::EdgeAlignedUp,
+    );
+    // Start with buzzer off
+    buzzer_pwm.ch1().set_duty_cycle_percent(0);
+    info!("Buzzer PWM initialized on PC6 (TIM3_CH1).");
+
+    // Test buzzer on startup
+    info!("Testing buzzer...");
+    beep_buzzer(&mut buzzer_pwm, 300).await; // 300ms test beep
+    info!("Buzzer test complete.");
 
     struct EmbassyDisplayTimer;
     impl Gc9d01Timer for EmbassyDisplayTimer {
@@ -257,6 +292,10 @@ async fn main(_spawner: Spawner) {
     // Initial delay before starting the loop
     embassy_time::Timer::after_secs(1).await;
 
+    // Initialize previous UFP states for change detection
+    let mut prev_port2_connected = false;
+    let mut prev_port3_connected = false;
+
     loop {
         // Read data from INA226 sensors
         // Use correct async function names and handle Option<f64> return types
@@ -279,6 +318,19 @@ async fn main(_spawner: Spawner) {
         // Px_UFP is Low Active, so Low means connected
         let port2_connected = p2_ufp_state == PinState::Low;
         let port3_connected = p3_ufp_state == PinState::Low;
+
+        // Check for UFP status changes and trigger buzzer
+        if port2_connected != prev_port2_connected {
+            info!("Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
+            beep_buzzer(&mut buzzer_pwm, 200).await; // 200ms beep
+            prev_port2_connected = port2_connected;
+        }
+
+        if port3_connected != prev_port3_connected {
+            info!("Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
+            beep_buzzer(&mut buzzer_pwm, 200).await; // 200ms beep
+            prev_port3_connected = port3_connected;
+        }
 
         // Prepare data for Dashboard, converting f64 to f32
         let sensor_data = [

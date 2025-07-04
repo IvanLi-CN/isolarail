@@ -25,6 +25,7 @@ use {defmt_rtt as _, panic_probe as _};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as EmbassyI2cDevice; // Alias for clarity
 use ina226::INA226;
 use tca6424::{Tca6424, Pin, PinDirection, PinState};
+use sw2303::SW2303;
 // Removed unused imports: AsyncI2c
 
 use defmt::*;
@@ -147,6 +148,20 @@ async fn main(_spawner: Spawner) {
     tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap();
     tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap();
     info!("TCA6424 P01 and P25 configured as inputs.");
+
+    // Create I2cDevice instance for SW2303
+    static I2C_DEVICE_SW2303_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();
+    let mut i2c_device_sw2303 = I2C_DEVICE_SW2303_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
+    let mut sw2303_controller = SW2303::new(&mut i2c_device_sw2303, sw2303::registers::constants::DEFAULT_ADDRESS);
+
+    // Initialize SW2303 PD controller
+    match sw2303_controller.init().await {
+        Ok(_) => info!("SW2303 PD controller initialized successfully."),
+        Err(e) => {
+            error!("Failed to initialize SW2303: {:?}", e);
+            // Continue without SW2303 functionality
+        }
+    }
 
     // Initialize buzzer PWM on TIM3_CH1 (PC6)
     let buzzer_pin = PwmPin::new_ch1(p.PC6, embassy_stm32::gpio::OutputType::PushPull);
@@ -293,6 +308,7 @@ async fn main(_spawner: Spawner) {
     embassy_time::Timer::after_secs(1).await;
 
     // Initialize previous UFP states for change detection
+    let mut prev_port1_connected = false; // SW2303 Port 1
     let mut prev_port2_connected = false;
     let mut prev_port3_connected = false;
 
@@ -311,6 +327,15 @@ async fn main(_spawner: Spawner) {
         let current3 = ina226_3.current_amps().await.unwrap_or(None).unwrap_or(0.0);
         let power3 = ina226_3.power_watts().await.unwrap_or(None).unwrap_or(0.0);
 
+        // Read SW2303 sink device connection status for Port 1 (more reliable than UFP status)
+        let sw2303_port1_connected = match sw2303_controller.is_sink_device_connected().await {
+            Ok(connected) => connected,
+            Err(e) => {
+                error!("Failed to read SW2303 sink device status: {:?}", e);
+                false
+            }
+        };
+
         // Read P2_UFP (P01) and P3_UFP (P25) states
         let p2_ufp_state = tca6424_expander.get_pin_input_state(Pin::P01).await.unwrap();
         let p3_ufp_state = tca6424_expander.get_pin_input_state(Pin::P25).await.unwrap();
@@ -320,14 +345,20 @@ async fn main(_spawner: Spawner) {
         let port3_connected = p3_ufp_state == PinState::Low;
 
         // Check for UFP status changes and trigger buzzer
+        if sw2303_port1_connected != prev_port1_connected {
+            info!("SW2303 PD controller Port 1 UFP status changed: {} -> {}", prev_port1_connected, sw2303_port1_connected);
+            beep_buzzer(&mut buzzer_pwm, 200).await; // 200ms beep
+            prev_port1_connected = sw2303_port1_connected;
+        }
+
         if port2_connected != prev_port2_connected {
-            info!("Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
+            info!("TCA6424 Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
             beep_buzzer(&mut buzzer_pwm, 200).await; // 200ms beep
             prev_port2_connected = port2_connected;
         }
 
         if port3_connected != prev_port3_connected {
-            info!("Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
+            info!("TCA6424 Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
             beep_buzzer(&mut buzzer_pwm, 200).await; // 200ms beep
             prev_port3_connected = port3_connected;
         }

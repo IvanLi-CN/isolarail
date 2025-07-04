@@ -4,3 +4,6 @@
 [submodule "tca6424"]
 	path = tca6424
 	url = git@github.com:IvanLi-CN/tca6424-rs
+[submodule "sw2303"]
+	path = sw2303
+	url = /Users/ivan/Projects/Ivan/sw2303-rs

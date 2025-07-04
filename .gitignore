@@ -1,9 +1,31 @@
+# Rust build artifacts
+/target/
 debug/
-target/
-/logs/
 Cargo.lock
 
-/.idea
+# IDE files
+/.idea/
+.vscode/
+*.swp
+*.swo
 
+# OS files
 .DS_Store
+Thumbs.db
+
+# Logs
+/logs/
+*.log
+
+# KiCad backup files
 *.FCBak
+*.bak
+
+# Embedded development
+*.bin
+*.hex
+*.elf
+*.map
+
+# Probe-rs
+.probe-rs/

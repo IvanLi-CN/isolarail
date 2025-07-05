@@ -45,6 +45,31 @@ bind_interrupts!(
     }
 );
 
+/// Configure SW2303 for 65W power delivery using REG 0xAF power configuration.
+/// This is the business logic for our specific application requirements.
+async fn configure_sw2303_power<I2C>(sw2303: &mut SW2303<'_, I2C>) -> Result<(), sw2303::error::Error<I2C::Error>>
+where
+    I2C: embedded_hal_async::i2c::I2c,
+{
+    info!("Configuring SW2303 for 65W power with 100mA detection threshold");
+
+    // Power configuration (REG 0xAF) requires unlock_write_enable_0()
+    // as it's in the locked register range (0xA0-0xBF)
+    sw2303.unlock_write_enable_0().await?;
+    info!("SW2303 register unlock sequence completed for power configuration");
+
+    // Configure power for 65W using REG 0xAF (Power Configuration register)
+    sw2303.set_power_config(65).await?;
+    info!("SW2303 power configured to 65W using REG 0xAF");
+
+    // Verify configuration by reading back the power setting
+    let (register_mode, power_watts) = sw2303.get_power_config().await?;
+    info!("SW2303 power configuration verification - Register mode: {}, Power: {}W", register_mode, power_watts);
+
+    info!("SW2303 power configuration completed: 65W using REG 0xAF");
+    Ok(())
+}
+
 /// Buzzer control function to emit a beep sound
 async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, duration_ms: u64) {
     // Enable PWM channel and set 80% duty cycle for louder beep
@@ -156,7 +181,18 @@ async fn main(_spawner: Spawner) {
 
     // Initialize SW2303 PD controller
     match sw2303_controller.init().await {
-        Ok(_) => info!("SW2303 PD controller initialized successfully."),
+        Ok(_) => {
+            info!("SW2303 PD controller initialized successfully.");
+
+            // Configure SW2303 for 65W power (20V, 3.25A) with 100mA detection threshold
+            match configure_sw2303_power(&mut sw2303_controller).await {
+                Ok(_) => info!("SW2303 configured for 65W power with 100mA detection threshold."),
+                Err(e) => {
+                    error!("Failed to configure SW2303 power settings: {:?}", e);
+                    // Continue with basic functionality
+                }
+            }
+        },
         Err(e) => {
             error!("Failed to initialize SW2303: {:?}", e);
             // Continue without SW2303 functionality

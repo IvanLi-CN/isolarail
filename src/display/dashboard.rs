@@ -23,6 +23,8 @@ use gc9d01::Timer as Gc9d01Timer; // Moved this import up
 use core::convert::TryInto; // Added import for try_into
 use alloc::format; // Added import for alloc::format!
 
+
+
 #[derive(Debug)]
 pub enum Error {
     // Add specific error types later if needed
@@ -99,12 +101,12 @@ impl Dashboard {
         // Buffer for character pixels (8x12)
         let mut char_pixel_buffer = [Rgb565::BLACK; FONT_8X12_WIDTH * FONT_8X12_HEIGHT]; // Updated constant names
 
-        // Helper function to draw a string
-        // Helper function to draw a string with right alignment
+        // Helper function to draw a string with fixed width using space padding
         async fn draw_string<'a, BUS, DC, RST, TIMER>(
             display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
             s: &str,
             right_edge_x: usize, // Right edge of the drawing area
+            fixed_width_chars: usize, // Fixed width in characters (e.g., 6 for "12.34V")
             start_y: usize,
             fg_color: Rgb565,
             bg_color: Rgb565,
@@ -116,11 +118,28 @@ impl Dashboard {
             RST: OutputPin<Error = core::convert::Infallible>, // Specify Infallible error type
             TIMER: Gc9d01Timer,
         {
-            let string_pixel_width = s.chars().count() * FONT_8X12_WIDTH;
-            let start_x = right_edge_x.saturating_sub(string_pixel_width); // Calculate start_x for right alignment, handle potential underflow
+            // Create a fixed-width string by padding with spaces
+            let mut padded_string = alloc::string::String::new();
+            let string_len = s.chars().count();
+
+            if string_len < fixed_width_chars {
+                // Pad with leading spaces for right alignment
+                let spaces_needed = fixed_width_chars - string_len;
+                for _ in 0..spaces_needed {
+                    padded_string.push(' ');
+                }
+                padded_string.push_str(s);
+            } else {
+                // If string is too long, truncate it
+                padded_string = s.chars().take(fixed_width_chars).collect();
+            }
+
+            // Calculate start position for the fixed-width string
+            let total_pixel_width = fixed_width_chars * FONT_8X12_WIDTH;
+            let start_x = right_edge_x.saturating_sub(total_pixel_width);
 
             let mut current_x = start_x;
-            for c in s.chars() {
+            for c in padded_string.chars() {
                 if let Some(bitmap) = char_to_mono_bitmap(c) {
                     mono_bitmap_to_rgb565(bitmap, fg_color, bg_color, char_pixel_buffer);
 
@@ -137,8 +156,21 @@ impl Dashboard {
 
                     current_x += FONT_8X12_WIDTH;
                 } else {
-                    // Handle characters not in font (e.g., draw a blank space)
-                    current_x += FONT_8X12_WIDTH; // Just advance cursor for now
+                    // Handle characters not in font (draw a blank space)
+                    mono_bitmap_to_rgb565(&[0u8; 12], fg_color, bg_color, char_pixel_buffer); // All zeros = blank
+
+                    let x0 = current_x;
+                    let y0 = start_y;
+
+                    display.write_area(
+                        x0.try_into().unwrap(),
+                        y0.try_into().unwrap(),
+                        FONT_8X12_WIDTH.try_into().unwrap(),
+                        FONT_8X12_HEIGHT.try_into().unwrap(),
+                        char_pixel_buffer,
+                    ).await.map_err(|_| Error::DriverError)?;
+
+                    current_x += FONT_8X12_WIDTH;
                 }
             }
             Ok(())
@@ -149,7 +181,6 @@ impl Dashboard {
 
         // Draw data for each port (column)
         for i in 0..3 {
-            let _col_start_x = i * col_width; // Mark as unused
             let col_right_edge_x = if i == 0 {
                 // 第一列往左移动1个像素
                 ((i + 1) * col_width).saturating_sub(1)
@@ -177,17 +208,17 @@ impl Dashboard {
             };
 
 
-            // Draw Voltage (Row 1)
+            // Draw Voltage (Row 1) - Fixed width of 6 characters (e.g., "12.34V")
             let voltage_str = self.float_to_string(&mut buffer, port_voltage);
-            draw_string(display, &format!("{}V", voltage_str), col_right_edge_x as usize, 0, final_voltage_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}V", voltage_str), col_right_edge_x as usize, 6, 0, final_voltage_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
 
-            // Draw Current (Row 2)
+            // Draw Current (Row 2) - Fixed width of 6 characters (e.g., "12.34A")
             let current_str = self.float_to_string(&mut buffer, port_current);
-            draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, actual_row_height as usize, final_current_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, 6, actual_row_height as usize, final_current_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
 
-            // Draw Power (Row 3)
+            // Draw Power (Row 3) - Fixed width of 6 characters (e.g., "12.34W")
             let power_str = self.float_to_string(&mut buffer, port_power);
-            draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, (actual_row_height * 2) as usize, final_power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
         }
 
         Ok(())

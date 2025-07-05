@@ -11,6 +11,7 @@ use defmt::*;
 mod display;
 mod hardware;
 mod app;
+mod joystick_example;
 
 extern crate alloc;
 

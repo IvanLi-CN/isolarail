@@ -45,6 +45,8 @@ pub struct Dashboard {
     port_data: [(f32, f32, f32); 3],
     // Connection status for each port (true if connected, false if not)
     port_connected: [bool; 3],
+    // Overcurrent status for each port (true if overcurrent detected, false if normal)
+    port_overcurrent: [bool; 3],
     // Counter for draw calls to control screen clearing frequency
     draw_count: u32,
 }
@@ -55,14 +57,16 @@ impl Dashboard {
         Self {
             port_data: [(0.0, 0.0, 0.0); 3],
             port_connected: [false; 3], // Initialize all ports as disconnected
+            port_overcurrent: [false; 3], // Initialize all ports as normal (no overcurrent)
             draw_count: 0, // Initialize draw counter
         }
     }
 
     // Update Dashboard display data for 3 ports: [(V1, A1, W1), (V2, A2, W2), (V3, A3, W3)]
-    pub fn update_data(&mut self, data: [(f32, f32, f32); 3], connection_status: [bool; 3]) {
+    pub fn update_data(&mut self, data: [(f32, f32, f32); 3], connection_status: [bool; 3], overcurrent_status: [bool; 3]) {
         self.port_data = data;
         self.port_connected = connection_status;
+        self.port_overcurrent = overcurrent_status;
     }
 
     // Draw Dashboard directly to the display driver using write_area
@@ -216,9 +220,15 @@ impl Dashboard {
             let current_str = self.float_to_string(&mut buffer, port_current);
             draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, 6, actual_row_height as usize, final_current_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
 
-            // Draw Power (Row 3) - Fixed width of 6 characters (e.g., "12.34W")
-            let power_str = self.float_to_string(&mut buffer, port_power);
-            draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            // Draw Power (Row 3) - Show "OCP" if overcurrent detected, otherwise show power value
+            if self.port_overcurrent[i] {
+                // Display "OCP" in red when overcurrent is detected
+                draw_string(display, "OCP", col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::RED, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            } else {
+                // Display normal power value
+                let power_str = self.float_to_string(&mut buffer, port_power);
+                draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, Rgb565::BLACK, &mut char_pixel_buffer).await?;
+            }
         }
 
         Ok(())

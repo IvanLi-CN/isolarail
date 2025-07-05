@@ -6,6 +6,7 @@ use embedded_graphics::prelude::WebColors;
 use tca6424::{Pin, PinState};
 use defmt::*;
 use crate::display::dashboard::Dashboard;
+use crate::hardware::FiveWayJoystick;
 
 /// Buzzer control function to emit a beep sound
 pub async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, duration_ms: u64) {
@@ -19,6 +20,26 @@ pub async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, dura
     // Turn off the buzzer
     buzzer_pwm.ch1().set_duty_cycle_percent(0);
     buzzer_pwm.ch1().disable();
+}
+
+/// Alarm beep function for overcurrent and fault conditions
+/// Plays a different pattern than the connection beep (3 short beeps)
+pub async fn play_alarm_beep(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) {
+    for _ in 0..3 {
+        // Enable PWM channel and set 90% duty cycle for urgent alarm sound
+        buzzer_pwm.ch1().enable();
+        buzzer_pwm.ch1().set_duty_cycle_percent(90);
+
+        // Short beep (150ms)
+        embassy_time::Timer::after_millis(150).await;
+
+        // Turn off the buzzer
+        buzzer_pwm.ch1().set_duty_cycle_percent(0);
+        buzzer_pwm.ch1().disable();
+
+        // Short pause between beeps (100ms)
+        embassy_time::Timer::after_millis(100).await;
+    }
 }
 
 /// Display test pattern on startup
@@ -98,6 +119,9 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     let mut prev_port2_connected = false;
     let mut prev_port3_connected = false;
 
+    // Initialize previous overcurrent states for change detection
+    let mut previous_overcurrent_status = [false; 3];
+
     loop {
         // Read data from INA226 sensors
         let voltage1 = hardware.ina226_sensors.0.bus_voltage_millivolts().await.unwrap_or(0.0);
@@ -129,6 +153,38 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         let port2_connected = p2_ufp_state == PinState::Low;
         let port3_connected = p3_ufp_state == PinState::Low;
 
+        // Check overcurrent/fault conditions for all ports
+        // Port 1: SW2303 overcurrent detection
+        let port1_overcurrent = match hardware.sw2303_controller.is_overcurrent().await {
+            Ok(overcurrent) => overcurrent,
+            Err(e) => {
+                error!("Failed to read SW2303 overcurrent status: {:?}", e);
+                false
+            }
+        };
+
+        // Port 2: TPS25810 fault signal via TCA6424 P02 (Low Active)
+        let p2_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P02).await.unwrap();
+        let port2_overcurrent = p2_fault_state == PinState::Low;
+
+        // Port 3: TPS25810 fault signal via TCA6424 P26 (Low Active)
+        let p3_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P26).await.unwrap();
+        let port3_overcurrent = p3_fault_state == PinState::Low;
+
+        // Check for new overcurrent events and trigger alarm beep
+        let current_overcurrent_status = [port1_overcurrent, port2_overcurrent, port3_overcurrent];
+        for (port_idx, &is_overcurrent) in current_overcurrent_status.iter().enumerate() {
+            if is_overcurrent && !previous_overcurrent_status[port_idx] {
+                // New overcurrent event detected - play alarm beep
+                info!("Overcurrent detected on Port {}, triggering alarm beep", port_idx + 1);
+                play_alarm_beep(&mut hardware.buzzer_pwm).await;
+            } else if !is_overcurrent && previous_overcurrent_status[port_idx] {
+                // Overcurrent cleared
+                info!("Overcurrent cleared on Port {}", port_idx + 1);
+            }
+        }
+        previous_overcurrent_status = current_overcurrent_status;
+
         // Check for UFP status changes and trigger buzzer
         if sw2303_port1_connected != prev_port1_connected {
             info!("SW2303 PD controller Port 1 UFP status changed: {} -> {}", prev_port1_connected, sw2303_port1_connected);
@@ -158,13 +214,49 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         // Prepare connection status for Dashboard
         let connection_status = [sw2303_port1_connected, port2_connected, port3_connected];
 
+        // Prepare overcurrent status for Dashboard
+        let overcurrent_status = [port1_overcurrent, port2_overcurrent, port3_overcurrent];
+
         // Update Dashboard data
-        dashboard.update_data(sensor_data, connection_status);
+        dashboard.update_data(sensor_data, connection_status, overcurrent_status);
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();
 
         // Wait for 100ms before the next update
         embassy_time::Timer::after_millis(100).await;
+    }
+}
+
+/// Test five-way joystick functionality
+pub async fn test_joystick(joystick: &FiveWayJoystick, buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) {
+    info!("Testing five-way joystick...");
+
+    loop {
+        let (up, down, left, right, center) = joystick.get_all_states();
+
+        if up {
+            info!("Joystick: UP pressed");
+            beep_buzzer(buzzer_pwm, 100).await;
+        }
+        if down {
+            info!("Joystick: DOWN pressed");
+            beep_buzzer(buzzer_pwm, 100).await;
+        }
+        if left {
+            info!("Joystick: LEFT pressed");
+            beep_buzzer(buzzer_pwm, 100).await;
+        }
+        if right {
+            info!("Joystick: RIGHT pressed");
+            beep_buzzer(buzzer_pwm, 100).await;
+        }
+        if center {
+            info!("Joystick: CENTER pressed");
+            beep_buzzer(buzzer_pwm, 200).await; // Longer beep for center
+        }
+
+        // Small delay to prevent excessive polling
+        embassy_time::Timer::after_millis(50).await;
     }
 }

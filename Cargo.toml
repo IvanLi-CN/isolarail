@@ -9,6 +9,11 @@ name = "iso-usb-hub"
 path = "src/main.rs"
 test = false
 
+[[bin]]
+name = "test-joystick"
+path = "test_joystick.rs"
+test = false
+
 [features]
 default = ["alloc"]
 alloc = []

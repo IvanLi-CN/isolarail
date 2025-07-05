@@ -1,7 +1,7 @@
 // src/hardware.rs
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as EmbassyI2cDevice;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice as EmbassySpiDevice;
-use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
 use embassy_stm32::i2c::{self, I2c};
 use embassy_stm32::spi::{Config as SpiConfig, Spi as Stm32Spi};
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
@@ -38,6 +38,53 @@ impl embedded_hal::digital::ErrorType for EmbassyDisplayTimer {
     type Error = core::convert::Infallible;
 }
 
+/// Five-way joystick GPIO configuration
+pub struct FiveWayJoystick {
+    pub up: Input<'static>,      // PA1
+    pub down: Input<'static>,    // PA3
+    pub left: Input<'static>,    // PA2
+    pub right: Input<'static>,   // PA5
+    pub center: Input<'static>,  // PA6
+}
+
+impl FiveWayJoystick {
+    /// Check if UP button is pressed (active low)
+    pub fn is_up_pressed(&self) -> bool {
+        self.up.is_low()
+    }
+
+    /// Check if DOWN button is pressed (active low)
+    pub fn is_down_pressed(&self) -> bool {
+        self.down.is_low()
+    }
+
+    /// Check if LEFT button is pressed (active low)
+    pub fn is_left_pressed(&self) -> bool {
+        self.left.is_low()
+    }
+
+    /// Check if RIGHT button is pressed (active low)
+    pub fn is_right_pressed(&self) -> bool {
+        self.right.is_low()
+    }
+
+    /// Check if CENTER button is pressed (active low)
+    pub fn is_center_pressed(&self) -> bool {
+        self.center.is_low()
+    }
+
+    /// Get all button states as a tuple (up, down, left, right, center)
+    pub fn get_all_states(&self) -> (bool, bool, bool, bool, bool) {
+        (
+            self.is_up_pressed(),
+            self.is_down_pressed(),
+            self.is_left_pressed(),
+            self.is_right_pressed(),
+            self.is_center_pressed(),
+        )
+    }
+}
+
 // Hardware configuration structure
 pub struct HardwareConfig<'a> {
     pub ina226_sensors: (
@@ -48,6 +95,7 @@ pub struct HardwareConfig<'a> {
     pub tca6424_expander: Tca6424<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     pub sw2303_controller: SW2303<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     pub buzzer_pwm: SimplePwm<'static, peripherals::TIM3>,
+    pub joystick: FiveWayJoystick,
     pub display: GC9D01<
         'static,
         EmbassySpiDevice<
@@ -241,6 +289,17 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         dy: 0,
     };
 
+    // Initialize five-way joystick
+    info!("Initializing five-way joystick...");
+    let joystick = FiveWayJoystick {
+        up: Input::new(p.PA1, Pull::Up),       // UP button on PA1
+        down: Input::new(p.PA3, Pull::Up),     // DOWN button on PA3
+        left: Input::new(p.PA2, Pull::Up),     // LEFT button on PA2
+        right: Input::new(p.PA5, Pull::Up),    // RIGHT button on PA5
+        center: Input::new(p.PA6, Pull::Up),   // CENTER button on PA6
+    };
+    info!("Five-way joystick initialized on PA1(UP), PA3(DOWN), PA2(LEFT), PA5(RIGHT), PA6(CENTER).");
+
     static DISPLAY_BUFFER_CELL: StaticCell<[u8; gc9d01::BUF_SIZE]> = StaticCell::new();
     let buffer_slice: &mut [u8] = DISPLAY_BUFFER_CELL.init([0; gc9d01::BUF_SIZE]);
 
@@ -270,6 +329,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         tca6424_expander,
         sw2303_controller,
         buzzer_pwm,
+        joystick,
         display,
     }
 }

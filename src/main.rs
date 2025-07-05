@@ -407,7 +407,7 @@ async fn main(_spawner: Spawner) {
         ];
 
         // Prepare connection status for Dashboard
-        let connection_status = [true, port2_connected, port3_connected]; // Assuming Port 1 is always connected or not relevant for this check
+        let connection_status = [sw2303_port1_connected, port2_connected, port3_connected];
 
         // Update Dashboard data
         dashboard.update_data(sensor_data, connection_status);

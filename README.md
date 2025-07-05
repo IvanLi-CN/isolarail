@@ -8,25 +8,47 @@ Exported 3D printable models for the front and back covers are located at:
 - [`models/iso-usb-hub-with-pd-Front.step`](models/iso-usb-hub-with-pd-Front.step)
 - [`models/iso-usb-hub-with-pd-Back.step`](models/iso-usb-hub-with-pd-Back.step)
 
+## Hardware Architecture
+
+### Port Configuration
+
+- **Port 1**: SW2303 PD controller with USB-C PD support (up to 65W)
+- **Port 2**: TPS25810 controller with 5V only
+- **Port 3**: TPS25810 controller with 5V only
+
+### Current Sensing Configuration
+
+Each port uses INA226 current sensors with different shunt resistor values:
+
+- **Port 1 (SW2303)**: 5mΩ current sensing resistor
+- **Port 2 (TPS25810)**: 10mΩ current sensing resistor
+- **Port 3 (TPS25810)**: 10mΩ current sensing resistor
+
+### UFP Detection
+
+- **Port 1**: SW2303 sink device detection via I2C
+- **Port 2**: TCA6424 P01 pin (Low Active)
+- **Port 3**: TCA6424 P25 pin (Low Active)
+
 ## Display Logic for USB Ports
 
-The display on the device shows real-time voltage, current, and power for each USB port. The color of these readings is determined as follows:
+The display on the device shows real-time voltage, current, and power for each USB port. The color of these readings is determined by the connection status of sink devices for all ports:
 
-### Port 1
+### All Ports (Port 1, Port 2, and Port 3)
 
-For Port 1, the colors of voltage, current, and power readings are dynamically determined based on their measured values:
-- **Voltage Color**: Orange if > 6.0V, Yellow if > 2.0V, otherwise Gray.
-- **Current Color**: Red if power > 0.05W, otherwise Gray.
-- **Power Color**: Blue if > 5.0W, Green if > 0.05W, otherwise Gray.
+The colors are determined by the connection status of sink devices:
 
-### Port 2 and Port 3
+- **Port 1**: Sink device detection via SW2303 PD controller
+- **Port 2 and Port 3**: Sink device detection via `P_UFP` signal from TCA6424 I/O expander
 
-For Port 2 and Port 3, the colors are primarily determined by the connection status of a sink device, indicated by the `P_UFP` signal from the TCA6424 I/O expander.
-- **When a sink device is connected (`P_UFP` is Low Active)**:
-  - **Voltage Color**: Yellow
-  - **Current Color**: Red
-  - **Power Color**: Green
-- **When no sink device is connected (`P_UFP` is High Active)**:
-  - **Voltage Color**: Gray
-  - **Current Color**: Gray
-  - **Power Color**: Gray
+**When a sink device is connected**:
+
+- **Voltage Color**: Yellow
+- **Current Color**: Red
+- **Power Color**: Green
+
+**When no sink device is connected**:
+
+- **Voltage Color**: Gray
+- **Current Color**: Gray
+- **Power Color**: Gray

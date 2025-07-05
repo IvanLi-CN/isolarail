@@ -36,8 +36,6 @@ const COLOR_VOLTAGE: Rgb565 = Rgb565::YELLOW;
 const COLOR_CURRENT: Rgb565 = Rgb565::RED;
 const COLOR_POWER: Rgb565 = Rgb565::GREEN;
 const COLOR_GRAY: Rgb565 = Rgb565::new(15, 30, 15); // 定义灰色
-const COLOR_ORANGE: Rgb565 = Rgb565::new(31, 20, 0); // 定义橙色 (R:31, G:20, B:0)
-const COLOR_BLUE: Rgb565 = Rgb565::BLUE; // 定义蓝色
 
 // Dashboard struct, contains data to display
 pub struct Dashboard {
@@ -166,38 +164,16 @@ impl Dashboard {
             let port_current = self.port_data[i].1;
             let port_power = self.port_data[i].2;
 
-            // Determine Voltage color
-            let voltage_color = if port_voltage > 6.0 {
-                COLOR_ORANGE
-            } else if port_voltage > 2.0 {
-                COLOR_VOLTAGE // Yellow
-            } else {
-                COLOR_GRAY
-            };
+            // Note: Dynamic color logic based on voltage/current/power values is no longer used.
+            // All ports now use connection-based fixed colors for consistency.
 
-            // Determine Current and Power colors based on Power
-            let (current_color, power_color) = if port_power < 0.05 {
-                (COLOR_GRAY, COLOR_GRAY)
+            // Determine final colors based on connection status for all ports
+            let (final_voltage_color, final_current_color, final_power_color) = if self.port_connected[i] {
+                // If port is connected, use fixed colors: voltage yellow, current red, power green
+                (COLOR_VOLTAGE, COLOR_CURRENT, COLOR_POWER)
             } else {
-                let p_color = if port_power > 5.0 {
-                    COLOR_BLUE
-                } else {
-                    COLOR_POWER // Green
-                };
-                (COLOR_CURRENT, p_color) // Red for current
-            };
-
-            // Determine final colors based on connection status and port index
-            let (final_voltage_color, final_current_color, final_power_color) = if i == 0 { // Port 1 (index 0) retains old dynamic logic
-                (voltage_color, current_color, power_color)
-            } else { // Port 2 and 3 (index 1 and 2) use connection-based fixed colors
-                if self.port_connected[i] {
-                    // 如果端口已连接，则电压黄色，电流红色，功率绿色
-                    (COLOR_VOLTAGE, COLOR_CURRENT, COLOR_POWER)
-                } else {
-                    // 如果端口未连接，则全部显示为灰色
-                    (COLOR_GRAY, COLOR_GRAY, COLOR_GRAY)
-                }
+                // If port is not connected, use gray for all
+                (COLOR_GRAY, COLOR_GRAY, COLOR_GRAY)
             };
 
 

@@ -14,7 +14,7 @@ use embassy_sync::mutex::Mutex;
 use gc9d01::{Config as DisplayDriverConfig, GC9D01, Orientation, Timer as Gc9d01Timer};
 use static_cell::StaticCell;
 use ina226::INA226;
-use tca6424::{Tca6424, Pin, PinDirection};
+use tca6424::{Tca6424, Pin, PinDirection, PinState};
 use sw2303::SW2303;
 use defmt::*;
 
@@ -206,10 +206,34 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     let mut i2c_device_tca6424 = I2C_DEVICE_TCA6424_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
     let mut tca6424_expander = Tca6424::new(i2c_device_tca6424, tca6424::DEFAULT_ADDRESS).unwrap();
     
-    // Configure P01 (Port 2 UFP) and P25 (Port 3 UFP) as inputs
-    tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap();
-    tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap();
-    info!("TCA6424 expander initialized.");
+    // Configure input pins for UFP detection and fault monitoring
+    tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap(); // P2_UFP
+    tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap(); // P3_UFP
+    tca6424_expander.set_pin_direction(Pin::P06, PinDirection::Input).await.unwrap(); // P2_FAULT
+    tca6424_expander.set_pin_direction(Pin::P20, PinDirection::Input).await.unwrap(); // P3_FAULT
+
+    // Configure output pins for current control
+    // Port 2 current control pins
+    tca6424_expander.set_pin_direction(Pin::P04, PinDirection::Output).await.unwrap(); // P2_CHG
+    tca6424_expander.set_pin_direction(Pin::P03, PinDirection::Output).await.unwrap(); // P2_CHG_HL
+
+    // Port 3 current control pins
+    tca6424_expander.set_pin_direction(Pin::P22, PinDirection::Output).await.unwrap(); // P3_CHG
+    tca6424_expander.set_pin_direction(Pin::P23, PinDirection::Output).await.unwrap(); // P3_CHG_HL
+
+    // Enable 3A current capability for Port 2
+    // First enable P2_CHG (1.5A base current source)
+    tca6424_expander.set_pin_output(Pin::P04, PinState::High).await.unwrap(); // P2_CHG = High
+    // Then enable P2_CHG_HL (3A current source, requires P2_CHG to be High)
+    tca6424_expander.set_pin_output(Pin::P03, PinState::High).await.unwrap(); // P2_CHG_HL = High
+
+    // Enable 3A current capability for Port 3
+    // First enable P3_CHG (1.5A base current source)
+    tca6424_expander.set_pin_output(Pin::P22, PinState::High).await.unwrap(); // P3_CHG = High
+    // Then enable P3_CHG_HL (3A current source, requires P3_CHG to be High)
+    tca6424_expander.set_pin_output(Pin::P23, PinState::High).await.unwrap(); // P3_CHG_HL = High
+
+    info!("TCA6424 expander initialized with 3A current capability for ports 2 and 3.");
 
     // Initialize SW2303
     static I2C_DEVICE_SW2303_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();

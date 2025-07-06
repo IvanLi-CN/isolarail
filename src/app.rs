@@ -167,12 +167,12 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             }
         };
 
-        // Port 2: TPS25810 fault signal via TCA6424 P02 (Low Active)
-        let p2_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P02).await.unwrap();
+        // Port 2: TPS25810 fault signal via TCA6424 P06 (Low Active)
+        let p2_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P06).await.unwrap();
         let port2_overcurrent = p2_fault_state == PinState::Low;
 
-        // Port 3: TPS25810 fault signal via TCA6424 P26 (Low Active)
-        let p3_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P26).await.unwrap();
+        // Port 3: TPS25810 fault signal via TCA6424 P20 (Low Active)
+        let p3_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P20).await.unwrap();
         let port3_overcurrent = p3_fault_state == PinState::Low;
 
         // Check for new overcurrent events and trigger alarm beep

@@ -122,6 +122,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     // Initialize previous overcurrent states for change detection
     let mut previous_overcurrent_status = [false; 3];
 
+    // Initialize joystick state tracking for debouncing
+    let mut prev_left_pressed = false;
+    let mut prev_right_pressed = false;
+
     loop {
         // Read data from INA226 sensors
         let voltage1 = hardware.ina226_sensors.0.bus_voltage_millivolts().await.unwrap_or(0.0);
@@ -219,6 +223,33 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         // Update Dashboard data
         dashboard.update_data(sensor_data, connection_status, overcurrent_status);
+
+        // Handle joystick input for port selection with debouncing
+        let (_, _, left, right, _) = hardware.joystick.get_all_states();
+
+        // Handle LEFT press (only on rising edge)
+        if left && !prev_left_pressed {
+            let current_port = dashboard.get_selected_port();
+            if current_port > 0 {
+                dashboard.set_selected_port(current_port - 1);
+                info!("Joystick: LEFT pressed - Selected Port {}", current_port);
+                beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+            }
+        }
+
+        // Handle RIGHT press (only on rising edge)
+        if right && !prev_right_pressed {
+            let current_port = dashboard.get_selected_port();
+            if current_port < 2 {
+                dashboard.set_selected_port(current_port + 1);
+                info!("Joystick: RIGHT pressed - Selected Port {}", current_port + 2);
+                beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+            }
+        }
+
+        // Update previous states for next iteration
+        prev_left_pressed = left;
+        prev_right_pressed = right;
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();

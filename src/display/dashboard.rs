@@ -6,6 +6,7 @@ use embedded_graphics::pixelcolor::Rgb565;
 // Remove other embedded_graphics imports as drawing primitives won't be used directly
 use embedded_graphics::prelude::RgbColor;
 // Removed: use embedded_graphics::prelude::*; // Unused import
+use defmt::info;
 // use embedded_graphics::{
 //     mono_font::{ascii::FONT_6X10, MonoTextStyle},
 //     prelude::*,
@@ -47,6 +48,12 @@ pub struct Dashboard {
     port_connected: [bool; 3],
     // Overcurrent status for each port (true if overcurrent detected, false if normal)
     port_overcurrent: [bool; 3],
+    // Power allocation data: All ports in Watts
+    power_allocation: [f32; 3],
+    // Total power budget in Watts
+    total_power_budget: f32,
+    // Display mode: false = show power (row 3), true = show power allocation (row 4)
+    show_power_allocation: bool,
     // Counter for draw calls to control screen clearing frequency
     draw_count: u32,
     // Currently selected port (0, 1, or 2), default is 1 (Port 2)
@@ -58,21 +65,47 @@ pub struct Dashboard {
 impl Dashboard {
     // Create new Dashboard instance
     pub fn new() -> Self {
-        Self {
+        // Read total power budget from environment variable, default to 100W
+        // This reads the compile-time environment variable
+        let total_power_budget = option_env!("TOTAL_POWER_BUDGET")
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(100.0);
+
+        info!("Dashboard initialized with TOTAL_POWER_BUDGET={}W", total_power_budget);
+
+        let mut dashboard = Self {
             port_data: [(0.0, 0.0, 0.0); 3],
             port_connected: [false; 3], // Initialize all ports as disconnected
             port_overcurrent: [false; 3], // Initialize all ports as normal (no overcurrent)
+            power_allocation: [0.0, 0.0, 0.0], // Will be calculated dynamically
+            total_power_budget,
+            show_power_allocation: false, // Default to showing power (row 3)
             draw_count: 0, // Initialize draw counter
             selected_port: 1, // Default to Port 2 (index 1)
             previous_selected_port: None, // No previous selection initially
-        }
+        };
+
+        // Calculate initial power allocation
+        dashboard.calculate_power_allocation();
+        dashboard
     }
 
     // Update Dashboard display data for 3 ports: [(V1, A1, W1), (V2, A2, W2), (V3, A3, W3)]
     pub fn update_data(&mut self, data: [(f32, f32, f32); 3], connection_status: [bool; 3], overcurrent_status: [bool; 3]) {
+        // Check if connection status changed
+        let connection_changed = self.port_connected != connection_status;
+
+        // Check if Port 1 power changed significantly (>1W difference)
+        let port1_power_changed = (data[0].2 - self.port_data[0].2).abs() > 1.0;
+
         self.port_data = data;
         self.port_connected = connection_status;
         self.port_overcurrent = overcurrent_status;
+
+        // Recalculate power allocation if connection status or Port 1 power changed
+        if connection_changed || port1_power_changed {
+            self.calculate_power_allocation();
+        }
     }
 
     // Set the selected port (0, 1, or 2)
@@ -85,6 +118,122 @@ impl Dashboard {
     // Get the currently selected port
     pub fn get_selected_port(&self) -> usize {
         self.selected_port
+    }
+
+    // Toggle display mode between power and power allocation
+    pub fn toggle_display_mode(&mut self) {
+        self.show_power_allocation = !self.show_power_allocation;
+    }
+
+
+
+    // Get current display mode
+    pub fn is_showing_power_allocation(&self) -> bool {
+        self.show_power_allocation
+    }
+
+
+
+    // Update connection status for all ports and recalculate allocation
+    pub fn update_connection_status(&mut self, connected: [bool; 3]) {
+        self.port_connected = connected;
+        self.calculate_power_allocation();
+    }
+
+    // Get current power allocation
+    pub fn get_power_allocation(&self) -> [f32; 3] {
+        self.power_allocation
+    }
+
+    // Calculate dynamic power allocation based on Port 1 real-time power consumption
+    fn calculate_power_allocation(&mut self) {
+        const P23_HIGH_POWER: f32 = 25.0; // P2+P3 high power allocation
+        const P23_LOW_POWER: f32 = 15.0; // P2+P3 low power allocation
+
+        // Track previous allocation to avoid duplicate logs
+        static mut PREV_ALLOCATION: [f32; 3] = [0.0, 0.0, 0.0];
+        static mut PREV_CONNECTIONS: [bool; 3] = [false, false, false];
+
+        let _connections_changed = unsafe { self.port_connected != PREV_CONNECTIONS };
+
+        // Get Port 1 real-time power consumption (from INA226 sensor)
+        let p1_real_power = self.port_data[0].2; // Power is the third element (V, A, W)
+
+        // Reset allocations
+        self.power_allocation = [0.0, 0.0, 0.0];
+
+        if !self.port_connected[0] {
+            // Port 1 not connected - allocate 0W to port 1
+            self.power_allocation[0] = 0.0;
+
+            // P2 and P3 can use full budget
+            let p23_available = self.total_power_budget;
+            self.allocate_p23_power(p23_available);
+
+
+        } else {
+            // Port 1 is connected - use real-time power consumption
+            // 用户策略：根据 Port 1 实时功率动态计算 P2+P3 功率
+
+            // 计算剩余功率：Pt - P1（P1 是实时功率）
+            let remaining_power = self.total_power_budget - p1_real_power;
+
+            // 用户策略实现：功率限制设置
+            // 如果 Pt - P1_real > 25W：P23 限制 = 25W
+            // 如果 Pt - P1_real <= 25W：P23 限制 = 15W（P2 和 P3 各自限制 7.5W）
+
+            let p23_limit = if remaining_power > P23_HIGH_POWER {
+                P23_HIGH_POWER // P23 限制 = 25W
+            } else {
+                P23_LOW_POWER  // P23 限制 = 15W
+            };
+
+            // P1 限制根据 P23 限制计算
+            let p1_power_limit = (self.total_power_budget - p23_limit).max(0.0);
+
+            // 存储功率限制值（用于显示）
+            self.power_allocation[0] = p1_power_limit;
+
+            // 分配 P23 功率限制
+            self.allocate_p23_power(p23_limit);
+
+
+        }
+
+        // Update previous allocation tracking
+        unsafe { PREV_ALLOCATION = self.power_allocation; }
+    }
+
+    // Helper method to allocate power between P2 and P3
+    fn allocate_p23_power(&mut self, p23_total: f32) {
+        const HIGH_CURRENT_POWER: f32 = 15.0; // 3A * 5V = 15W
+        const LOW_CURRENT_POWER: f32 = 7.5; // 1.5A * 5V = 7.5W
+
+        if !self.port_connected[1] && !self.port_connected[2] {
+            // No ports connected - allocate standby power
+            self.power_allocation[1] = LOW_CURRENT_POWER;
+            self.power_allocation[2] = LOW_CURRENT_POWER;
+        } else if self.port_connected[1] && !self.port_connected[2] {
+            // Only Port 2 connected
+            self.power_allocation[1] = p23_total.min(HIGH_CURRENT_POWER);
+            self.power_allocation[2] = 0.0;
+        } else if !self.port_connected[1] && self.port_connected[2] {
+            // Only Port 3 connected
+            self.power_allocation[1] = 0.0;
+            self.power_allocation[2] = p23_total.min(HIGH_CURRENT_POWER);
+        } else {
+            // Both ports connected - distribute power
+            if p23_total >= HIGH_CURRENT_POWER + LOW_CURRENT_POWER {
+                // Enough for 3A + 1.5A - prioritize Port 2
+                self.power_allocation[1] = HIGH_CURRENT_POWER;
+                self.power_allocation[2] = LOW_CURRENT_POWER;
+            } else {
+                // Limited power - split equally
+                let per_port = p23_total / 2.0;
+                self.power_allocation[1] = per_port;
+                self.power_allocation[2] = per_port;
+            }
+        }
     }
 
     // Draw Dashboard directly to the display driver using write_area
@@ -362,14 +511,21 @@ impl Dashboard {
             let current_str = self.float_to_string(&mut buffer, port_current);
             draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, 6, actual_row_height as usize, final_current_color, text_bg_color, &mut char_pixel_buffer).await?;
 
-            // Draw Power (Row 3) - Show "OCP" if overcurrent detected, otherwise show power value
-            if self.port_overcurrent[i] {
-                // Display "OCP" in red when overcurrent is detected
-                draw_string(display, "OCP", col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::RED, text_bg_color, &mut char_pixel_buffer).await?;
+            // Draw Row 3 - Show power allocation or power based on display mode
+            if self.show_power_allocation {
+                // Display power allocation (Row 4 data) - All in Watts with white color
+                let allocation_str = self.float_to_string(&mut buffer, self.power_allocation[i]);
+                draw_string(display, &format!("{}W", allocation_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::WHITE, text_bg_color, &mut char_pixel_buffer).await?;
             } else {
-                // Display normal power value
-                let power_str = self.float_to_string(&mut buffer, port_power);
-                draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, text_bg_color, &mut char_pixel_buffer).await?;
+                // Display power (Row 3 data) - Show "OCP" if overcurrent detected, otherwise show power value
+                if self.port_overcurrent[i] {
+                    // Display "OCP" in red when overcurrent is detected
+                    draw_string(display, "OCP", col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::RED, text_bg_color, &mut char_pixel_buffer).await?;
+                } else {
+                    // Display normal power value
+                    let power_str = self.float_to_string(&mut buffer, port_power);
+                    draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, text_bg_color, &mut char_pixel_buffer).await?;
+                }
             }
         }
 

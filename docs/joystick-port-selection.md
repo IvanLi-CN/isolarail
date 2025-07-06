@@ -1,17 +1,28 @@
-# Joystick Port Selection Feature
+# Joystick Navigation Features
 
 ## Overview
 
-This document describes the implementation of the joystick port selection feature for the ISO USB Hub project. The feature allows users to navigate between different USB ports using the left and right directions of the five-way joystick, with visual feedback on the display.
+This document describes the implementation of the joystick navigation features for the ISO USB Hub project. The features include port selection using left/right directions and display mode switching using the down direction of the five-way joystick, with visual and audio feedback.
 
 ## Features
 
 ### Port Selection
+
 - **Default Selection**: Port 2 (middle port) is selected by default
 - **Navigation**: Use LEFT and RIGHT joystick directions to navigate between ports
   - LEFT: Move to previous port (Port 3 → Port 2 → Port 1)
   - RIGHT: Move to next port (Port 1 → Port 2 → Port 3)
 - **Boundaries**: Navigation stops at the boundaries (cannot go beyond Port 1 or Port 3)
+
+### Display Mode Switching
+
+- **Default Mode**: Power display (Row 3) showing actual power consumption in Watts
+- **Toggle**: Use DOWN joystick direction to switch between display modes
+  - **Power Mode**: Shows real-time power consumption (V, A, W)
+  - **Power Allocation Mode**: Shows power/current limits (V, A, Allocation)
+- **Port-Specific Allocation Display**:
+  - **Port 1**: Power limit in Watts (default: 65W)
+  - **Ports 2 & 3**: Current limit in Amperes (default: 3A each)
 
 ### Visual Feedback
 
@@ -23,28 +34,40 @@ This document describes the implementation of the joystick port selection featur
 - **Non-selected Ports**: No background, normal black display
 
 ### Audio Feedback
-- **Beep Sound**: A 100ms beep is played when successfully changing port selection
-- **No Sound**: No beep when trying to navigate beyond boundaries
+
+- **Port Selection**: A 100ms beep is played when successfully changing port selection
+- **Display Mode Toggle**: A 100ms beep is played when switching display modes
+- **No Sound**: No beep when trying to navigate beyond port boundaries
 
 ## Implementation Details
 
 ### Dashboard Structure Changes
+
 ```rust
 pub struct Dashboard {
     // ... existing fields ...
     selected_port: usize, // Currently selected port (0, 1, or 2)
+    power_allocation: [f32; 3], // Power/current limits for each port
+    show_power_allocation: bool, // Display mode toggle
 }
 ```
 
 ### New Methods
+
 - `set_selected_port(port: usize)`: Set the selected port (with bounds checking)
 - `get_selected_port() -> usize`: Get the currently selected port
+- `toggle_display_mode()`: Switch between power and power allocation display
+- `update_power_allocation(allocation: [f32; 3])`: Update power/current limits
+- `is_showing_power_allocation() -> bool`: Check current display mode
 
 ### Main Loop Integration
+
 The joystick handling is integrated into the main application loop with:
+
 - **Debouncing**: Only triggers on rising edge (button press, not hold)
 - **State Tracking**: Prevents multiple triggers from single button press
-- **Logging**: Debug information when port selection changes
+- **Logging**: Debug information when port selection or display mode changes
+- **Multi-button Support**: Handles LEFT, RIGHT, and DOWN directions simultaneously
 
 ### Display Rendering
 
@@ -61,18 +84,24 @@ The joystick handling is integrated into the main application loop with:
 
 ## Usage
 
-1. **Power On**: System starts with Port 2 selected (default)
+1. **Power On**: System starts with Port 2 selected and Power display mode (default)
 2. **Navigate Left**: Press joystick LEFT to select previous port
 3. **Navigate Right**: Press joystick RIGHT to select next port
-4. **Visual Confirmation**: Selected port will have a dark blue background
-5. **Audio Confirmation**: Successful navigation produces a short beep
+4. **Toggle Display**: Press joystick DOWN to switch between Power and Power Allocation modes
+5. **Visual Confirmation**:
+   - Selected port will have a dark blue background
+   - Display mode affects the third row content (Power vs Allocation)
+6. **Audio Confirmation**: Successful navigation or mode switching produces a short beep
 
 ## Technical Notes
 
 ### Joystick GPIO Mapping
-- LEFT: PA2
-- RIGHT: PA5
-- (UP: PA1, DOWN: PA3, CENTER: PA6 - not used for port selection)
+
+- LEFT: PA2 (Port selection)
+- RIGHT: PA5 (Port selection)
+- DOWN: PA3 (Display mode toggle)
+- UP: PA1 (Not used)
+- CENTER: PA6 (Not used)
 
 ### Display Coordinates
 - Screen: 160x40 pixels in landscape mode
@@ -87,10 +116,13 @@ The joystick handling is integrated into the main application loop with:
 ## Future Enhancements
 
 Potential improvements for this feature:
-1. **Animation**: Smooth transition effects between port selections
-2. **Different Colors**: Port-specific selection colors
-3. **Additional Actions**: CENTER button for port-specific actions
+
+1. **Animation**: Smooth transition effects between port selections and display modes
+2. **Different Colors**: Port-specific selection colors and mode-specific indicators
+3. **Additional Actions**: CENTER button for port-specific actions or settings
 4. **Status Integration**: Different selection styles based on port status (connected/disconnected)
+5. **Configurable Limits**: Runtime adjustment of power/current allocation limits
+6. **Visual Indicators**: Icons or symbols to distinguish between display modes
 
 ## Code Files Modified
 
@@ -100,9 +132,13 @@ Potential improvements for this feature:
 
 ## Testing
 
-To test the feature:
+To test the features:
+
 1. Compile and flash the program to the STM32G431 microcontroller
-2. Observe the default selection on Port 2 (middle column highlighted)
+2. Observe the default selection on Port 2 (middle column highlighted) in Power mode
 3. Press LEFT/RIGHT on the joystick to navigate between ports
-4. Verify visual feedback (background highlight) and audio feedback (beep)
-5. Test boundary conditions (cannot go beyond Port 1 or Port 3)
+4. Press DOWN to toggle between Power and Power Allocation display modes
+5. Verify visual feedback (background highlight and display content changes)
+6. Verify audio feedback (beep for all successful actions)
+7. Test boundary conditions (cannot go beyond Port 1 or Port 3)
+8. Confirm Power Allocation displays: Port 1 shows 65W, Ports 2&3 show 3A

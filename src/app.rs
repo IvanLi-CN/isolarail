@@ -6,7 +6,7 @@ use embedded_graphics::prelude::WebColors;
 use tca6424::{Pin, PinState};
 use defmt::*;
 use crate::display::dashboard::Dashboard;
-use crate::hardware::FiveWayJoystick;
+
 
 /// Buzzer control function to emit a beep sound
 pub async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, duration_ms: u64) {
@@ -125,6 +125,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     // Initialize joystick state tracking for debouncing
     let mut prev_left_pressed = false;
     let mut prev_right_pressed = false;
+    let mut prev_down_pressed = false;
 
     loop {
         // Read data from INA226 sensors
@@ -140,13 +141,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         let current3 = hardware.ina226_sensors.2.current_amps().await.unwrap_or(None).unwrap_or(0.0);
         let power3 = hardware.ina226_sensors.2.power_watts().await.unwrap_or(None).unwrap_or(0.0);
 
-        // Read SW2303 sink device connection status for Port 1
+        // Read SW2303 connection status for Port 1
         let sw2303_port1_connected = match hardware.sw2303_controller.is_sink_device_connected().await {
-            Ok(connected) => connected,
-            Err(e) => {
-                error!("Failed to read SW2303 sink device status: {:?}", e);
-                false
-            }
+            Ok(device_online) => device_online,
+            Err(_) => false,
         };
 
         // Read P2_UFP (P01) and P3_UFP (P25) states
@@ -191,21 +189,67 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         // Check for UFP status changes and trigger buzzer
         if sw2303_port1_connected != prev_port1_connected {
-            info!("SW2303 PD controller Port 1 UFP status changed: {} -> {}", prev_port1_connected, sw2303_port1_connected);
+            info!("Port 1 UFP status changed: {} -> {}", prev_port1_connected, sw2303_port1_connected);
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port1_connected = sw2303_port1_connected;
         }
 
         if port2_connected != prev_port2_connected {
-            info!("TCA6424 Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
+            info!("Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port2_connected = port2_connected;
         }
 
         if port3_connected != prev_port3_connected {
-            info!("TCA6424 Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
+            info!("Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port3_connected = port3_connected;
+        }
+
+        // Note: We now use real-time power consumption from INA226 sensors
+        // instead of SW2303 negotiated power for dynamic allocation
+
+        // Check for connection status changes and trigger power allocation recalculation
+        let current_connections = [sw2303_port1_connected, port2_connected, port3_connected];
+        static mut PREV_CONNECTIONS: [bool; 3] = [false, false, false];
+        let prev_connections = unsafe { PREV_CONNECTIONS };
+
+        let connections_changed = current_connections != prev_connections;
+        if connections_changed {
+            info!("Connections: P1={}, P2={}, P3={}",
+                  current_connections[0], current_connections[1], current_connections[2]);
+            unsafe { PREV_CONNECTIONS = current_connections; }
+        }
+
+        // Update connection status and apply dynamic power allocation
+        dashboard.update_connection_status(current_connections);
+        let power_allocation = dashboard.get_power_allocation();
+
+        // Apply power allocation to hardware (only when connections change or every 10 seconds)
+        static mut LAST_APPLY_TIME: u64 = 0;
+        let current_time = embassy_time::Instant::now().as_millis();
+        let should_apply = connections_changed || (current_time - unsafe { LAST_APPLY_TIME } > 10000);
+
+        if should_apply {
+            if connections_changed {
+                info!("Applying power allocation due to connection change");
+            } else {
+                info!("Applying power allocation (periodic update)");
+            }
+
+            match crate::hardware::apply_power_allocation(
+                &mut hardware.sw2303_controller,
+                &mut hardware.tca6424_expander,
+                power_allocation
+            ).await {
+                Ok(_) => {
+                    info!("Power allocation applied successfully");
+                    unsafe { LAST_APPLY_TIME = current_time; }
+                }
+                Err(_e) => {
+                    error!("Failed to apply power allocation to hardware");
+                }
+            }
         }
 
         // Prepare data for Dashboard, converting f64 to f32
@@ -224,8 +268,8 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         // Update Dashboard data
         dashboard.update_data(sensor_data, connection_status, overcurrent_status);
 
-        // Handle joystick input for port selection with debouncing
-        let (_, _, left, right, _) = hardware.joystick.get_all_states();
+        // Handle joystick input for port selection and display mode switching with debouncing
+        let (_, down, left, right, _) = hardware.joystick.get_all_states();
 
         // Handle LEFT press (only on rising edge)
         if left && !prev_left_pressed {
@@ -247,9 +291,22 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             }
         }
 
+        // Handle DOWN press (only on rising edge) - Toggle display mode
+        if down && !prev_down_pressed {
+            dashboard.toggle_display_mode();
+            let mode = if dashboard.is_showing_power_allocation() {
+                "Power Allocation"
+            } else {
+                "Power"
+            };
+            info!("Joystick: DOWN pressed - Switched to {} display", mode);
+            beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+        }
+
         // Update previous states for next iteration
         prev_left_pressed = left;
         prev_right_pressed = right;
+        prev_down_pressed = down;
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();
@@ -259,35 +316,4 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     }
 }
 
-/// Test five-way joystick functionality
-pub async fn test_joystick(joystick: &FiveWayJoystick, buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) {
-    info!("Testing five-way joystick...");
 
-    loop {
-        let (up, down, left, right, center) = joystick.get_all_states();
-
-        if up {
-            info!("Joystick: UP pressed");
-            beep_buzzer(buzzer_pwm, 100).await;
-        }
-        if down {
-            info!("Joystick: DOWN pressed");
-            beep_buzzer(buzzer_pwm, 100).await;
-        }
-        if left {
-            info!("Joystick: LEFT pressed");
-            beep_buzzer(buzzer_pwm, 100).await;
-        }
-        if right {
-            info!("Joystick: RIGHT pressed");
-            beep_buzzer(buzzer_pwm, 100).await;
-        }
-        if center {
-            info!("Joystick: CENTER pressed");
-            beep_buzzer(buzzer_pwm, 200).await; // Longer beep for center
-        }
-
-        // Small delay to prevent excessive polling
-        embassy_time::Timer::after_millis(50).await;
-    }
-}

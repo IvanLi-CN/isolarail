@@ -21,6 +21,10 @@ rb = "run --bin"
 rrb = "run --release --bin"
 rr = "run --release"
 br = "build --release"
+# Clean build (useful when environment variables change)
+clean-build = "build --bin iso-usb-hub"
+clean-run = "run --bin iso-usb-hub"
 
 [env]
 DEFMT_LOG = "info"
+TOTAL_POWER_BUDGET = "100"

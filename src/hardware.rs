@@ -160,6 +160,130 @@ where
     Ok(())
 }
 
+/// Apply dynamic power allocation to hardware controllers.
+/// This function configures SW2303 and TPS25810 controllers based on calculated power allocation.
+pub async fn apply_power_allocation<I2C>(
+    sw2303: &mut SW2303<'_, I2C>,
+    tca6424: &mut Tca6424<'_, I2C>,
+    power_allocation: [f32; 3]
+) -> Result<(), sw2303::error::Error<I2C::Error>>
+where
+    I2C: embedded_hal_async::i2c::I2c,
+{
+    info!("Applying power allocation: P1={}W, P2={}W, P3={}W",
+          power_allocation[0], power_allocation[1], power_allocation[2]);
+
+    // Apply Port 1 (SW2303) power allocation
+    let port1_power = power_allocation[0] as u8;
+    if port1_power > 0 && port1_power <= 127 {
+        info!("Configuring SW2303 Port 1 to {}W", port1_power);
+        match sw2303.unlock_write_enable_0().await {
+            Ok(_) => {
+                info!("SW2303 registers unlocked successfully");
+                match sw2303.set_power_config(port1_power).await {
+                    Ok(_) => {
+                        info!("✓ SW2303 Port 1 power configured to {}W", port1_power);
+                    }
+                    Err(e) => {
+                        info!("✗ Failed to set SW2303 power config");
+                        return Err(e);
+                    }
+                }
+            }
+            Err(e) => {
+                info!("✗ Failed to unlock SW2303 registers");
+                return Err(e);
+            }
+        }
+    } else if port1_power == 0 {
+        info!("Port 1 power allocation is 0W, skipping SW2303 configuration");
+    } else {
+        info!("Port 1 power allocation {}W exceeds maximum 127W, skipping", port1_power);
+    }
+
+    // Apply Port 2 (TPS25810) current allocation
+    let port2_current_a = power_allocation[1] / 5.0; // Convert watts to amperes (5V)
+    info!("Configuring TPS25810 Port 2 to {}A ({}W)", port2_current_a as u32, power_allocation[1] as u32);
+    match apply_tps25810_current_limit(tca6424, 2, port2_current_a).await {
+        Ok(_) => {
+            info!("✓ Port 2 current limit configured successfully");
+        }
+        Err(_e) => {
+            info!("✗ Failed to set Port 2 current limit");
+        }
+    }
+
+    // Apply Port 3 (TPS25810) current allocation
+    let port3_current_a = power_allocation[2] / 5.0; // Convert watts to amperes (5V)
+    info!("Configuring TPS25810 Port 3 to {}A ({}W)", port3_current_a as u32, power_allocation[2] as u32);
+    match apply_tps25810_current_limit(tca6424, 3, port3_current_a).await {
+        Ok(_) => {
+            info!("✓ Port 3 current limit configured successfully");
+        }
+        Err(_e) => {
+            info!("✗ Failed to set Port 3 current limit");
+        }
+    }
+
+    info!("✓ Hardware configured: P1={}W, P2={}A, P3={}A",
+          port1_power, port2_current_a as u32, port3_current_a as u32);
+
+    Ok(())
+}
+
+/// Apply current limit to TPS25810 controller via TCA6424 GPIO pins.
+///
+/// # Arguments
+/// * `tca6424` - TCA6424 I/O expander reference
+/// * `port` - Port number (2 or 3)
+/// * `current_a` - Current limit in amperes
+async fn apply_tps25810_current_limit<I2C>(
+    tca6424: &mut Tca6424<'_, I2C>,
+    port: u8,
+    current_a: f32
+) -> Result<(), tca6424::errors::Error<I2C::Error>>
+where
+    I2C: embedded_hal_async::i2c::I2c,
+{
+    use tca6424::{Pin, PinState};
+
+    info!("Setting TPS25810 Port {} current limit to {}A", port, current_a as u32);
+
+    let (chg_pin, chg_hl_pin) = match port {
+        2 => {
+            info!("Port 2 GPIO pins: CHG=P04, CHG_HL=P03");
+            (Pin::P04, Pin::P03) // Port 2: P2_CHG, P2_CHG_HL
+        },
+        3 => {
+            info!("Port 3 GPIO pins: CHG=P22, CHG_HL=P23");
+            (Pin::P22, Pin::P23) // Port 3: P3_CHG, P3_CHG_HL
+        },
+        _ => {
+            info!("Invalid port number: {}", port);
+            return Err(tca6424::errors::Error::InvalidRegisterOrPin);
+        }
+    };
+
+    if current_a >= 2.5 {
+        // 3A mode: CHG = High, CHG_HL = High
+        tca6424.set_pin_output(chg_pin, PinState::High).await?;
+        tca6424.set_pin_output(chg_hl_pin, PinState::High).await?;
+        info!("✓ Port {} configured for 3A", port);
+    } else if current_a >= 1.0 {
+        // 1.5A mode: CHG = High, CHG_HL = Low
+        tca6424.set_pin_output(chg_pin, PinState::High).await?;
+        tca6424.set_pin_output(chg_hl_pin, PinState::Low).await?;
+        info!("✓ Port {} configured for 1.5A", port);
+    } else {
+        // Low current mode: CHG = Low, CHG_HL = Low (500mA/900mA default)
+        tca6424.set_pin_output(chg_pin, PinState::Low).await?;
+        tca6424.set_pin_output(chg_hl_pin, PinState::Low).await?;
+        info!("✓ Port {} configured for default current", port);
+    }
+
+    Ok(())
+}
+
 /// Initialize all hardware components
 pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfig<'static> {
     info!("Initializing hardware components...");

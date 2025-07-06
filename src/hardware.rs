@@ -95,6 +95,7 @@ pub struct HardwareConfig<'a> {
     pub tca6424_expander: Tca6424<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     pub sw2303_controller: SW2303<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     pub buzzer_pwm: SimplePwm<'static, peripherals::TIM3>,
+    pub backlight_pwm: SimplePwm<'static, peripherals::TIM1>,
     pub joystick: FiveWayJoystick,
     pub display: GC9D01<
         'static,
@@ -272,6 +273,22 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     buzzer_pwm.ch1().set_duty_cycle_percent(0);
     info!("Buzzer PWM initialized on PC6 (TIM3_CH1).");
 
+    // Initialize backlight PWM
+    let backlight_pin = PwmPin::new_ch1(p.PA8, embassy_stm32::gpio::OutputType::PushPull);
+    let mut backlight_pwm = SimplePwm::new(
+        p.TIM1,
+        Some(backlight_pin),
+        None,
+        None,
+        None,
+        Hertz(1000), // 1kHz PWM frequency for backlight
+        CountingMode::EdgeAlignedUp,
+    );
+    // Set backlight to 75% brightness
+    backlight_pwm.ch1().set_duty_cycle_percent(75);
+    backlight_pwm.ch1().enable();
+    info!("Backlight PWM initialized on PA8 (TIM1_CH1) with 75% brightness.");
+
     // Initialize SPI and display
     let spi_peripheral_instance = p.SPI1;
     let sck_pin = p.PB3;
@@ -353,6 +370,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         tca6424_expander,
         sw2303_controller,
         buzzer_pwm,
+        backlight_pwm,
         joystick,
         display,
     }

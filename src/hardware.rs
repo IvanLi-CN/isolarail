@@ -284,6 +284,39 @@ where
     Ok(())
 }
 
+/// Control USB communication for a specific port
+///
+/// # Arguments
+/// * `tca6424` - TCA6424 expander instance
+/// * `port` - Port number (1, 2, or 3)
+/// * `enable` - true to enable communication, false to disable
+pub async fn control_usb_communication<I2C>(
+    tca6424: &mut Tca6424<'_, I2C>,
+    port: u8,
+    enable: bool
+) -> Result<(), tca6424::errors::Error<I2C::Error>>
+where
+    I2C: embedded_hal_async::i2c::I2c,
+{
+    let data_conn_pin = match port {
+        1 => Pin::P10, // P1_DATA_CONN
+        2 => Pin::P11, // P2_DATA_CONN
+        3 => Pin::P12, // P3_DATA_CONN
+        _ => {
+            info!("Invalid port number: {}", port);
+            return Err(tca6424::errors::Error::InvalidRegisterOrPin);
+        }
+    };
+
+    let state = if enable { PinState::High } else { PinState::Low };
+    tca6424.set_pin_output(data_conn_pin, state).await?;
+
+    let action = if enable { "enabled" } else { "disabled" };
+    info!("✓ Port {} USB communication {}", port, action);
+
+    Ok(())
+}
+
 /// Initialize all hardware components
 pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfig<'static> {
     info!("Initializing hardware components...");
@@ -346,6 +379,11 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     tca6424_expander.set_pin_direction(Pin::P22, PinDirection::Output).await.unwrap(); // P3_CHG
     tca6424_expander.set_pin_direction(Pin::P23, PinDirection::Output).await.unwrap(); // P3_CHG_HL
 
+    // Configure output pins for USB communication control
+    tca6424_expander.set_pin_direction(Pin::P10, PinDirection::Output).await.unwrap(); // P1_DATA_CONN
+    tca6424_expander.set_pin_direction(Pin::P11, PinDirection::Output).await.unwrap(); // P2_DATA_CONN
+    tca6424_expander.set_pin_direction(Pin::P12, PinDirection::Output).await.unwrap(); // P3_DATA_CONN
+
     // Enable 3A current capability for Port 2
     // First enable P2_CHG (1.5A base current source)
     tca6424_expander.set_pin_output(Pin::P04, PinState::High).await.unwrap(); // P2_CHG = High
@@ -358,7 +396,12 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     // Then enable P3_CHG_HL (3A current source, requires P3_CHG to be High)
     tca6424_expander.set_pin_output(Pin::P23, PinState::High).await.unwrap(); // P3_CHG_HL = High
 
-    info!("TCA6424 expander initialized with 3A current capability for ports 2 and 3.");
+    // Enable USB communication for all ports by default
+    tca6424_expander.set_pin_output(Pin::P10, PinState::High).await.unwrap(); // P1_DATA_CONN = High (enabled)
+    tca6424_expander.set_pin_output(Pin::P11, PinState::High).await.unwrap(); // P2_DATA_CONN = High (enabled)
+    tca6424_expander.set_pin_output(Pin::P12, PinState::High).await.unwrap(); // P3_DATA_CONN = High (enabled)
+
+    info!("TCA6424 expander initialized with 3A current capability and USB communication enabled for all ports.");
 
     // Initialize SW2303
     static I2C_DEVICE_SW2303_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();

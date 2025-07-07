@@ -126,6 +126,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     let mut prev_left_pressed = false;
     let mut prev_right_pressed = false;
     let mut prev_down_pressed = false;
+    let mut prev_center_pressed = false;
+
+    // Track USB communication state for the selected port
+    let mut usb_comm_disabled = false;
 
     loop {
         // Read data from INA226 sensors
@@ -269,7 +273,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         dashboard.update_data(sensor_data, connection_status, overcurrent_status);
 
         // Handle joystick input for port selection and display mode switching with debouncing
-        let (_, down, left, right, _) = hardware.joystick.get_all_states();
+        let (_, down, left, right, center) = hardware.joystick.get_all_states();
 
         // Handle LEFT press (only on rising edge)
         if left && !prev_left_pressed {
@@ -303,10 +307,48 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
         }
 
+        // Handle CENTER press/release - Temporarily disconnect USB communication for selected port
+        if center && !prev_center_pressed {
+            // Center button pressed - disable USB communication for selected port
+            let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
+            match crate::hardware::control_usb_communication(
+                &mut hardware.tca6424_expander,
+                selected_port as u8,
+                false
+            ).await {
+                Ok(_) => {
+                    usb_comm_disabled = true;
+                    info!("Joystick: CENTER pressed - USB communication disabled for Port {}", selected_port);
+                    beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // Different beep for disconnect
+                }
+                Err(e) => {
+                    error!("Failed to disable USB communication for Port {}: {:?}", selected_port, e);
+                }
+            }
+        } else if !center && prev_center_pressed && usb_comm_disabled {
+            // Center button released - re-enable USB communication for selected port
+            let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
+            match crate::hardware::control_usb_communication(
+                &mut hardware.tca6424_expander,
+                selected_port as u8,
+                true
+            ).await {
+                Ok(_) => {
+                    usb_comm_disabled = false;
+                    info!("Joystick: CENTER released - USB communication restored for Port {}", selected_port);
+                    beep_buzzer(&mut hardware.buzzer_pwm, 100).await; // Normal beep for reconnect
+                }
+                Err(e) => {
+                    error!("Failed to restore USB communication for Port {}: {:?}", selected_port, e);
+                }
+            }
+        }
+
         // Update previous states for next iteration
         prev_left_pressed = left;
         prev_right_pressed = right;
         prev_down_pressed = down;
+        prev_center_pressed = center;
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();

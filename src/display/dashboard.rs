@@ -14,25 +14,24 @@ use defmt::info;
 //     geometry::Point,
 // };
 
-use gc9d01::GC9D01; // Import GC9D01
-use crate::display::font::{char_to_mono_bitmap, mono_bitmap_to_rgb565, FONT_8X12_WIDTH, FONT_8X12_HEIGHT}; // Updated constant names
+use crate::display::font::{
+    FONT_8X12_HEIGHT, FONT_8X12_WIDTH, char_to_mono_bitmap, mono_bitmap_to_rgb565,
+};
+use gc9d01::GC9D01; // Import GC9D01 // Updated constant names
 
 // Import necessary traits for GC9D01 (these are bounds on the GC9D01 struct itself)
+use alloc::format;
+use core::convert::TryInto; // Added import for try_into
 use embedded_hal::digital::OutputPin;
 use embedded_hal_async::spi::SpiDevice;
-use gc9d01::Timer as Gc9d01Timer; // Moved this import up
-use core::convert::TryInto; // Added import for try_into
-use alloc::format; // Added import for alloc::format!
-
-
+use gc9d01::Timer as Gc9d01Timer; // Moved this import up // Added import for alloc::format!
 
 #[derive(Debug)]
 pub enum Error {
     // Add specific error types later if needed
     DriverError, // Placeholder for errors from the GC9D01 driver
-    // Add other errors like FontError, LayoutError, etc. as needed
+                 // Add other errors like FontError, LayoutError, etc. as needed
 }
-
 
 // Define colors
 const COLOR_VOLTAGE: Rgb565 = Rgb565::YELLOW;
@@ -48,6 +47,8 @@ pub struct Dashboard {
     port_connected: [bool; 3],
     // Overcurrent status for each port (true if overcurrent detected, false if normal)
     port_overcurrent: [bool; 3],
+    // USB communication status for each port (true if enabled, false if disabled)
+    usb_comm_enabled: [bool; 3],
     // Power allocation data: All ports in Watts
     power_allocation: [f32; 3],
     // Total power budget in Watts
@@ -71,17 +72,21 @@ impl Dashboard {
             .and_then(|s| s.parse::<f32>().ok())
             .unwrap_or(100.0);
 
-        info!("Dashboard initialized with TOTAL_POWER_BUDGET={}W", total_power_budget);
+        info!(
+            "Dashboard initialized with TOTAL_POWER_BUDGET={}W",
+            total_power_budget
+        );
 
         let mut dashboard = Self {
             port_data: [(0.0, 0.0, 0.0); 3],
             port_connected: [false; 3], // Initialize all ports as disconnected
             port_overcurrent: [false; 3], // Initialize all ports as normal (no overcurrent)
+            usb_comm_enabled: [true; 3], // Initialize all ports with USB communication enabled
             power_allocation: [0.0, 0.0, 0.0], // Will be calculated dynamically
             total_power_budget,
             show_power_allocation: false, // Default to showing power (row 3)
-            draw_count: 0, // Initialize draw counter
-            selected_port: 1, // Default to Port 2 (index 1)
+            draw_count: 0,                // Initialize draw counter
+            selected_port: 1,             // Default to Port 2 (index 1)
             previous_selected_port: None, // No previous selection initially
         };
 
@@ -91,7 +96,12 @@ impl Dashboard {
     }
 
     // Update Dashboard display data for 3 ports: [(V1, A1, W1), (V2, A2, W2), (V3, A3, W3)]
-    pub fn update_data(&mut self, data: [(f32, f32, f32); 3], connection_status: [bool; 3], overcurrent_status: [bool; 3]) {
+    pub fn update_data(
+        &mut self,
+        data: [(f32, f32, f32); 3],
+        connection_status: [bool; 3],
+        overcurrent_status: [bool; 3],
+    ) {
         // Check if connection status changed
         let connection_changed = self.port_connected != connection_status;
 
@@ -120,19 +130,22 @@ impl Dashboard {
         self.selected_port
     }
 
+    // Update USB communication status for a specific port
+    pub fn set_usb_communication(&mut self, port_index: usize, enabled: bool) {
+        if port_index < 3 {
+            self.usb_comm_enabled[port_index] = enabled;
+        }
+    }
+
     // Toggle display mode between power and power allocation
     pub fn toggle_display_mode(&mut self) {
         self.show_power_allocation = !self.show_power_allocation;
     }
 
-
-
     // Get current display mode
     pub fn is_showing_power_allocation(&self) -> bool {
         self.show_power_allocation
     }
-
-
 
     // Update connection status for all ports and recalculate allocation
     pub fn update_connection_status(&mut self, connected: [bool; 3]) {
@@ -169,8 +182,6 @@ impl Dashboard {
             // P2 and P3 can use full budget
             let p23_available = self.total_power_budget;
             self.allocate_p23_power(p23_available);
-
-
         } else {
             // Port 1 is connected - use real-time power consumption
             // 用户策略：根据 Port 1 实时功率动态计算 P2+P3 功率
@@ -185,7 +196,7 @@ impl Dashboard {
             let p23_limit = if remaining_power > P23_HIGH_POWER {
                 P23_HIGH_POWER // P23 限制 = 25W
             } else {
-                P23_LOW_POWER  // P23 限制 = 15W
+                P23_LOW_POWER // P23 限制 = 15W
             };
 
             // P1 限制根据 P23 限制计算
@@ -196,12 +207,12 @@ impl Dashboard {
 
             // 分配 P23 功率限制
             self.allocate_p23_power(p23_limit);
-
-
         }
 
         // Update previous allocation tracking
-        unsafe { PREV_ALLOCATION = self.power_allocation; }
+        unsafe {
+            PREV_ALLOCATION = self.power_allocation;
+        }
     }
 
     // Helper method to allocate power between P2 and P3
@@ -238,7 +249,10 @@ impl Dashboard {
 
     // Draw Dashboard directly to the display driver using write_area
     // Accept GC9D01 directly
-    pub async fn draw<'a, BUS, DC, RST, TIMER>(&mut self, display: &mut GC9D01<'a, BUS, DC, RST, TIMER>) -> Result<(), Error>
+    pub async fn draw<'a, BUS, DC, RST, TIMER>(
+        &mut self,
+        display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
+    ) -> Result<(), Error>
     where
         BUS: SpiDevice,
         DC: OutputPin<Error = core::convert::Infallible>, // Specify Infallible error type
@@ -261,7 +275,6 @@ impl Dashboard {
         }
         self.draw_count += 1;
         // (Assuming 160x40 is a multiple of 20x20, so no extra handling needed for this specific case)
-
 
         // Layout: 3 columns, hardcoded positions to avoid overlap
         // Screen width: 160 pixels, divide into 3 columns with proper spacing
@@ -344,7 +357,10 @@ impl Dashboard {
                 }
             }
 
-            display.write_area(x, y, width, height, &bg_buffer).await.map_err(|_| Error::DriverError)?;
+            display
+                .write_area(x, y, width, height, &bg_buffer)
+                .await
+                .map_err(|_| Error::DriverError)?;
             Ok(())
         }
 
@@ -352,7 +368,7 @@ impl Dashboard {
         async fn draw_string<'a, BUS, DC, RST, TIMER>(
             display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
             s: &str,
-            right_edge_x: usize, // Right edge of the drawing area
+            right_edge_x: usize,      // Right edge of the drawing area
             fixed_width_chars: usize, // Fixed width in characters (e.g., 6 for "12.34V")
             start_y: usize,
             fg_color: Rgb565,
@@ -394,13 +410,16 @@ impl Dashboard {
                     let x0 = current_x;
                     let y0 = start_y;
 
-                    display.write_area(
-                        x0.try_into().unwrap(),
-                        y0.try_into().unwrap(),
-                        FONT_8X12_WIDTH.try_into().unwrap(),
-                        FONT_8X12_HEIGHT.try_into().unwrap(),
-                        char_pixel_buffer,
-                    ).await.map_err(|_| Error::DriverError)?;
+                    display
+                        .write_area(
+                            x0.try_into().unwrap(),
+                            y0.try_into().unwrap(),
+                            FONT_8X12_WIDTH.try_into().unwrap(),
+                            FONT_8X12_HEIGHT.try_into().unwrap(),
+                            char_pixel_buffer,
+                        )
+                        .await
+                        .map_err(|_| Error::DriverError)?;
 
                     current_x += FONT_8X12_WIDTH;
                 } else {
@@ -410,13 +429,16 @@ impl Dashboard {
                     let x0 = current_x;
                     let y0 = start_y;
 
-                    display.write_area(
-                        x0.try_into().unwrap(),
-                        y0.try_into().unwrap(),
-                        FONT_8X12_WIDTH.try_into().unwrap(),
-                        FONT_8X12_HEIGHT.try_into().unwrap(),
-                        char_pixel_buffer,
-                    ).await.map_err(|_| Error::DriverError)?;
+                    display
+                        .write_area(
+                            x0.try_into().unwrap(),
+                            y0.try_into().unwrap(),
+                            FONT_8X12_WIDTH.try_into().unwrap(),
+                            FONT_8X12_HEIGHT.try_into().unwrap(),
+                            char_pixel_buffer,
+                        )
+                        .await
+                        .map_err(|_| Error::DriverError)?;
 
                     current_x += FONT_8X12_WIDTH;
                 }
@@ -432,7 +454,8 @@ impl Dashboard {
                 let prev_bg_x = (prev_col_start_x as i32 - 4).max(0) as u16;
                 let prev_bg_y = 0u16.saturating_sub(4);
                 let prev_col_width = prev_col_end_x - prev_col_start_x;
-                let prev_bg_width = (prev_col_width as u16 + 8).min(screen_width as u16 - prev_bg_x);
+                let prev_bg_width =
+                    (prev_col_width as u16 + 8).min(screen_width as u16 - prev_bg_x);
                 let prev_bg_height = screen_height as u16 + 8;
 
                 // Clear previous background in chunks to avoid memory issues
@@ -442,14 +465,18 @@ impl Dashboard {
 
                 for y_chunk in (0..prev_bg_height).step_by(chunk_height) {
                     let remaining_height = (prev_bg_height - y_chunk).min(chunk_height as u16);
-                    let chunk_pixels = (prev_bg_width as usize * remaining_height as usize).min(chunk_size);
-                    display.write_area(
-                        prev_bg_x,
-                        prev_bg_y + y_chunk,
-                        prev_bg_width,
-                        remaining_height,
-                        &clear_buffer[..chunk_pixels]
-                    ).await.map_err(|_| Error::DriverError)?;
+                    let chunk_pixels =
+                        (prev_bg_width as usize * remaining_height as usize).min(chunk_size);
+                    display
+                        .write_area(
+                            prev_bg_x,
+                            prev_bg_y + y_chunk,
+                            prev_bg_width,
+                            remaining_height,
+                            &clear_buffer[..chunk_pixels],
+                        )
+                        .await
+                        .map_err(|_| Error::DriverError)?;
                 }
             }
         }
@@ -473,13 +500,14 @@ impl Dashboard {
             // All ports now use connection-based fixed colors for consistency.
 
             // Determine final colors based on connection status for all ports
-            let (final_voltage_color, final_current_color, final_power_color) = if self.port_connected[i] {
-                // If port is connected, use fixed colors: voltage yellow, current red, power green
-                (COLOR_VOLTAGE, COLOR_CURRENT, COLOR_POWER)
-            } else {
-                // If port is not connected, use gray for all
-                (COLOR_GRAY, COLOR_GRAY, COLOR_GRAY)
-            };
+            let (final_voltage_color, final_current_color, final_power_color) =
+                if self.port_connected[i] {
+                    // If port is connected, use fixed colors: voltage yellow, current red, power green
+                    (COLOR_VOLTAGE, COLOR_CURRENT, COLOR_POWER)
+                } else {
+                    // If port is not connected, use gray for all
+                    (COLOR_GRAY, COLOR_GRAY, COLOR_GRAY)
+                };
 
             // Determine text background color based on selection status
             let text_bg_color = if i == self.selected_port {
@@ -500,31 +528,95 @@ impl Dashboard {
                 let bg_width = (col_width as u16 + 8).min(screen_width as u16 - bg_x); // 4px padding on each side
                 let bg_height = screen_height as u16 + 8; // 4px padding top and bottom
 
-                draw_rounded_rect(display, bg_x, bg_y, bg_width, bg_height, selection_color, 4).await?;
+                draw_rounded_rect(display, bg_x, bg_y, bg_width, bg_height, selection_color, 4)
+                    .await?;
             }
 
             // Draw Voltage (Row 1) - Fixed width of 6 characters (e.g., "12.34V")
             let voltage_str = self.float_to_string(&mut buffer, port_voltage);
-            draw_string(display, &format!("{}V", voltage_str), col_right_edge_x as usize, 6, 0, final_voltage_color, text_bg_color, &mut char_pixel_buffer).await?;
+            draw_string(
+                display,
+                &format!("{}V", voltage_str),
+                col_right_edge_x as usize,
+                6,
+                0,
+                final_voltage_color,
+                text_bg_color,
+                &mut char_pixel_buffer,
+            )
+            .await?;
 
             // Draw Current (Row 2) - Fixed width of 6 characters (e.g., "12.34A")
             let current_str = self.float_to_string(&mut buffer, port_current);
-            draw_string(display, &format!("{}A", current_str), col_right_edge_x as usize, 6, actual_row_height as usize, final_current_color, text_bg_color, &mut char_pixel_buffer).await?;
+            draw_string(
+                display,
+                &format!("{}A", current_str),
+                col_right_edge_x as usize,
+                6,
+                actual_row_height as usize,
+                final_current_color,
+                text_bg_color,
+                &mut char_pixel_buffer,
+            )
+            .await?;
 
             // Draw Row 3 - Show power allocation or power based on display mode
             if self.show_power_allocation {
                 // Display power allocation (Row 4 data) - All in Watts with white color
                 let allocation_str = self.float_to_string(&mut buffer, self.power_allocation[i]);
-                draw_string(display, &format!("{}W", allocation_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::WHITE, text_bg_color, &mut char_pixel_buffer).await?;
+                draw_string(
+                    display,
+                    &format!("{}W", allocation_str),
+                    col_right_edge_x as usize,
+                    6,
+                    (actual_row_height * 2) as usize,
+                    Rgb565::WHITE,
+                    text_bg_color,
+                    &mut char_pixel_buffer,
+                )
+                .await?;
             } else {
-                // Display power (Row 3 data) - Show "OCP" if overcurrent detected, otherwise show power value
-                if self.port_overcurrent[i] {
+                // Display power (Row 3 data) - Show status based on priority: USB comm > OCP > power value
+                if !self.usb_comm_enabled[i] {
+                    // Display "DISC" in orange when USB communication is disabled
+                    draw_string(
+                        display,
+                        "DISC",
+                        col_right_edge_x as usize,
+                        6,
+                        (actual_row_height * 2) as usize,
+                        Rgb565::new(31, 32, 0),
+                        text_bg_color,
+                        &mut char_pixel_buffer,
+                    )
+                    .await?; // Orange color
+                } else if self.port_overcurrent[i] {
                     // Display "OCP" in red when overcurrent is detected
-                    draw_string(display, "OCP", col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, Rgb565::RED, text_bg_color, &mut char_pixel_buffer).await?;
+                    draw_string(
+                        display,
+                        "OCP",
+                        col_right_edge_x as usize,
+                        6,
+                        (actual_row_height * 2) as usize,
+                        Rgb565::RED,
+                        text_bg_color,
+                        &mut char_pixel_buffer,
+                    )
+                    .await?;
                 } else {
                     // Display normal power value
                     let power_str = self.float_to_string(&mut buffer, port_power);
-                    draw_string(display, &format!("{}W", power_str), col_right_edge_x as usize, 6, (actual_row_height * 2) as usize, final_power_color, text_bg_color, &mut char_pixel_buffer).await?;
+                    draw_string(
+                        display,
+                        &format!("{}W", power_str),
+                        col_right_edge_x as usize,
+                        6,
+                        (actual_row_height * 2) as usize,
+                        final_power_color,
+                        text_bg_color,
+                        &mut char_pixel_buffer,
+                    )
+                    .await?;
                 }
             }
         }
@@ -533,7 +625,8 @@ impl Dashboard {
     }
 
     // Simplified float to string function (moved from inside draw)
-    fn float_to_string<'a>(&self, buffer: &'a mut [u8], value: f32) -> &'a str { // Added &self and value parameter and lifetime
+    fn float_to_string<'a>(&self, buffer: &'a mut [u8], value: f32) -> &'a str {
+        // Added &self and value parameter and lifetime
         // This is a very simplified implementation for demonstration only
         // Does not handle negative numbers, large numbers, or specific precision well
         let integer_part = value as i32;
@@ -555,14 +648,15 @@ impl Dashboard {
             temp %= divisor;
             divisor /= 10;
         }
-         if integer_part == 0 && value.abs() < 1.0 && value >= 0.0 { // Handle 0.x case
-             buffer[cursor] = b'0';
-             cursor += 1;
-        } else if integer_part == 0 && value.abs() < 1.0 && value < 0.0 && cursor == 1 { // Handle -0.x case
-             buffer[cursor] = b'0';
-             cursor += 1;
+        if integer_part == 0 && value.abs() < 1.0 && value >= 0.0 {
+            // Handle 0.x case
+            buffer[cursor] = b'0';
+            cursor += 1;
+        } else if integer_part == 0 && value.abs() < 1.0 && value < 0.0 && cursor == 1 {
+            // Handle -0.x case
+            buffer[cursor] = b'0';
+            cursor += 1;
         }
-
 
         buffer[cursor] = b'.';
         cursor += 1;

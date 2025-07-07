@@ -1,12 +1,11 @@
 // src/app.rs
-use embassy_stm32::timer::simple_pwm::SimplePwm;
+use crate::display::dashboard::Dashboard;
+use defmt::*;
 use embassy_stm32::peripherals;
+use embassy_stm32::timer::simple_pwm::SimplePwm;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::WebColors;
 use tca6424::{Pin, PinState};
-use defmt::*;
-use crate::display::dashboard::Dashboard;
-
 
 /// Buzzer control function to emit a beep sound
 pub async fn beep_buzzer(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>, duration_ms: u64) {
@@ -44,7 +43,7 @@ pub async fn play_alarm_beep(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) 
 
 /// Display test pattern on startup
 pub async fn display_test_pattern<'a, BUS, DC, RST, TIMER, BusE, PinE>(
-    display: &mut gc9d01::GC9D01<'a, BUS, DC, RST, TIMER>
+    display: &mut gc9d01::GC9D01<'a, BUS, DC, RST, TIMER>,
 ) -> Result<(), gc9d01::Error<BusE, PinE>>
 where
     BUS: embedded_hal_async::spi::SpiDevice<Error = BusE>,
@@ -82,7 +81,10 @@ where
         }
 
         // Write the pixel data for the current stripe
-        if let Err(e) = display.write_area(x, 0, STRIPE_WIDTH, STRIPE_HEIGHT, &stripe_pixels).await {
+        if let Err(e) = display
+            .write_area(x, 0, STRIPE_WIDTH, STRIPE_HEIGHT, &stripe_pixels)
+            .await
+        {
             error!("Failed to write stripe {}: {:?}", i, e);
             return Err(e);
         }
@@ -96,7 +98,11 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     info!("Starting application main loop");
 
     // Fill display with black background
-    hardware.display.fill_color(Rgb565::CSS_BLACK).await.unwrap();
+    hardware
+        .display
+        .fill_color(Rgb565::CSS_BLACK)
+        .await
+        .unwrap();
 
     // Display test pattern
     if let Err(e) = display_test_pattern(&mut hardware.display).await {
@@ -133,27 +139,87 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
     loop {
         // Read data from INA226 sensors
-        let voltage1 = hardware.ina226_sensors.0.bus_voltage_millivolts().await.unwrap_or(0.0);
-        let current1 = hardware.ina226_sensors.0.current_amps().await.unwrap_or(None).unwrap_or(0.0);
-        let power1 = hardware.ina226_sensors.0.power_watts().await.unwrap_or(None).unwrap_or(0.0);
+        let voltage1 = hardware
+            .ina226_sensors
+            .0
+            .bus_voltage_millivolts()
+            .await
+            .unwrap_or(0.0);
+        let current1 = hardware
+            .ina226_sensors
+            .0
+            .current_amps()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+        let power1 = hardware
+            .ina226_sensors
+            .0
+            .power_watts()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
-        let voltage2 = hardware.ina226_sensors.1.bus_voltage_millivolts().await.unwrap_or(0.0);
-        let current2 = hardware.ina226_sensors.1.current_amps().await.unwrap_or(None).unwrap_or(0.0);
-        let power2 = hardware.ina226_sensors.1.power_watts().await.unwrap_or(None).unwrap_or(0.0);
+        let voltage2 = hardware
+            .ina226_sensors
+            .1
+            .bus_voltage_millivolts()
+            .await
+            .unwrap_or(0.0);
+        let current2 = hardware
+            .ina226_sensors
+            .1
+            .current_amps()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+        let power2 = hardware
+            .ina226_sensors
+            .1
+            .power_watts()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
-        let voltage3 = hardware.ina226_sensors.2.bus_voltage_millivolts().await.unwrap_or(0.0);
-        let current3 = hardware.ina226_sensors.2.current_amps().await.unwrap_or(None).unwrap_or(0.0);
-        let power3 = hardware.ina226_sensors.2.power_watts().await.unwrap_or(None).unwrap_or(0.0);
+        let voltage3 = hardware
+            .ina226_sensors
+            .2
+            .bus_voltage_millivolts()
+            .await
+            .unwrap_or(0.0);
+        let current3 = hardware
+            .ina226_sensors
+            .2
+            .current_amps()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+        let power3 = hardware
+            .ina226_sensors
+            .2
+            .power_watts()
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0.0);
 
         // Read SW2303 connection status for Port 1
-        let sw2303_port1_connected = match hardware.sw2303_controller.is_sink_device_connected().await {
-            Ok(device_online) => device_online,
-            Err(_) => false,
-        };
+        let sw2303_port1_connected =
+            match hardware.sw2303_controller.is_sink_device_connected().await {
+                Ok(device_online) => device_online,
+                Err(_) => false,
+            };
 
         // Read P2_UFP (P01) and P3_UFP (P25) states
-        let p2_ufp_state = hardware.tca6424_expander.get_pin_input_state(Pin::P01).await.unwrap();
-        let p3_ufp_state = hardware.tca6424_expander.get_pin_input_state(Pin::P25).await.unwrap();
+        let p2_ufp_state = hardware
+            .tca6424_expander
+            .get_pin_input_state(Pin::P01)
+            .await
+            .unwrap();
+        let p3_ufp_state = hardware
+            .tca6424_expander
+            .get_pin_input_state(Pin::P25)
+            .await
+            .unwrap();
 
         // Px_UFP is Low Active, so Low means connected
         let port2_connected = p2_ufp_state == PinState::Low;
@@ -170,11 +236,19 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         };
 
         // Port 2: TPS25810 fault signal via TCA6424 P06 (Low Active)
-        let p2_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P06).await.unwrap();
+        let p2_fault_state = hardware
+            .tca6424_expander
+            .get_pin_input_state(Pin::P06)
+            .await
+            .unwrap();
         let port2_overcurrent = p2_fault_state == PinState::Low;
 
         // Port 3: TPS25810 fault signal via TCA6424 P20 (Low Active)
-        let p3_fault_state = hardware.tca6424_expander.get_pin_input_state(Pin::P20).await.unwrap();
+        let p3_fault_state = hardware
+            .tca6424_expander
+            .get_pin_input_state(Pin::P20)
+            .await
+            .unwrap();
         let port3_overcurrent = p3_fault_state == PinState::Low;
 
         // Check for new overcurrent events and trigger alarm beep
@@ -182,7 +256,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         for (port_idx, &is_overcurrent) in current_overcurrent_status.iter().enumerate() {
             if is_overcurrent && !previous_overcurrent_status[port_idx] {
                 // New overcurrent event detected - play alarm beep
-                info!("Overcurrent detected on Port {}, triggering alarm beep", port_idx + 1);
+                info!(
+                    "Overcurrent detected on Port {}, triggering alarm beep",
+                    port_idx + 1
+                );
                 play_alarm_beep(&mut hardware.buzzer_pwm).await;
             } else if !is_overcurrent && previous_overcurrent_status[port_idx] {
                 // Overcurrent cleared
@@ -193,19 +270,28 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         // Check for UFP status changes and trigger buzzer
         if sw2303_port1_connected != prev_port1_connected {
-            info!("Port 1 UFP status changed: {} -> {}", prev_port1_connected, sw2303_port1_connected);
+            info!(
+                "Port 1 UFP status changed: {} -> {}",
+                prev_port1_connected, sw2303_port1_connected
+            );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port1_connected = sw2303_port1_connected;
         }
 
         if port2_connected != prev_port2_connected {
-            info!("Port 2 UFP status changed: {} -> {}", prev_port2_connected, port2_connected);
+            info!(
+                "Port 2 UFP status changed: {} -> {}",
+                prev_port2_connected, port2_connected
+            );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port2_connected = port2_connected;
         }
 
         if port3_connected != prev_port3_connected {
-            info!("Port 3 UFP status changed: {} -> {}", prev_port3_connected, port3_connected);
+            info!(
+                "Port 3 UFP status changed: {} -> {}",
+                prev_port3_connected, port3_connected
+            );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
             prev_port3_connected = port3_connected;
         }
@@ -220,9 +306,13 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         let connections_changed = current_connections != prev_connections;
         if connections_changed {
-            info!("Connections: P1={}, P2={}, P3={}",
-                  current_connections[0], current_connections[1], current_connections[2]);
-            unsafe { PREV_CONNECTIONS = current_connections; }
+            info!(
+                "Connections: P1={}, P2={}, P3={}",
+                current_connections[0], current_connections[1], current_connections[2]
+            );
+            unsafe {
+                PREV_CONNECTIONS = current_connections;
+            }
         }
 
         // Update connection status and apply dynamic power allocation
@@ -232,7 +322,8 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         // Apply power allocation to hardware (only when connections change or every 10 seconds)
         static mut LAST_APPLY_TIME: u64 = 0;
         let current_time = embassy_time::Instant::now().as_millis();
-        let should_apply = connections_changed || (current_time - unsafe { LAST_APPLY_TIME } > 10000);
+        let should_apply =
+            connections_changed || (current_time - unsafe { LAST_APPLY_TIME } > 10000);
 
         if should_apply {
             if connections_changed {
@@ -244,11 +335,15 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             match crate::hardware::apply_power_allocation(
                 &mut hardware.sw2303_controller,
                 &mut hardware.tca6424_expander,
-                power_allocation
-            ).await {
+                power_allocation,
+            )
+            .await
+            {
                 Ok(_) => {
                     info!("Power allocation applied successfully");
-                    unsafe { LAST_APPLY_TIME = current_time; }
+                    unsafe {
+                        LAST_APPLY_TIME = current_time;
+                    }
                 }
                 Err(_e) => {
                     error!("Failed to apply power allocation to hardware");
@@ -290,7 +385,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             let current_port = dashboard.get_selected_port();
             if current_port < 2 {
                 dashboard.set_selected_port(current_port + 1);
-                info!("Joystick: RIGHT pressed - Selected Port {}", current_port + 2);
+                info!(
+                    "Joystick: RIGHT pressed - Selected Port {}",
+                    current_port + 2
+                );
                 beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
             }
         }
@@ -311,35 +409,55 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         if center && !prev_center_pressed {
             // Center button pressed - disable USB communication for selected port
             let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
+            let selected_port_index = dashboard.get_selected_port(); // 0-based index for dashboard
             match crate::hardware::control_usb_communication(
                 &mut hardware.tca6424_expander,
                 selected_port as u8,
-                false
-            ).await {
+                false,
+            )
+            .await
+            {
                 Ok(_) => {
                     usb_comm_disabled = true;
-                    info!("Joystick: CENTER pressed - USB communication disabled for Port {}", selected_port);
+                    dashboard.set_usb_communication(selected_port_index, false); // Update dashboard state
+                    info!(
+                        "Joystick: CENTER pressed - USB communication disabled for Port {}",
+                        selected_port
+                    );
                     beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // Different beep for disconnect
                 }
                 Err(e) => {
-                    error!("Failed to disable USB communication for Port {}: {:?}", selected_port, e);
+                    error!(
+                        "Failed to disable USB communication for Port {}: {:?}",
+                        selected_port, e
+                    );
                 }
             }
         } else if !center && prev_center_pressed && usb_comm_disabled {
             // Center button released - re-enable USB communication for selected port
             let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
+            let selected_port_index = dashboard.get_selected_port(); // 0-based index for dashboard
             match crate::hardware::control_usb_communication(
                 &mut hardware.tca6424_expander,
                 selected_port as u8,
-                true
-            ).await {
+                true,
+            )
+            .await
+            {
                 Ok(_) => {
                     usb_comm_disabled = false;
-                    info!("Joystick: CENTER released - USB communication restored for Port {}", selected_port);
+                    dashboard.set_usb_communication(selected_port_index, true); // Update dashboard state
+                    info!(
+                        "Joystick: CENTER released - USB communication restored for Port {}",
+                        selected_port
+                    );
                     beep_buzzer(&mut hardware.buzzer_pwm, 100).await; // Normal beep for reconnect
                 }
                 Err(e) => {
-                    error!("Failed to restore USB communication for Port {}: {:?}", selected_port, e);
+                    error!(
+                        "Failed to restore USB communication for Port {}: {:?}",
+                        selected_port, e
+                    );
                 }
             }
         }
@@ -357,5 +475,3 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         embassy_time::Timer::after_millis(100).await;
     }
 }
-
-

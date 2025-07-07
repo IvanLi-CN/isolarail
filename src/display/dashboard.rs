@@ -219,31 +219,27 @@ impl Dashboard {
     fn allocate_p23_power(&mut self, p23_total: f32) {
         const HIGH_CURRENT_POWER: f32 = 15.0; // 3A * 5V = 15W
         const LOW_CURRENT_POWER: f32 = 7.5; // 1.5A * 5V = 7.5W
+        const MIN_STANDBY_POWER: f32 = 7.5; // Minimum power allocation for standby
 
-        if !self.port_connected[1] && !self.port_connected[2] {
-            // No ports connected - allocate standby power
-            self.power_allocation[1] = LOW_CURRENT_POWER;
+        // Power allocation should always reserve capacity for both ports
+        // regardless of current connection status, as this is power limit allocation
+
+        if p23_total >= HIGH_CURRENT_POWER + LOW_CURRENT_POWER {
+            // Enough power for both ports at full capacity
+            // Port 2: 3A (15W), Port 3: 1.5A (7.5W)
+            self.power_allocation[1] = HIGH_CURRENT_POWER;
             self.power_allocation[2] = LOW_CURRENT_POWER;
-        } else if self.port_connected[1] && !self.port_connected[2] {
-            // Only Port 2 connected
-            self.power_allocation[1] = p23_total.min(HIGH_CURRENT_POWER);
-            self.power_allocation[2] = 0.0;
-        } else if !self.port_connected[1] && self.port_connected[2] {
-            // Only Port 3 connected
-            self.power_allocation[1] = 0.0;
-            self.power_allocation[2] = p23_total.min(HIGH_CURRENT_POWER);
+        } else if p23_total >= LOW_CURRENT_POWER * 2.0 {
+            // Enough for both ports at reduced capacity
+            // Prioritize Port 2 with higher allocation
+            let remaining_after_p3 = p23_total - LOW_CURRENT_POWER;
+            self.power_allocation[1] = remaining_after_p3.min(HIGH_CURRENT_POWER);
+            self.power_allocation[2] = LOW_CURRENT_POWER;
         } else {
-            // Both ports connected - distribute power
-            if p23_total >= HIGH_CURRENT_POWER + LOW_CURRENT_POWER {
-                // Enough for 3A + 1.5A - prioritize Port 2
-                self.power_allocation[1] = HIGH_CURRENT_POWER;
-                self.power_allocation[2] = LOW_CURRENT_POWER;
-            } else {
-                // Limited power - split equally
-                let per_port = p23_total / 2.0;
-                self.power_allocation[1] = per_port;
-                self.power_allocation[2] = per_port;
-            }
+            // Limited power - split equally but ensure minimum allocation
+            let per_port = (p23_total / 2.0).max(MIN_STANDBY_POWER / 2.0);
+            self.power_allocation[1] = per_port;
+            self.power_allocation[2] = per_port;
         }
     }
 

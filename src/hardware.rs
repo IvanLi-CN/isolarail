@@ -1,22 +1,22 @@
 // src/hardware.rs
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as EmbassyI2cDevice;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice as EmbassySpiDevice;
-use embassy_stm32::gpio::{Level, Output, Speed, Input, Pull};
+use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
 use embassy_stm32::i2c::{self, I2c};
 use embassy_stm32::spi::{Config as SpiConfig, Spi as Stm32Spi};
-use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
-use embassy_stm32::timer::low_level::CountingMode;
 use embassy_stm32::time::{Hertz, khz};
+use embassy_stm32::timer::low_level::CountingMode;
+use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_stm32::{bind_interrupts, mode, peripherals};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 
-use gc9d01::{Config as DisplayDriverConfig, GC9D01, Orientation, Timer as Gc9d01Timer};
-use static_cell::StaticCell;
-use ina226::INA226;
-use tca6424::{Tca6424, Pin, PinDirection, PinState};
-use sw2303::SW2303;
 use defmt::*;
+use gc9d01::{Config as DisplayDriverConfig, GC9D01, Orientation, Timer as Gc9d01Timer};
+use ina226::INA226;
+use static_cell::StaticCell;
+use sw2303::SW2303;
+use tca6424::{Pin, PinDirection, PinState, Tca6424};
 
 // Interrupt bindings
 bind_interrupts!(
@@ -40,11 +40,11 @@ impl embedded_hal::digital::ErrorType for EmbassyDisplayTimer {
 
 /// Five-way joystick GPIO configuration
 pub struct FiveWayJoystick {
-    pub up: Input<'static>,      // PA1
-    pub down: Input<'static>,    // PA3
-    pub left: Input<'static>,    // PA2
-    pub right: Input<'static>,   // PA5
-    pub center: Input<'static>,  // PA6
+    pub up: Input<'static>,     // PA1
+    pub down: Input<'static>,   // PA3
+    pub left: Input<'static>,   // PA2
+    pub right: Input<'static>,  // PA5
+    pub center: Input<'static>, // PA6
 }
 
 impl FiveWayJoystick {
@@ -85,6 +85,162 @@ impl FiveWayJoystick {
     }
 }
 
+/// Joystick button enumeration for debouncing
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoystickButton {
+    Up,
+    Down,
+    Left,
+    Right,
+    Center,
+}
+
+/// Joystick debounce state for a single button
+#[derive(Debug, Clone, Copy)]
+struct ButtonDebounceState {
+    current_state: bool,
+    stable_state: bool,
+    counter: u8,
+    last_press_time: u64,
+}
+
+impl ButtonDebounceState {
+    fn new() -> Self {
+        Self {
+            current_state: false,
+            stable_state: false,
+            counter: 0,
+            last_press_time: 0,
+        }
+    }
+}
+
+/// Five-way joystick debounce handler
+pub struct JoystickDebouncer {
+    buttons: [ButtonDebounceState; 5],
+    debounce_threshold: u8,
+    repeat_delay_ms: u64,
+}
+
+impl JoystickDebouncer {
+    /// Create a new joystick debouncer
+    ///
+    /// # Parameters
+    /// - `debounce_threshold`: Number of consecutive readings required for state change (default: 3)
+    /// - `repeat_delay_ms`: Minimum time between repeat presses in milliseconds (default: 200)
+    pub fn new(debounce_threshold: u8, repeat_delay_ms: u64) -> Self {
+        Self {
+            buttons: [ButtonDebounceState::new(); 5],
+            debounce_threshold,
+            repeat_delay_ms,
+        }
+    }
+
+    /// Create a new joystick debouncer with default settings
+    pub fn new_default() -> Self {
+        Self::new(3, 200)
+    }
+
+    /// Update debounce state and return button press events
+    ///
+    /// # Parameters
+    /// - `joystick`: Reference to the joystick hardware
+    /// - `current_time_ms`: Current time in milliseconds
+    ///
+    /// # Returns
+    /// Vector of buttons that have been pressed (after debouncing)
+    pub fn update(
+        &mut self,
+        joystick: &FiveWayJoystick,
+        current_time_ms: u64,
+    ) -> heapless::Vec<JoystickButton, 5> {
+        let raw_states = [
+            joystick.is_up_pressed(),
+            joystick.is_down_pressed(),
+            joystick.is_left_pressed(),
+            joystick.is_right_pressed(),
+            joystick.is_center_pressed(),
+        ];
+
+        let button_types = [
+            JoystickButton::Up,
+            JoystickButton::Down,
+            JoystickButton::Left,
+            JoystickButton::Right,
+            JoystickButton::Center,
+        ];
+
+        let mut pressed_buttons = heapless::Vec::new();
+
+        for (i, &raw_state) in raw_states.iter().enumerate() {
+            let button_state = &mut self.buttons[i];
+
+            // Update current state
+            if raw_state == button_state.current_state {
+                // State is consistent, increment counter
+                if button_state.counter < self.debounce_threshold {
+                    button_state.counter += 1;
+                }
+            } else {
+                // State changed, reset counter and update current state
+                button_state.current_state = raw_state;
+                button_state.counter = 0;
+            }
+
+            // Check if state is stable
+            if button_state.counter >= self.debounce_threshold {
+                let previous_stable_state = button_state.stable_state;
+                button_state.stable_state = button_state.current_state;
+
+                // Detect rising edge (button press) with repeat delay
+                if button_state.stable_state && !previous_stable_state {
+                    if current_time_ms >= button_state.last_press_time + self.repeat_delay_ms {
+                        button_state.last_press_time = current_time_ms;
+                        let _ = pressed_buttons.push(button_types[i]);
+                    }
+                }
+            }
+        }
+
+        pressed_buttons
+    }
+
+    /// Get current stable state of a specific button
+    pub fn get_button_state(&self, button: JoystickButton) -> bool {
+        let index = match button {
+            JoystickButton::Up => 0,
+            JoystickButton::Down => 1,
+            JoystickButton::Left => 2,
+            JoystickButton::Right => 3,
+            JoystickButton::Center => 4,
+        };
+        self.buttons[index].stable_state
+    }
+
+    /// Get all stable button states
+    pub fn get_all_stable_states(&self) -> (bool, bool, bool, bool, bool) {
+        (
+            self.buttons[0].stable_state, // Up
+            self.buttons[1].stable_state, // Down
+            self.buttons[2].stable_state, // Left
+            self.buttons[3].stable_state, // Right
+            self.buttons[4].stable_state, // Center
+        )
+    }
+
+    /// Check if any button is currently pressed (stable state)
+    pub fn any_button_pressed(&self) -> bool {
+        self.buttons.iter().any(|state| state.stable_state)
+    }
+
+    /// Reset debounce state for all buttons
+    pub fn reset(&mut self) {
+        for button_state in &mut self.buttons {
+            *button_state = ButtonDebounceState::new();
+        }
+    }
+}
+
 // Hardware configuration structure
 pub struct HardwareConfig<'a> {
     pub ina226_sensors: (
@@ -92,11 +248,14 @@ pub struct HardwareConfig<'a> {
         INA226<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
         INA226<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     ),
-    pub tca6424_expander: Tca6424<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
-    pub sw2303_controller: SW2303<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
+    pub tca6424_expander:
+        Tca6424<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
+    pub sw2303_controller:
+        SW2303<'a, EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>>,
     pub buzzer_pwm: SimplePwm<'static, peripherals::TIM3>,
     pub backlight_pwm: SimplePwm<'static, peripherals::TIM1>,
     pub joystick: FiveWayJoystick,
+    pub joystick_debouncer: JoystickDebouncer,
     pub display: GC9D01<
         'static,
         EmbassySpiDevice<
@@ -137,7 +296,9 @@ pub fn configure_stm32() -> embassy_stm32::Config {
 
 /// Configure SW2303 for 65W power delivery using REG 0xAF power configuration.
 /// This is the business logic for our specific application requirements.
-pub async fn configure_sw2303_power<I2C>(sw2303: &mut SW2303<'_, I2C>) -> Result<(), sw2303::error::Error<I2C::Error>>
+pub async fn configure_sw2303_power<I2C>(
+    sw2303: &mut SW2303<'_, I2C>,
+) -> Result<(), sw2303::error::Error<I2C::Error>>
 where
     I2C: embedded_hal_async::i2c::I2c,
 {
@@ -154,7 +315,10 @@ where
 
     // Verify configuration by reading back the power setting
     let (register_mode, power_watts) = sw2303.get_power_config().await?;
-    info!("SW2303 power configuration verification - Register mode: {}, Power: {}W", register_mode, power_watts);
+    info!(
+        "SW2303 power configuration verification - Register mode: {}, Power: {}W",
+        register_mode, power_watts
+    );
 
     info!("SW2303 power configuration completed: 65W using REG 0xAF");
     Ok(())
@@ -165,13 +329,15 @@ where
 pub async fn apply_power_allocation<I2C>(
     sw2303: &mut SW2303<'_, I2C>,
     tca6424: &mut Tca6424<'_, I2C>,
-    power_allocation: [f32; 3]
+    power_allocation: [f32; 3],
 ) -> Result<(), sw2303::error::Error<I2C::Error>>
 where
     I2C: embedded_hal_async::i2c::I2c,
 {
-    info!("Applying power allocation: P1={}W, P2={}W, P3={}W",
-          power_allocation[0], power_allocation[1], power_allocation[2]);
+    info!(
+        "Applying power allocation: P1={}W, P2={}W, P3={}W",
+        power_allocation[0], power_allocation[1], power_allocation[2]
+    );
 
     // Apply Port 1 (SW2303) power allocation
     let port1_power = power_allocation[0] as u8;
@@ -198,12 +364,18 @@ where
     } else if port1_power == 0 {
         info!("Port 1 power allocation is 0W, skipping SW2303 configuration");
     } else {
-        info!("Port 1 power allocation {}W exceeds maximum 127W, skipping", port1_power);
+        info!(
+            "Port 1 power allocation {}W exceeds maximum 127W, skipping",
+            port1_power
+        );
     }
 
     // Apply Port 2 (TPS25810) current allocation
     let port2_current_a = power_allocation[1] / 5.0; // Convert watts to amperes (5V)
-    info!("Configuring TPS25810 Port 2 to {}A ({}W)", port2_current_a as u32, power_allocation[1] as u32);
+    info!(
+        "Configuring TPS25810 Port 2 to {}A ({}W)",
+        port2_current_a as u32, power_allocation[1] as u32
+    );
     match apply_tps25810_current_limit(tca6424, 2, port2_current_a).await {
         Ok(_) => {
             info!("✓ Port 2 current limit configured successfully");
@@ -215,7 +387,10 @@ where
 
     // Apply Port 3 (TPS25810) current allocation
     let port3_current_a = power_allocation[2] / 5.0; // Convert watts to amperes (5V)
-    info!("Configuring TPS25810 Port 3 to {}A ({}W)", port3_current_a as u32, power_allocation[2] as u32);
+    info!(
+        "Configuring TPS25810 Port 3 to {}A ({}W)",
+        port3_current_a as u32, power_allocation[2] as u32
+    );
     match apply_tps25810_current_limit(tca6424, 3, port3_current_a).await {
         Ok(_) => {
             info!("✓ Port 3 current limit configured successfully");
@@ -225,8 +400,10 @@ where
         }
     }
 
-    info!("✓ Hardware configured: P1={}W, P2={}A, P3={}A",
-          port1_power, port2_current_a as u32, port3_current_a as u32);
+    info!(
+        "✓ Hardware configured: P1={}W, P2={}A, P3={}A",
+        port1_power, port2_current_a as u32, port3_current_a as u32
+    );
 
     Ok(())
 }
@@ -240,24 +417,27 @@ where
 async fn apply_tps25810_current_limit<I2C>(
     tca6424: &mut Tca6424<'_, I2C>,
     port: u8,
-    current_a: f32
+    current_a: f32,
 ) -> Result<(), tca6424::errors::Error<I2C::Error>>
 where
     I2C: embedded_hal_async::i2c::I2c,
 {
     use tca6424::{Pin, PinState};
 
-    info!("Setting TPS25810 Port {} current limit to {}A", port, current_a as u32);
+    info!(
+        "Setting TPS25810 Port {} current limit to {}A",
+        port, current_a as u32
+    );
 
     let (chg_pin, chg_hl_pin) = match port {
         2 => {
             info!("Port 2 GPIO pins: CHG=P04, CHG_HL=P03");
             (Pin::P04, Pin::P03) // Port 2: P2_CHG, P2_CHG_HL
-        },
+        }
         3 => {
             info!("Port 3 GPIO pins: CHG=P22, CHG_HL=P23");
             (Pin::P22, Pin::P23) // Port 3: P3_CHG, P3_CHG_HL
-        },
+        }
         _ => {
             info!("Invalid port number: {}", port);
             return Err(tca6424::errors::Error::InvalidRegisterOrPin);
@@ -293,7 +473,7 @@ where
 pub async fn control_usb_communication<I2C>(
     tca6424: &mut Tca6424<'_, I2C>,
     port: u8,
-    enable: bool
+    enable: bool,
 ) -> Result<(), tca6424::errors::Error<I2C::Error>>
 where
     I2C: embedded_hal_async::i2c::I2c,
@@ -308,7 +488,11 @@ where
         }
     };
 
-    let state = if enable { PinState::High } else { PinState::Low };
+    let state = if enable {
+        PinState::High
+    } else {
+        PinState::Low
+    };
     tca6424.set_pin_output(data_conn_pin, state).await?;
 
     let action = if enable { "enabled" } else { "disabled" };
@@ -360,59 +544,124 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     info!("INA226 sensors initialized.");
 
     // Initialize TCA6424
-    static I2C_DEVICE_TCA6424_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();
-    let mut i2c_device_tca6424 = I2C_DEVICE_TCA6424_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
+    static I2C_DEVICE_TCA6424_CELL: StaticCell<
+        EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>,
+    > = StaticCell::new();
+    let mut i2c_device_tca6424 =
+        I2C_DEVICE_TCA6424_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
     let mut tca6424_expander = Tca6424::new(i2c_device_tca6424, tca6424::DEFAULT_ADDRESS).unwrap();
-    
+
     // Configure input pins for UFP detection and fault monitoring
-    tca6424_expander.set_pin_direction(Pin::P01, PinDirection::Input).await.unwrap(); // P2_UFP
-    tca6424_expander.set_pin_direction(Pin::P25, PinDirection::Input).await.unwrap(); // P3_UFP
-    tca6424_expander.set_pin_direction(Pin::P06, PinDirection::Input).await.unwrap(); // P2_FAULT
-    tca6424_expander.set_pin_direction(Pin::P20, PinDirection::Input).await.unwrap(); // P3_FAULT
+    tca6424_expander
+        .set_pin_direction(Pin::P01, PinDirection::Input)
+        .await
+        .unwrap(); // P2_UFP
+    tca6424_expander
+        .set_pin_direction(Pin::P25, PinDirection::Input)
+        .await
+        .unwrap(); // P3_UFP
+    tca6424_expander
+        .set_pin_direction(Pin::P06, PinDirection::Input)
+        .await
+        .unwrap(); // P2_FAULT
+    tca6424_expander
+        .set_pin_direction(Pin::P20, PinDirection::Input)
+        .await
+        .unwrap(); // P3_FAULT
 
     // Configure output pins for current control
     // Port 2 current control pins
-    tca6424_expander.set_pin_direction(Pin::P04, PinDirection::Output).await.unwrap(); // P2_CHG
-    tca6424_expander.set_pin_direction(Pin::P03, PinDirection::Output).await.unwrap(); // P2_CHG_HL
+    tca6424_expander
+        .set_pin_direction(Pin::P04, PinDirection::Output)
+        .await
+        .unwrap(); // P2_CHG
+    tca6424_expander
+        .set_pin_direction(Pin::P03, PinDirection::Output)
+        .await
+        .unwrap(); // P2_CHG_HL
 
     // Port 3 current control pins
-    tca6424_expander.set_pin_direction(Pin::P22, PinDirection::Output).await.unwrap(); // P3_CHG
-    tca6424_expander.set_pin_direction(Pin::P23, PinDirection::Output).await.unwrap(); // P3_CHG_HL
+    tca6424_expander
+        .set_pin_direction(Pin::P22, PinDirection::Output)
+        .await
+        .unwrap(); // P3_CHG
+    tca6424_expander
+        .set_pin_direction(Pin::P23, PinDirection::Output)
+        .await
+        .unwrap(); // P3_CHG_HL
 
     // Configure output pins for USB communication control
-    tca6424_expander.set_pin_direction(Pin::P10, PinDirection::Output).await.unwrap(); // P1_DATA_CONN
-    tca6424_expander.set_pin_direction(Pin::P11, PinDirection::Output).await.unwrap(); // P2_DATA_CONN
-    tca6424_expander.set_pin_direction(Pin::P12, PinDirection::Output).await.unwrap(); // P3_DATA_CONN
+    tca6424_expander
+        .set_pin_direction(Pin::P10, PinDirection::Output)
+        .await
+        .unwrap(); // P1_DATA_CONN
+    tca6424_expander
+        .set_pin_direction(Pin::P11, PinDirection::Output)
+        .await
+        .unwrap(); // P2_DATA_CONN
+    tca6424_expander
+        .set_pin_direction(Pin::P12, PinDirection::Output)
+        .await
+        .unwrap(); // P3_DATA_CONN
 
     // Enable 3A current capability for Port 2
     // First enable P2_CHG (1.5A base current source)
-    tca6424_expander.set_pin_output(Pin::P04, PinState::High).await.unwrap(); // P2_CHG = High
+    tca6424_expander
+        .set_pin_output(Pin::P04, PinState::High)
+        .await
+        .unwrap(); // P2_CHG = High
     // Then enable P2_CHG_HL (3A current source, requires P2_CHG to be High)
-    tca6424_expander.set_pin_output(Pin::P03, PinState::High).await.unwrap(); // P2_CHG_HL = High
+    tca6424_expander
+        .set_pin_output(Pin::P03, PinState::High)
+        .await
+        .unwrap(); // P2_CHG_HL = High
 
     // Enable 3A current capability for Port 3
     // First enable P3_CHG (1.5A base current source)
-    tca6424_expander.set_pin_output(Pin::P22, PinState::High).await.unwrap(); // P3_CHG = High
+    tca6424_expander
+        .set_pin_output(Pin::P22, PinState::High)
+        .await
+        .unwrap(); // P3_CHG = High
     // Then enable P3_CHG_HL (3A current source, requires P3_CHG to be High)
-    tca6424_expander.set_pin_output(Pin::P23, PinState::High).await.unwrap(); // P3_CHG_HL = High
+    tca6424_expander
+        .set_pin_output(Pin::P23, PinState::High)
+        .await
+        .unwrap(); // P3_CHG_HL = High
 
     // Enable USB communication for all ports by default
-    tca6424_expander.set_pin_output(Pin::P10, PinState::High).await.unwrap(); // P1_DATA_CONN = High (enabled)
-    tca6424_expander.set_pin_output(Pin::P11, PinState::High).await.unwrap(); // P2_DATA_CONN = High (enabled)
-    tca6424_expander.set_pin_output(Pin::P12, PinState::High).await.unwrap(); // P3_DATA_CONN = High (enabled)
+    tca6424_expander
+        .set_pin_output(Pin::P10, PinState::High)
+        .await
+        .unwrap(); // P1_DATA_CONN = High (enabled)
+    tca6424_expander
+        .set_pin_output(Pin::P11, PinState::High)
+        .await
+        .unwrap(); // P2_DATA_CONN = High (enabled)
+    tca6424_expander
+        .set_pin_output(Pin::P12, PinState::High)
+        .await
+        .unwrap(); // P3_DATA_CONN = High (enabled)
 
-    info!("TCA6424 expander initialized with 3A current capability and USB communication enabled for all ports.");
+    info!(
+        "TCA6424 expander initialized with 3A current capability and USB communication enabled for all ports."
+    );
 
     // Initialize SW2303
-    static I2C_DEVICE_SW2303_CELL: StaticCell<EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>> = StaticCell::new();
-    let mut i2c_device_sw2303 = I2C_DEVICE_SW2303_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
-    let mut sw2303_controller = SW2303::new(i2c_device_sw2303, sw2303::registers::constants::DEFAULT_ADDRESS);
+    static I2C_DEVICE_SW2303_CELL: StaticCell<
+        EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>,
+    > = StaticCell::new();
+    let mut i2c_device_sw2303 =
+        I2C_DEVICE_SW2303_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
+    let mut sw2303_controller = SW2303::new(
+        i2c_device_sw2303,
+        sw2303::registers::constants::DEFAULT_ADDRESS,
+    );
 
     // Initialize SW2303 PD controller
     match sw2303_controller.init().await {
         Ok(_) => {
             info!("SW2303 PD controller initialized successfully.");
-            
+
             // Configure SW2303 for 65W power
             match configure_sw2303_power(&mut sw2303_controller).await {
                 Ok(_) => info!("SW2303 configured for 65W power with 100mA detection threshold."),
@@ -420,7 +669,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
                     error!("Failed to configure SW2303 power settings: {:?}", e);
                 }
             }
-        },
+        }
         Err(e) => {
             error!("Failed to initialize SW2303: {:?}", e);
         }
@@ -500,13 +749,15 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     // Initialize five-way joystick
     info!("Initializing five-way joystick...");
     let joystick = FiveWayJoystick {
-        up: Input::new(p.PA1, Pull::Up),       // UP button on PA1
-        down: Input::new(p.PA3, Pull::Up),     // DOWN button on PA3
-        left: Input::new(p.PA2, Pull::Up),     // LEFT button on PA2
-        right: Input::new(p.PA5, Pull::Up),    // RIGHT button on PA5
-        center: Input::new(p.PA6, Pull::Up),   // CENTER button on PA6
+        up: Input::new(p.PA1, Pull::Up),     // UP button on PA1
+        down: Input::new(p.PA3, Pull::Up),   // DOWN button on PA3
+        left: Input::new(p.PA2, Pull::Up),   // LEFT button on PA2
+        right: Input::new(p.PA5, Pull::Up),  // RIGHT button on PA5
+        center: Input::new(p.PA6, Pull::Up), // CENTER button on PA6
     };
-    info!("Five-way joystick initialized on PA1(UP), PA3(DOWN), PA2(LEFT), PA5(RIGHT), PA6(CENTER).");
+    info!(
+        "Five-way joystick initialized on PA1(UP), PA3(DOWN), PA2(LEFT), PA5(RIGHT), PA6(CENTER)."
+    );
 
     static DISPLAY_BUFFER_CELL: StaticCell<[u8; gc9d01::BUF_SIZE]> = StaticCell::new();
     let buffer_slice: &mut [u8] = DISPLAY_BUFFER_CELL.init([0; gc9d01::BUF_SIZE]);
@@ -530,6 +781,16 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         Err(e) => error!("Display initialization failed: {:?}", e),
     }
 
+    // Initialize joystick debouncer with settings optimized for 50ms polling interval
+    info!("Initializing joystick debouncer...");
+    let joystick_debouncer = JoystickDebouncer::new(
+        2,   // debounce_threshold: 2 samples (100ms total delay at 50ms polling)
+        250, // repeat_delay_ms: 250ms to prevent accidental repeats
+    );
+    info!(
+        "Joystick debouncer initialized with 2-sample threshold and 250ms repeat delay (optimized for 50ms polling)."
+    );
+
     info!("Hardware initialization complete.");
 
     HardwareConfig {
@@ -539,6 +800,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         buzzer_pwm,
         backlight_pwm,
         joystick,
+        joystick_debouncer,
         display,
     }
 }

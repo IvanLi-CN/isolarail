@@ -128,12 +128,6 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     // Initialize previous overcurrent states for change detection
     let mut previous_overcurrent_status = [false; 3];
 
-    // Initialize joystick state tracking for debouncing
-    let mut prev_left_pressed = false;
-    let mut prev_right_pressed = false;
-    let mut prev_down_pressed = false;
-    let mut prev_center_pressed = false;
-
     // Track USB communication state for the selected port
     let mut usb_comm_disabled = false;
 
@@ -367,73 +361,81 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         // Update Dashboard data
         dashboard.update_data(sensor_data, connection_status, overcurrent_status);
 
-        // Handle joystick input for port selection and display mode switching with debouncing
-        let (_, down, left, right, center) = hardware.joystick.get_all_states();
+        // Handle joystick input with software debouncing
+        let current_time_ms = embassy_time::Instant::now().as_millis();
+        let pressed_buttons = hardware
+            .joystick_debouncer
+            .update(&hardware.joystick, current_time_ms);
 
-        // Handle LEFT press (only on rising edge)
-        if left && !prev_left_pressed {
-            let current_port = dashboard.get_selected_port();
-            if current_port > 0 {
-                dashboard.set_selected_port(current_port - 1);
-                info!("Joystick: LEFT pressed - Selected Port {}", current_port);
-                beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
-            }
-        }
-
-        // Handle RIGHT press (only on rising edge)
-        if right && !prev_right_pressed {
-            let current_port = dashboard.get_selected_port();
-            if current_port < 2 {
-                dashboard.set_selected_port(current_port + 1);
-                info!(
-                    "Joystick: RIGHT pressed - Selected Port {}",
-                    current_port + 2
-                );
-                beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
-            }
-        }
-
-        // Handle DOWN press (only on rising edge) - Toggle display mode
-        if down && !prev_down_pressed {
-            dashboard.toggle_display_mode();
-            let mode = if dashboard.is_showing_power_allocation() {
-                "Power Allocation"
-            } else {
-                "Power"
-            };
-            info!("Joystick: DOWN pressed - Switched to {} display", mode);
-            beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
-        }
-
-        // Handle CENTER press/release - Temporarily disconnect USB communication for selected port
-        if center && !prev_center_pressed {
-            // Center button pressed - disable USB communication for selected port
-            let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
-            let selected_port_index = dashboard.get_selected_port(); // 0-based index for dashboard
-            match crate::hardware::control_usb_communication(
-                &mut hardware.tca6424_expander,
-                selected_port as u8,
-                false,
-            )
-            .await
-            {
-                Ok(_) => {
-                    usb_comm_disabled = true;
-                    dashboard.set_usb_communication(selected_port_index, false); // Update dashboard state
-                    info!(
-                        "Joystick: CENTER pressed - USB communication disabled for Port {}",
-                        selected_port
-                    );
-                    beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // Different beep for disconnect
+        // Process debounced button presses
+        for button in pressed_buttons {
+            match button {
+                crate::hardware::JoystickButton::Left => {
+                    let current_port = dashboard.get_selected_port();
+                    if current_port > 0 {
+                        dashboard.set_selected_port(current_port - 1);
+                        info!("Joystick: LEFT pressed - Selected Port {}", current_port);
+                        beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+                    }
                 }
-                Err(e) => {
-                    error!(
-                        "Failed to disable USB communication for Port {}: {:?}",
-                        selected_port, e
-                    );
+                crate::hardware::JoystickButton::Right => {
+                    let current_port = dashboard.get_selected_port();
+                    if current_port < 2 {
+                        dashboard.set_selected_port(current_port + 1);
+                        info!(
+                            "Joystick: RIGHT pressed - Selected Port {}",
+                            current_port + 2
+                        );
+                        beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+                    }
                 }
+                crate::hardware::JoystickButton::Down => {
+                    dashboard.toggle_display_mode();
+                    let mode = if dashboard.is_showing_power_allocation() {
+                        "Power Allocation"
+                    } else {
+                        "Power"
+                    };
+                    info!("Joystick: DOWN pressed - Switched to {} display", mode);
+                    beep_buzzer(&mut hardware.buzzer_pwm, 100).await;
+                }
+                crate::hardware::JoystickButton::Center => {
+                    // Center button pressed - disable USB communication for selected port
+                    let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
+                    let selected_port_index = dashboard.get_selected_port(); // 0-based index for dashboard
+                    match crate::hardware::control_usb_communication(
+                        &mut hardware.tca6424_expander,
+                        selected_port as u8,
+                        false,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            usb_comm_disabled = true;
+                            dashboard.set_usb_communication(selected_port_index, false); // Update dashboard state
+                            info!(
+                                "Joystick: CENTER pressed - USB communication disabled for Port {}",
+                                selected_port
+                            );
+                            beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // Different beep for disconnect
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to disable USB communication for Port {}: {:?}",
+                                selected_port, e
+                            );
+                        }
+                    }
+                }
+                _ => {} // Handle other buttons if needed
             }
-        } else if !center && prev_center_pressed && usb_comm_disabled {
+        }
+
+        // Handle CENTER button release - restore USB communication if disabled
+        let center_currently_pressed = hardware
+            .joystick_debouncer
+            .get_button_state(crate::hardware::JoystickButton::Center);
+        if !center_currently_pressed && usb_comm_disabled {
             // Center button released - re-enable USB communication for selected port
             let selected_port = dashboard.get_selected_port() + 1; // Convert to 1-based port number
             let selected_port_index = dashboard.get_selected_port(); // 0-based index for dashboard
@@ -462,16 +464,10 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             }
         }
 
-        // Update previous states for next iteration
-        prev_left_pressed = left;
-        prev_right_pressed = right;
-        prev_down_pressed = down;
-        prev_center_pressed = center;
-
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();
 
-        // Wait for 100ms before the next update
-        embassy_time::Timer::after_millis(100).await;
+        // Wait for 50ms before the next update (improved responsiveness for joystick)
+        embassy_time::Timer::after_millis(50).await;
     }
 }

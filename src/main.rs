@@ -2,15 +2,15 @@
 #![no_std]
 #![no_main]
 
+use core::ptr;
+use defmt::*;
 use embassy_executor::Spawner;
 use embedded_alloc::LlffHeap as Heap;
-use core::ptr;
 use {defmt_rtt as _, panic_probe as _};
-use defmt::*;
 
+mod app;
 mod display;
 mod hardware;
-mod app;
 mod joystick_example;
 
 extern crate alloc;

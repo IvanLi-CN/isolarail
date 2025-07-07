@@ -86,21 +86,52 @@ The test program will:
 - Output button press/release events via serial
 - Verify each direction's functionality
 
+### Debounce Testing
+
+Test the software debouncing functionality:
+
+```bash
+# Compile debounce test program
+cargo build --bin test-joystick-debounce
+
+# Run debounce test program
+cargo run --bin test-joystick-debounce
+```
+
+The debounce test program will:
+
+- Initialize joystick with software debouncing
+- Show debounced button press events with timestamps
+- Display raw vs stable button states periodically
+- Demonstrate bounce filtering in real-time
+
 ### Integration Testing
 
-Use the joystick in the main program:
+Use the joystick with debouncing in the main program:
 
 ```rust
-// Access joystick in main program
-let hardware = initialize_hardware(p).await;
+// Access joystick and debouncer in main program
+let mut hardware = initialize_hardware(p).await;
 
-// Check button states
-if hardware.joystick.is_up_pressed() {
-    info!("UP button pressed");
+// Update debouncer and get button press events
+let current_time_ms = embassy_time::Instant::now().as_millis();
+let pressed_buttons = hardware.joystick_debouncer.update(&hardware.joystick, current_time_ms);
+
+// Process debounced button presses
+for button in pressed_buttons {
+    match button {
+        JoystickButton::Up => {
+            info!("UP button pressed (debounced)");
+        }
+        JoystickButton::Down => {
+            info!("DOWN button pressed (debounced)");
+        }
+        // ... handle other buttons
+    }
 }
 
-// Get all states
-let (up, down, left, right, center) = hardware.joystick.get_all_states();
+// Check stable button states
+let center_pressed = hardware.joystick_debouncer.get_button_state(JoystickButton::Center);
 ```
 
 ## Usage Examples
@@ -161,22 +192,64 @@ match direction {
 }
 ```
 
+## Software Debouncing
+
+### Overview
+
+The five-way joystick includes an advanced software debouncing system that eliminates mechanical button bounce and provides reliable button press detection. The debouncer uses a multi-stage filtering approach:
+
+1. **Sample Consistency**: Requires multiple consecutive identical readings before accepting a state change
+2. **Stable State Tracking**: Maintains separate current and stable states for each button
+3. **Repeat Prevention**: Implements configurable minimum time between repeat presses
+4. **Event Generation**: Produces clean button press events only after debouncing
+
+### Configuration
+
+```rust
+// Create debouncer with custom settings
+let debouncer = JoystickDebouncer::new(
+    5,    // debounce_threshold: 5 samples required for state change
+    300   // repeat_delay_ms: 300ms minimum between repeat presses
+);
+
+// Create debouncer with default settings (3 samples, 200ms delay)
+let debouncer = JoystickDebouncer::new_default();
+```
+
+### Debounce Parameters
+
+- **Debounce Threshold**: Number of consecutive identical readings required (default: 3)
+  - Lower values: More responsive but less bounce filtering
+  - Higher values: Better bounce filtering but slower response
+  - Recommended range: 2-5 samples
+
+- **Repeat Delay**: Minimum time between repeat button presses in milliseconds (default: 200ms)
+  - Prevents accidental rapid-fire button presses
+  - Allows intentional repeated presses after delay
+  - Recommended range: 100-500ms
+
 ## Features
 
-### 1. Debouncing
-- Software debouncing mechanism implemented
+### 1. Software Debouncing
+
+- Advanced software debouncing mechanism implemented
 - Prevents false triggers from mechanical button bounce
-- Configurable debounce timing
+- Configurable debounce threshold (default: 3 samples)
+- Configurable repeat delay (default: 200ms)
+- Per-button state tracking with stable state detection
+- Event-based button press detection with timing control
 
 ### 2. Direction Detection
 - Independent detection for all five directions
 - Unified state reading interface
 - Support for combination button detection
+- Raw and stable state access
 
 ### 3. Event Handling
 - Event-driven button processing
 - Support for press and release events
 - Extensible event handling framework
+- Time-based repeat prevention
 
 ## Troubleshooting
 

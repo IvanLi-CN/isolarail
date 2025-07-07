@@ -1,12 +1,12 @@
 // src/joystick_example.rs
 //! Five-way joystick usage example
-//! 
+//!
 //! This module demonstrates how to use the five-way joystick for navigation
 //! and user input in the ISO USB Hub application.
 
+use crate::hardware::{FiveWayJoystick, HardwareConfig};
 use defmt::*;
 use embassy_time::{Duration, Timer};
-use crate::hardware::{FiveWayJoystick, HardwareConfig};
 
 /// Joystick direction enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +50,7 @@ impl JoystickHandler {
     /// Read current joystick direction with debouncing
     pub fn read_direction(&mut self, joystick: &FiveWayJoystick) -> Option<JoystickDirection> {
         let current_direction = self.get_current_direction(joystick);
-        
+
         // Simple debouncing logic
         if current_direction == self.last_direction {
             if self.debounce_counter < 3 {
@@ -93,12 +93,12 @@ impl JoystickHandler {
 pub async fn joystick_monitor_task(hardware: &mut HardwareConfig<'_>) {
     info!("Starting joystick monitor task...");
     let mut handler = JoystickHandler::new();
-    
+
     loop {
         // Check joystick state
         if let Some(direction) = handler.read_direction(&hardware.joystick) {
             info!("Joystick pressed: {}", direction);
-            
+
             // Handle different directions
             match direction {
                 JoystickDirection::Up => {
@@ -120,7 +120,7 @@ pub async fn joystick_monitor_task(hardware: &mut HardwareConfig<'_>) {
                 JoystickDirection::Center => {
                     info!("Action: CENTER - Select/confirm current item");
                     // Add your CENTER/SELECT action here
-                    
+
                     // Example: trigger buzzer on center press
                     hardware.buzzer_pwm.ch1().set_duty_cycle_percent(50);
                     Timer::after(Duration::from_millis(100)).await;
@@ -131,7 +131,7 @@ pub async fn joystick_monitor_task(hardware: &mut HardwareConfig<'_>) {
                 }
             }
         }
-        
+
         // Small delay to prevent excessive polling
         Timer::after(Duration::from_millis(10)).await;
     }
@@ -140,12 +140,14 @@ pub async fn joystick_monitor_task(hardware: &mut HardwareConfig<'_>) {
 /// Test all joystick buttons
 pub async fn test_joystick_buttons(joystick: &FiveWayJoystick) {
     info!("Testing joystick buttons...");
-    
+
     let (up, down, left, right, center) = joystick.get_all_states();
-    
-    info!("Joystick states - UP: {}, DOWN: {}, LEFT: {}, RIGHT: {}, CENTER: {}", 
-          up, down, left, right, center);
-    
+
+    info!(
+        "Joystick states - UP: {}, DOWN: {}, LEFT: {}, RIGHT: {}, CENTER: {}",
+        up, down, left, right, center
+    );
+
     if up || down || left || right || center {
         info!("At least one button is currently pressed!");
     } else {
@@ -175,7 +177,10 @@ impl MenuNavigator {
                 } else {
                     self.current_item = self.menu_items.len() - 1; // Wrap to last item
                 }
-                info!("Menu: Selected item {} - {}", self.current_item, self.menu_items[self.current_item]);
+                info!(
+                    "Menu: Selected item {} - {}",
+                    self.current_item, self.menu_items[self.current_item]
+                );
                 false
             }
             JoystickDirection::Down => {
@@ -184,11 +189,17 @@ impl MenuNavigator {
                 } else {
                     self.current_item = 0; // Wrap to first item
                 }
-                info!("Menu: Selected item {} - {}", self.current_item, self.menu_items[self.current_item]);
+                info!(
+                    "Menu: Selected item {} - {}",
+                    self.current_item, self.menu_items[self.current_item]
+                );
                 false
             }
             JoystickDirection::Center => {
-                info!("Menu: Activated item {} - {}", self.current_item, self.menu_items[self.current_item]);
+                info!(
+                    "Menu: Activated item {} - {}",
+                    self.current_item, self.menu_items[self.current_item]
+                );
                 true // Return true to indicate item was selected
             }
             _ => false,

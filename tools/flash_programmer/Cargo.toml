@@ -1,0 +1,76 @@
+[package]
+name = "flash_programmer"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ivan Li <ivanli2048@gmail.com>"]
+description = "Tool for programming W25Q128 Flash memory via ST-Link"
+
+[[bin]]
+name = "flash_programmer"
+path = "src/main.rs"
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[dependencies]
+# STM32 Embassy dependencies
+embassy-stm32 = { version = "0.2.0", git = "https://github.com/IvanLi-CN/embassy", features = [
+  "defmt",
+  "time-driver-any",
+  "stm32g431cb",
+  "memory-x",
+  "unstable-pac",
+  "exti",
+] }
+embassy-sync = { version = "0.7.0", git = "https://github.com/IvanLi-CN/embassy", features = [
+  "defmt",
+] }
+embassy-executor = { version = "0.7.0", git = "https://github.com/IvanLi-CN/embassy", features = [
+  "arch-cortex-m",
+  "executor-thread",
+  "defmt",
+] }
+embassy-time = { version = "0.4.0", git = "https://github.com/IvanLi-CN/embassy", features = [
+  "defmt",
+  "defmt-timestamp-uptime",
+  "tick-hz-32_768",
+] }
+embassy-embedded-hal = { version = "0.3.0", git = "https://github.com/IvanLi-CN/embassy" }
+
+# Core dependencies
+defmt = "1.0.1"
+defmt-rtt = "1.0.0"
+cortex-m = { version = "0.7.7", features = [
+  "inline-asm",
+  "critical-section-single-core",
+] }
+cortex-m-rt = "0.7.5"
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+heapless = { version = "0.8", default-features = false }
+portable-atomic = { version = "1.11.0", features = ["critical-section"] }
+static_cell = "2.1.0"
+embedded-alloc = "0.6.0"
+
+# W25Q32JV driver (with 128Mbit support)
+w25q32jv = { version = "0.5.1", features = ["async", "defmt", "megabits128"] }
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+debug-assertions = true
+incremental = false
+opt-level = 3
+overflow-checks = true
+
+[profile.release]
+codegen-units = 1
+debug = 0
+strip = "symbols"
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 3
+overflow-checks = false

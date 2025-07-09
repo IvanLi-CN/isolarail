@@ -8,6 +8,14 @@ default-run = "iso-usb-hub"
 [[bin]]
 name = "iso-usb-hub"
 path = "src/main.rs"
+
+[[bin]]
+name = "flash-bitmap"
+path = "tools/flash_bitmap.rs"
+
+[[example]]
+name = "bitmap_flasher"
+path = "examples/bitmap_flasher.rs"
 test = false
 
 [[bin]]
@@ -93,6 +101,7 @@ gc9d01 = { version = "*", path = "./gc9d01", features = ["async", "defmt"] }
 tca6424 = { version = "*", path = "./tca6424", features = ["async", "defmt"] }
 sw2303 = { version = "*", path = "./sw2303", features = ["async", "defmt"] }
 ina226 = { version = "0.3.0", features = ["async"] }
+w25q32jv = { version = "0.5.1", features = ["async", "defmt", "megabits128"] }
 
 [profile.dev]
 codegen-units = 1

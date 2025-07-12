@@ -18,19 +18,7 @@ name = "bitmap_flasher"
 path = "examples/bitmap_flasher.rs"
 test = false
 
-[[bin]]
-name = "test-joystick"
-path = "test_joystick.rs"
-test = false
 
-[[bin]]
-name = "test-joystick-debounce"
-path = "test_joystick_debounce.rs"
-
-[[bin]]
-name = "test-joystick-timing"
-path = "test_joystick_timing.rs"
-test = false
 
 [features]
 default = ["alloc"]

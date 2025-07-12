@@ -80,15 +80,12 @@ where
             *pixel = *color;
         }
 
-        // Write the pixel data for the current stripe
-        if let Err(e) = display
-            .write_area(x, 0, STRIPE_WIDTH, STRIPE_HEIGHT, &stripe_pixels)
-            .await
-        {
-            error!("Failed to write stripe {}: {:?}", i, e);
-            return Err(e);
-        }
+        // Write the pixel data for the current stripe to frame buffer
+        display.write_area(x, 0, STRIPE_WIDTH, STRIPE_HEIGHT, &stripe_pixels);
     }
+
+    // Flush the frame buffer to display the test pattern
+    display.flush().await?;
 
     Ok(())
 }
@@ -98,11 +95,8 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     info!("Starting application main loop");
 
     // Fill display with black background
-    hardware
-        .display
-        .fill_color(Rgb565::CSS_BLACK)
-        .await
-        .unwrap();
+    hardware.display.fill_color(Rgb565::CSS_BLUE_VIOLET);
+    hardware.display.flush().await.unwrap();
 
     // Display test pattern
     if let Err(e) = display_test_pattern(&mut hardware.display).await {
@@ -118,7 +112,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
     let mut dashboard = Dashboard::new();
 
     // Initial delay before starting the loop
-    embassy_time::Timer::after_secs(1).await;
+    embassy_time::Timer::after_secs(2).await;
 
     // Initialize previous UFP states for change detection
     let mut prev_port1_connected = false; // SW2303 Port 1
@@ -269,6 +263,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
                 prev_port1_connected, sw2303_port1_connected
             );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
+            embassy_time::Timer::after_millis(10).await; // Small delay after beep
             prev_port1_connected = sw2303_port1_connected;
         }
 
@@ -278,6 +273,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
                 prev_port2_connected, port2_connected
             );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
+            embassy_time::Timer::after_millis(10).await; // Small delay after beep
             prev_port2_connected = port2_connected;
         }
 
@@ -287,6 +283,7 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
                 prev_port3_connected, port3_connected
             );
             beep_buzzer(&mut hardware.buzzer_pwm, 200).await; // 200ms beep
+            embassy_time::Timer::after_millis(10).await; // Small delay after beep
             prev_port3_connected = port3_connected;
         }
 

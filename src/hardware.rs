@@ -10,6 +10,7 @@ use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_stm32::{bind_interrupts, mode, peripherals};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
+use embedded_graphics::prelude::WebColors;
 
 use defmt::*;
 use gc9d01::{Config as DisplayDriverConfig, GC9D01, Orientation, Timer as Gc9d01Timer};
@@ -17,6 +18,40 @@ use ina226::INA226;
 use static_cell::StaticCell;
 use sw2303::SW2303;
 use tca6424::{Pin, PinDirection, PinState, Tca6424};
+use w25q32jv::W25q32jv;
+
+// Dummy pin implementation for Flash WP and HOLD pins
+#[derive(Debug, Clone, Copy)]
+pub struct DummyPin;
+
+#[derive(Debug)]
+pub struct DummyError;
+
+impl defmt::Format for DummyError {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "DummyError");
+    }
+}
+
+impl embedded_hal::digital::Error for DummyError {
+    fn kind(&self) -> embedded_hal::digital::ErrorKind {
+        embedded_hal::digital::ErrorKind::Other
+    }
+}
+
+impl embedded_hal::digital::OutputPin for DummyPin {
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl embedded_hal::digital::ErrorType for DummyPin {
+    type Error = DummyError;
+}
 
 // Interrupt bindings
 bind_interrupts!(
@@ -268,6 +303,16 @@ pub struct HardwareConfig<'a> {
         Output<'static>,
         EmbassyDisplayTimer,
     >,
+    pub flash: W25q32jv<
+        EmbassySpiDevice<
+            'static,
+            CriticalSectionRawMutex,
+            Stm32Spi<'static, mode::Async>,
+            Output<'static>,
+        >,
+        DummyPin,
+        DummyPin,
+    >,
 }
 
 /// Configure STM32 system
@@ -510,6 +555,8 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     let i2c_sda = p.PB7; // SDA pin for I2C1
 
     let mut i2c_config = i2c::Config::default();
+    i2c_config.scl_pullup = true;
+    i2c_config.sda_pullup = true;
 
     // Initialize I2C1 with correct parameter order
     let i2c1 = I2c::new(
@@ -737,9 +784,9 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     >::new(spi_bus_mutex_ref, cs_pin_output);
 
     let display_config = DisplayDriverConfig {
-        width: 160,
-        height: 40,
-        orientation: Orientation::PortraitSwapped,
+        width: 160,                         // Logical width
+        height: 40,                         // Logical height
+        orientation: Orientation::Portrait, // Use Portrait
         rgb: false,
         inverted: false,
         dx: 0,
@@ -759,8 +806,14 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         "Five-way joystick initialized on PA1(UP), PA3(DOWN), PA2(LEFT), PA5(RIGHT), PA6(CENTER)."
     );
 
-    static DISPLAY_BUFFER_CELL: StaticCell<[u8; gc9d01::BUF_SIZE]> = StaticCell::new();
-    let buffer_slice: &mut [u8] = DISPLAY_BUFFER_CELL.init([0; gc9d01::BUF_SIZE]);
+    // Initialize minimal frame buffer for display (40x40 = 1600 pixels, quarter screen)
+    // This significantly reduces memory usage while still providing frame buffer functionality
+    const MINIMAL_FRAME_PIXELS: usize = 160 * 40; // Quarter screen buffer
+    static FRAME_BUFFER_CELL: StaticCell<
+        [embedded_graphics::pixelcolor::Rgb565; MINIMAL_FRAME_PIXELS],
+    > = StaticCell::new();
+    let frame_buffer: &mut [embedded_graphics::pixelcolor::Rgb565] = FRAME_BUFFER_CELL
+        .init([embedded_graphics::pixelcolor::Rgb565::CSS_BLACK; MINIMAL_FRAME_PIXELS]);
 
     let mut display: GC9D01<
         '_,
@@ -773,13 +826,57 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         Output<'_>,
         Output<'_>,
         EmbassyDisplayTimer,
-    > = GC9D01::new(display_config, spi_device, dc_pin, rst_pin, buffer_slice);
+    > = GC9D01::new(display_config, spi_device, dc_pin, rst_pin, frame_buffer);
 
     info!("Initializing display...");
     match display.init().await {
         Ok(_) => info!("Display initialized successfully!"),
         Err(e) => error!("Display initialization failed: {:?}", e),
     }
+
+    // Initialize SPI2 for W25Q128 Flash
+    info!("Initializing SPI2 for W25Q128 Flash...");
+
+    // SPI2 pins for W25Q128 Flash
+    let flash_sck_pin = p.PB13; // SPI2_SCK
+    let flash_mosi_pin = p.PB15; // SPI2_MOSI
+    let flash_miso_pin = p.PA10; // SPI2_MISO
+    let flash_cs_pin = Output::new(p.PB12, Level::High, Speed::VeryHigh); // SPI2_NSS
+
+    let mut flash_spi_config = SpiConfig::default();
+    flash_spi_config.frequency = Hertz(1_000_000); // 1MHz for Flash communication
+
+    // W25Q128 requires SPI Mode 0 (CPOL=0, CPHA=0)
+    info!(
+        "Flash SPI Config - Frequency: {} Hz",
+        flash_spi_config.frequency.0
+    );
+
+    let flash_spi_bus = Stm32Spi::new(
+        p.SPI2,
+        flash_sck_pin,
+        flash_mosi_pin,
+        flash_miso_pin,
+        p.DMA2_CH1, // TX DMA
+        p.DMA2_CH2, // RX DMA
+        flash_spi_config,
+    );
+
+    static FLASH_SPI_BUS_CELL: StaticCell<
+        Mutex<CriticalSectionRawMutex, Stm32Spi<'static, mode::Async>>,
+    > = StaticCell::new();
+    let flash_spi_bus_mutex_ref = FLASH_SPI_BUS_CELL.init(Mutex::new(flash_spi_bus));
+
+    let flash_spi_device = EmbassySpiDevice::<
+        'static,
+        CriticalSectionRawMutex,
+        Stm32Spi<'static, mode::Async>,
+        Output<'static>,
+    >::new(flash_spi_bus_mutex_ref, flash_cs_pin);
+
+    let flash = W25q32jv::new(flash_spi_device, DummyPin, DummyPin)
+        .expect("Failed to initialize W25Q128 Flash");
+    info!("W25Q128 Flash initialized successfully!");
 
     // Initialize joystick debouncer with settings optimized for 50ms polling interval
     info!("Initializing joystick debouncer...");
@@ -802,5 +899,6 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         joystick,
         joystick_debouncer,
         display,
+        flash,
     }
 }

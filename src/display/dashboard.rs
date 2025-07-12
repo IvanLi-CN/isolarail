@@ -20,7 +20,7 @@ use crate::display::font::{
 use gc9d01::GC9D01; // Import GC9D01 // Updated constant names
 
 // Import necessary traits for GC9D01 (these are bounds on the GC9D01 struct itself)
-use alloc::format;
+// Removed alloc::format import to avoid dynamic allocation
 use core::convert::TryInto; // Added import for try_into
 use embedded_hal::digital::OutputPin;
 use embedded_hal_async::spi::SpiDevice;
@@ -265,7 +265,8 @@ impl Dashboard {
         // Clear screen manually by writing black pixels to the whole area
         // Only clear every 1000 draws to save resources
         if self.draw_count % 1000 == 0 {
-            let _ = display.fill_color(Rgb565::BLACK).await;
+            display.fill_color(Rgb565::BLACK);
+            let _ = display.flush().await;
             // Handle potential remaining rows/columns if screen dimensions are not multiples of BLOCK_SIZE
             // (Assuming 160x40 is a multiple of 20x20, so no extra handling needed for this specific case)
         }
@@ -286,80 +287,6 @@ impl Dashboard {
         // Buffer for character pixels (8x12)
         let mut char_pixel_buffer = [Rgb565::BLACK; FONT_8X12_WIDTH * FONT_8X12_HEIGHT]; // Updated constant names
 
-        // Helper function to draw a rounded rectangle background
-        async fn draw_rounded_rect<'a, BUS, DC, RST, TIMER>(
-            display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
-            x: u16,
-            y: u16,
-            width: u16,
-            height: u16,
-            bg_color: Rgb565,
-            corner_radius: u16,
-        ) -> Result<(), Error>
-        where
-            BUS: SpiDevice,
-            DC: OutputPin<Error = core::convert::Infallible>,
-            RST: OutputPin<Error = core::convert::Infallible>,
-            TIMER: Gc9d01Timer,
-        {
-            let total_pixels = (width * height) as usize;
-            let mut bg_buffer = alloc::vec![Rgb565::BLACK; total_pixels]; // Default to black (transparent)
-
-            // Fill the rounded rectangle
-            for py in 0..height {
-                for px in 0..width {
-                    let mut inside_rect = true;
-
-                    // Check corners for rounding
-                    if corner_radius > 0 {
-                        // Top-left corner
-                        if px < corner_radius && py < corner_radius {
-                            let dx = corner_radius - px;
-                            let dy = corner_radius - py;
-                            if (dx * dx + dy * dy) > (corner_radius * corner_radius) {
-                                inside_rect = false;
-                            }
-                        }
-                        // Top-right corner
-                        else if px >= width - corner_radius && py < corner_radius {
-                            let dx = px - (width - corner_radius - 1);
-                            let dy = corner_radius - py;
-                            if (dx * dx + dy * dy) > (corner_radius * corner_radius) {
-                                inside_rect = false;
-                            }
-                        }
-                        // Bottom-left corner
-                        else if px < corner_radius && py >= height - corner_radius {
-                            let dx = corner_radius - px;
-                            let dy = py - (height - corner_radius - 1);
-                            if (dx * dx + dy * dy) > (corner_radius * corner_radius) {
-                                inside_rect = false;
-                            }
-                        }
-                        // Bottom-right corner
-                        else if px >= width - corner_radius && py >= height - corner_radius {
-                            let dx = px - (width - corner_radius - 1);
-                            let dy = py - (height - corner_radius - 1);
-                            if (dx * dx + dy * dy) > (corner_radius * corner_radius) {
-                                inside_rect = false;
-                            }
-                        }
-                    }
-
-                    if inside_rect {
-                        let index = (py * width + px) as usize;
-                        bg_buffer[index] = bg_color;
-                    }
-                }
-            }
-
-            display
-                .write_area(x, y, width, height, &bg_buffer)
-                .await
-                .map_err(|_| Error::DriverError)?;
-            Ok(())
-        }
-
         // Helper function to draw a string with fixed width using space padding
         async fn draw_string<'a, BUS, DC, RST, TIMER>(
             display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
@@ -377,20 +304,28 @@ impl Dashboard {
             RST: OutputPin<Error = core::convert::Infallible>, // Specify Infallible error type
             TIMER: Gc9d01Timer,
         {
-            // Create a fixed-width string by padding with spaces
-            let mut padded_string = alloc::string::String::new();
+            // Create a fixed-width string by padding with spaces using fixed buffer
+            let mut padded_chars: [char; 16] = [' '; 16]; // Max 16 characters should be enough
             let string_len = s.chars().count();
+            let actual_width = fixed_width_chars.min(16); // Limit to buffer size
 
-            if string_len < fixed_width_chars {
+            if string_len < actual_width {
                 // Pad with leading spaces for right alignment
-                let spaces_needed = fixed_width_chars - string_len;
-                for _ in 0..spaces_needed {
-                    padded_string.push(' ');
+                let spaces_needed = actual_width - string_len;
+                let mut char_iter = s.chars();
+                for i in 0..actual_width {
+                    if i < spaces_needed {
+                        padded_chars[i] = ' ';
+                    } else {
+                        padded_chars[i] = char_iter.next().unwrap_or(' ');
+                    }
                 }
-                padded_string.push_str(s);
             } else {
                 // If string is too long, truncate it
-                padded_string = s.chars().take(fixed_width_chars).collect();
+                let mut char_iter = s.chars();
+                for i in 0..actual_width {
+                    padded_chars[i] = char_iter.next().unwrap_or(' ');
+                }
             }
 
             // Calculate dimensions for background rectangle
@@ -399,42 +334,40 @@ impl Dashboard {
 
             // Draw the text
             let mut current_x = start_x;
-            for c in padded_string.chars() {
-                if let Some(bitmap) = char_to_mono_bitmap(c) {
-                    mono_bitmap_to_rgb565(bitmap, fg_color, bg_color, char_pixel_buffer);
+            for c in &padded_chars[..actual_width] {
+                // First fill the character buffer with background color
+                for pixel in char_pixel_buffer.iter_mut() {
+                    *pixel = bg_color;
+                }
+
+                if let Some(bitmap) = char_to_mono_bitmap(*c) {
+                    mono_bitmap_to_rgb565(bitmap, fg_color, char_pixel_buffer);
 
                     let x0 = current_x;
                     let y0 = start_y;
 
-                    display
-                        .write_area(
-                            x0.try_into().unwrap(),
-                            y0.try_into().unwrap(),
-                            FONT_8X12_WIDTH.try_into().unwrap(),
-                            FONT_8X12_HEIGHT.try_into().unwrap(),
-                            char_pixel_buffer,
-                        )
-                        .await
-                        .map_err(|_| Error::DriverError)?;
+                    display.write_area(
+                        x0.try_into().unwrap(),
+                        y0.try_into().unwrap(),
+                        FONT_8X12_WIDTH.try_into().unwrap(),
+                        FONT_8X12_HEIGHT.try_into().unwrap(),
+                        char_pixel_buffer,
+                    );
 
                     current_x += FONT_8X12_WIDTH;
                 } else {
                     // Handle characters not in font (draw a blank space)
-                    mono_bitmap_to_rgb565(&[0u8; 12], fg_color, bg_color, char_pixel_buffer); // All zeros = blank
-
+                    // Background is already filled, no need to render anything for blank space
                     let x0 = current_x;
                     let y0 = start_y;
 
-                    display
-                        .write_area(
-                            x0.try_into().unwrap(),
-                            y0.try_into().unwrap(),
-                            FONT_8X12_WIDTH.try_into().unwrap(),
-                            FONT_8X12_HEIGHT.try_into().unwrap(),
-                            char_pixel_buffer,
-                        )
-                        .await
-                        .map_err(|_| Error::DriverError)?;
+                    display.write_area(
+                        x0.try_into().unwrap(),
+                        y0.try_into().unwrap(),
+                        FONT_8X12_WIDTH.try_into().unwrap(),
+                        FONT_8X12_HEIGHT.try_into().unwrap(),
+                        char_pixel_buffer,
+                    );
 
                     current_x += FONT_8X12_WIDTH;
                 }
@@ -455,24 +388,28 @@ impl Dashboard {
                 let prev_bg_height = screen_height as u16 + 8;
 
                 // Clear previous background in chunks to avoid memory issues
-                let chunk_height = 8;
-                let chunk_size = (prev_bg_width as usize * chunk_height) as usize;
-                let clear_buffer = alloc::vec![Rgb565::BLACK; chunk_size];
+                // Use very small fixed buffer to minimize memory usage
+                const MAX_CLEAR_PIXELS: usize = 64; // Only 64 pixels = 128 bytes
+                let clear_buffer: [Rgb565; MAX_CLEAR_PIXELS] = [Rgb565::BLACK; MAX_CLEAR_PIXELS];
 
-                for y_chunk in (0..prev_bg_height).step_by(chunk_height) {
-                    let remaining_height = (prev_bg_height - y_chunk).min(chunk_height as u16);
+                // Clear in very small chunks to minimize memory usage
+                // Calculate how many pixels we can clear per row with our small buffer
+                let pixels_per_row = prev_bg_width as usize;
+                let rows_per_chunk = MAX_CLEAR_PIXELS / pixels_per_row.max(1);
+                let chunk_height = rows_per_chunk.max(1) as u16;
+
+                for y_chunk in (0..prev_bg_height).step_by(chunk_height as usize) {
+                    let remaining_height = (prev_bg_height - y_chunk).min(chunk_height);
                     let chunk_pixels =
-                        (prev_bg_width as usize * remaining_height as usize).min(chunk_size);
-                    display
-                        .write_area(
-                            prev_bg_x,
-                            prev_bg_y + y_chunk,
-                            prev_bg_width,
-                            remaining_height,
-                            &clear_buffer[..chunk_pixels],
-                        )
-                        .await
-                        .map_err(|_| Error::DriverError)?;
+                        (prev_bg_width as usize * remaining_height as usize).min(MAX_CLEAR_PIXELS);
+
+                    display.write_area(
+                        prev_bg_x,
+                        prev_bg_y + y_chunk,
+                        prev_bg_width,
+                        remaining_height,
+                        &clear_buffer[..chunk_pixels],
+                    );
                 }
             }
         }
@@ -524,15 +461,39 @@ impl Dashboard {
                 let bg_width = (col_width as u16 + 8).min(screen_width as u16 - bg_x); // 4px padding on each side
                 let bg_height = screen_height as u16 + 8; // 4px padding top and bottom
 
-                draw_rounded_rect(display, bg_x, bg_y, bg_width, bg_height, selection_color, 4)
-                    .await?;
+                // Draw simple rectangle background without rounded corners to save memory
+                // Use very small buffer for line-by-line drawing
+                const LINE_PIXELS: usize = 64; // Max 64 pixels per line = 128 bytes
+                let mut line_buffer: [Rgb565; LINE_PIXELS] = [selection_color; LINE_PIXELS];
+
+                let lines_per_chunk = LINE_PIXELS / (bg_width as usize).max(1);
+                let chunk_height = lines_per_chunk.max(1) as u16;
+
+                for y_offset in (0..bg_height).step_by(chunk_height as usize) {
+                    let remaining_height = (bg_height - y_offset).min(chunk_height);
+                    let pixels_needed =
+                        (bg_width as usize * remaining_height as usize).min(LINE_PIXELS);
+
+                    // Fill buffer with selection color
+                    for pixel in &mut line_buffer[..pixels_needed] {
+                        *pixel = selection_color;
+                    }
+
+                    display.write_area(
+                        bg_x,
+                        bg_y + y_offset,
+                        bg_width,
+                        remaining_height,
+                        &line_buffer[..pixels_needed],
+                    );
+                }
             }
 
             // Draw Voltage (Row 1) - Fixed width of 6 characters (e.g., "12.34V")
-            let voltage_str = self.float_to_string(&mut buffer, port_voltage);
+            let voltage_str = self.float_with_unit_to_string(&mut buffer, port_voltage, 'V');
             draw_string(
                 display,
-                &format!("{}V", voltage_str),
+                voltage_str,
                 col_right_edge_x as usize,
                 6,
                 0,
@@ -543,10 +504,10 @@ impl Dashboard {
             .await?;
 
             // Draw Current (Row 2) - Fixed width of 6 characters (e.g., "12.34A")
-            let current_str = self.float_to_string(&mut buffer, port_current);
+            let current_str = self.float_with_unit_to_string(&mut buffer, port_current, 'A');
             draw_string(
                 display,
-                &format!("{}A", current_str),
+                current_str,
                 col_right_edge_x as usize,
                 6,
                 actual_row_height as usize,
@@ -559,10 +520,11 @@ impl Dashboard {
             // Draw Row 3 - Show power allocation or power based on display mode
             if self.show_power_allocation {
                 // Display power allocation (Row 4 data) - All in Watts with white color
-                let allocation_str = self.float_to_string(&mut buffer, self.power_allocation[i]);
+                let allocation_str =
+                    self.float_with_unit_to_string(&mut buffer, self.power_allocation[i], 'W');
                 draw_string(
                     display,
-                    &format!("{}W", allocation_str),
+                    allocation_str,
                     col_right_edge_x as usize,
                     6,
                     (actual_row_height * 2) as usize,
@@ -601,10 +563,10 @@ impl Dashboard {
                     .await?;
                 } else {
                     // Display normal power value
-                    let power_str = self.float_to_string(&mut buffer, port_power);
+                    let power_str = self.float_with_unit_to_string(&mut buffer, port_power, 'W');
                     draw_string(
                         display,
-                        &format!("{}W", power_str),
+                        power_str,
                         col_right_edge_x as usize,
                         6,
                         (actual_row_height * 2) as usize,
@@ -617,7 +579,62 @@ impl Dashboard {
             }
         }
 
+        // Flush all changes to the display
+        display.flush().await.map_err(|_| Error::DriverError)?;
+
         Ok(())
+    }
+
+    // Helper function to create float string with unit suffix without dynamic allocation
+    fn float_with_unit_to_string<'a>(
+        &self,
+        buffer: &'a mut [u8],
+        value: f32,
+        unit: char,
+    ) -> &'a str {
+        // First convert float to string manually
+        let integer_part = value as i32;
+        let decimal_part = ((value - integer_part as f32).abs() * 100.0) as i32;
+
+        let mut cursor = 0;
+        if value < 0.0 {
+            buffer[cursor] = b'-';
+            cursor += 1;
+        }
+        let mut temp = integer_part.abs();
+        let mut divisor = 1;
+        while divisor * 10 <= temp {
+            divisor *= 10;
+        }
+        while divisor > 0 {
+            buffer[cursor] = b'0' + (temp / divisor) as u8;
+            cursor += 1;
+            temp %= divisor;
+            divisor /= 10;
+        }
+        if integer_part == 0 && value.abs() < 1.0 && value >= 0.0 {
+            buffer[cursor] = b'0';
+            cursor += 1;
+        } else if integer_part == 0 && value.abs() < 1.0 && value < 0.0 && cursor == 1 {
+            buffer[cursor] = b'0';
+            cursor += 1;
+        }
+
+        buffer[cursor] = b'.';
+        cursor += 1;
+
+        buffer[cursor] = b'0' + (decimal_part / 10) as u8;
+        cursor += 1;
+        buffer[cursor] = b'0' + (decimal_part % 10) as u8;
+        cursor += 1;
+
+        // Append unit
+        if cursor < buffer.len() {
+            buffer[cursor] = unit as u8;
+            cursor += 1;
+        }
+
+        core::str::from_utf8(&buffer[..cursor]).unwrap_or("Err")
     }
 
     // Simplified float to string function (moved from inside draw)

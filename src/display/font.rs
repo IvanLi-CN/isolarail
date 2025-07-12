@@ -340,31 +340,29 @@ pub fn char_to_mono_bitmap(c: char) -> Option<&'static [u8; 12]> {
 }
 
 // Function to convert a monochrome bitmap to an RGB565 pixel array
-// Takes the monochrome bitmap, foreground color, background color, and an output buffer.
-// Writes the RGB565 pixel data into the buffer.
+// Takes the monochrome bitmap, foreground color, and an output buffer.
+// Only writes foreground pixels to the buffer, leaving background pixels unchanged.
 // The buffer must be large enough: FONT_8X12_WIDTH * FONT_8X12_HEIGHT * size_of::<Rgb565>() bytes.
 pub fn mono_bitmap_to_rgb565(
     bitmap: &[u8; FONT_8X12_HEIGHT], // Changed to u8
     fg_color: Rgb565,
-    bg_color: Rgb565,
     output_buffer: &mut [Rgb565], // Size 8 * 12 = 96
 ) {
     let output_width = FONT_8X12_WIDTH; // 8
     let output_height = FONT_8X12_HEIGHT; // 12
 
     let mut buffer_idx = 0;
-    for col_idx in 0..output_width {
-        // Iterate over the 8 columns
-        for row_idx in 0..output_height {
+    // Iterate over the 8 columns
+    for row_idx in 0..output_height {
+        for col_idx in 0..output_width {
             // Iterate over the 12 rows
             let row_bitmap = bitmap[row_idx];
             // Check if the pixel is set in the monochrome bitmap (using 8 bits)
             if (row_bitmap >> (output_width - 1 - col_idx)) & 1 == 1 {
-                // Check bit from MSB side
+                // Check bit from MSB side - only write foreground pixels
                 output_buffer[buffer_idx] = fg_color;
-            } else {
-                output_buffer[buffer_idx] = bg_color;
             }
+            // Background pixels are left unchanged in the buffer
             buffer_idx += 1;
         }
     }

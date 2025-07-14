@@ -44,6 +44,11 @@ fn create_startup_bitmap() -> Vec<u8> {
     bitmap
 }
 
+/// Get the startup bitmap data
+fn get_startup_bitmap() -> Vec<u8> {
+    create_startup_bitmap()
+}
+
 /// Bitmap header structure (must match the one in src/app.rs)
 #[repr(C)]
 #[derive(Debug)]
@@ -102,8 +107,8 @@ fn calculate_checksum(data: &[u8]) -> u32 {
 async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
     info!("Programming startup bitmap to Flash...");
 
-    // Create the bitmap data
-    let startup_bitmap_data = create_startup_bitmap();
+    // Get the bitmap data
+    let startup_bitmap_data = get_startup_bitmap();
     info!("Bitmap size: {} bytes", startup_bitmap_data.len());
 
     // Calculate checksum

@@ -4,7 +4,7 @@ use defmt::*;
 use embassy_stm32::peripherals;
 use embassy_stm32::timer::simple_pwm::SimplePwm;
 use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::WebColors;
+use embedded_graphics::prelude::{RgbColor, WebColors};
 use tca6424::{Pin, PinState};
 
 /// Buzzer control function to emit a beep sound
@@ -90,29 +90,104 @@ where
     Ok(())
 }
 
+/// Display startup splash screen from external Flash - simplified implementation based on flash_display_test.rs
+async fn display_startup_splash(
+    hardware: &mut crate::hardware::HardwareConfig<'static>,
+) -> Result<(), &'static str> {
+    info!("=== 启动屏显示 - 基于flash_display_test.rs的成功实现 ===");
+
+    // 图像参数 - 与flash_display_test.rs保持一致
+    const BITMAP_WIDTH: u16 = 160;
+    const BITMAP_HEIGHT: u16 = 40;
+    const BYTES_PER_ROW: usize = 320; // 160像素 * 2字节/像素
+    const STARTUP_ADDRESS: u32 = 0x000000; // 启动屏地址
+
+    info!("启动屏图像尺寸: {}x{} 像素", BITMAP_WIDTH, BITMAP_HEIGHT);
+    info!("启动屏Flash地址: 0x{:06X}", STARTUP_ADDRESS);
+
+    // 逐行读取Flash并渲染到屏幕 - 完全参考flash_display_test.rs的成功实现
+    for y in 0..BITMAP_HEIGHT {
+        let row_address = STARTUP_ADDRESS + (y as u32 * BYTES_PER_ROW as u32);
+        let mut row_buffer = [0u8; BYTES_PER_ROW];
+
+        // 从Flash读取一行数据
+        match hardware
+            .flash
+            .read_async(row_address, &mut row_buffer)
+            .await
+        {
+            Ok(_) => {
+                // 转换为RGB565像素 - 与flash_display_test.rs完全相同的实现
+                let mut pixel_row = [Rgb565::BLACK; BITMAP_WIDTH as usize];
+                for (pixel_index, pixel_bytes) in row_buffer.chunks_exact(2).enumerate() {
+                    if pixel_index < pixel_row.len() {
+                        // RGB565小端格式 - 与flash_display_test.rs完全相同
+                        let pixel_value = (pixel_bytes[0] as u16) | ((pixel_bytes[1] as u16) << 8);
+                        pixel_row[pixel_index] = Rgb565::new(
+                            ((pixel_value >> 11) & 0x1F) as u8, // 红色
+                            ((pixel_value >> 5) & 0x3F) as u8,  // 绿色
+                            (pixel_value & 0x1F) as u8,         // 蓝色
+                        );
+                    }
+                }
+
+                // 写入显示缓冲区 - 与flash_display_test.rs完全相同
+                hardware
+                    .display
+                    .write_area(0, y, BITMAP_WIDTH, 1, &pixel_row);
+            }
+            Err(e) => {
+                error!("启动屏第{}行读取失败: {:?}", y, e);
+
+                // 错误时显示红色行 - 与flash_display_test.rs完全相同
+                let error_row = [Rgb565::CSS_RED; BITMAP_WIDTH as usize];
+                hardware
+                    .display
+                    .write_area(0, y, BITMAP_WIDTH, 1, &error_row);
+            }
+        }
+    }
+
+    // 刷新显示器 - 与flash_display_test.rs完全相同
+    match hardware.display.flush().await {
+        Ok(_) => {
+            info!("✓ 启动屏显示成功！");
+        }
+        Err(e) => {
+            error!("✗ 启动屏显示失败: {:?}", e);
+            return Err("Failed to flush display");
+        }
+    }
+
+    info!("启动屏显示完成");
+    Ok(())
+}
+
 /// Main application loop
 pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'static>) {
     info!("Starting application main loop");
 
-    // Fill display with black background
-    hardware.display.fill_color(Rgb565::CSS_BLUE_VIOLET);
-    hardware.display.flush().await.unwrap();
+    // Test buzzer immediately on power-up
+    info!("Testing buzzer on power-up...");
+    beep_buzzer(&mut hardware.buzzer_pwm, 300).await; // 300ms power-up beep
+    info!("Power-up buzzer test complete.");
 
-    // Display test pattern
-    if let Err(e) = display_test_pattern(&mut hardware.display).await {
-        error!("Failed to display test pattern: {:?}", e);
+    // Display startup splash screen for 3 seconds
+    info!("Displaying startup splash screen for 3 seconds...");
+    if let Err(e) = display_startup_splash(&mut hardware).await {
+        error!("Startup splash failed: {}", e);
     }
 
-    // Test buzzer on startup
-    info!("Testing buzzer...");
-    beep_buzzer(&mut hardware.buzzer_pwm, 300).await; // 300ms test beep
-    info!("Buzzer test complete.");
+    // Wait for 3 seconds
+    embassy_time::Timer::after_secs(3).await;
+    info!("Startup splash screen timeout completed");
 
-    // Instantiate Dashboard
+    // Clear display and continue with normal application
+    hardware.display.fill_color(Rgb565::BLACK);
+    hardware.display.flush().await.unwrap();
+
+    // Instantiate Dashboard and start main application
     let mut dashboard = Dashboard::new();
-
-    // Initial delay before starting the loop
-    embassy_time::Timer::after_secs(2).await;
 
     // Initialize previous UFP states for change detection
     let mut prev_port1_connected = false; // SW2303 Port 1

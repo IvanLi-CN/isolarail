@@ -109,8 +109,8 @@ async fn initialize_flash_spi(p: embassy_stm32::Peripherals) -> W25q32jv<Embassy
     flash
 }
 
-/// Startup bitmap data (140x40 RGB565 with header)
-const STARTUP_BITMAP: &[u8] = include_bytes!("../../screenshot_140x40.bin");
+/// Test checkerboard image data (160x40 RGB565)
+const TEST_IMAGE: &[u8] = include_bytes!("../../test_data/checkerboard_160x40.bin");
 
 /// Demonstrate Flash programming operations
 async fn demo_flash_operations<SPI>(flash: W25q32jv<SPI, DummyPin, DummyPin>) -> Result<(), Error<SPI::Error, crate::programmer::DummyError>>
@@ -125,16 +125,16 @@ where
     let device_info = programmer.get_device_info().await?;
     device_info.print_info();
 
-    // Program startup bitmap to startup bitmap area
-    info!("=== Programming Startup Bitmap (140x40) ===");
-    let startup_bitmap_addr = 0x000000; // Startup bitmap area starts at 0x000000
-    info!("Programming startup bitmap ({} bytes) to address 0x{:06X}",
-          STARTUP_BITMAP.len(), startup_bitmap_addr);
+    // Program test checkerboard image to entire Flash
+    info!("=== Programming Test Checkerboard Image (16MB) ===");
+    let test_image_addr = 0x000000; // Start at beginning of Flash
+    info!("Programming test image ({} bytes) to fill 16MB Flash starting at address 0x{:06X}",
+          TEST_IMAGE.len(), test_image_addr);
 
     // First, let's try to read what's currently at address 0x000000
     info!("Reading current data at address 0x000000...");
     let mut read_buffer = [0u8; 32];
-    match programmer.read_data(startup_bitmap_addr, &mut read_buffer).await {
+    match programmer.read_data(test_image_addr, &mut read_buffer).await {
         Ok(()) => {
             info!("Current data at 0x000000: {:?}", &read_buffer[0..16]);
         }
@@ -143,48 +143,61 @@ where
         }
     }
 
-    // Note: w25q32jv crate handles write protection internally
-    info!("Proceeding with Flash programming (w25q32jv handles protection internally)...");
-
-    // First, let's try a 16-byte test at address 0x0000
-    info!("=== Testing 16-Byte Write at Address 0x0000 ===");
-    let test_address = 0x0000u32; // Start at the very beginning
-    let test_pattern: [u8; 16] = [0xAA, 0x55, 0xCC, 0x33, 0xAA, 0x55, 0xCC, 0x33,
-                                  0xAA, 0x55, 0xCC, 0x33, 0xAA, 0x55, 0xCC, 0x33];
-    info!("Programming 16 bytes: {:?} at address 0x{:06X}", test_pattern, test_address);
-
-    match programmer.program_and_verify(test_address, &test_pattern).await {
+    // Erase entire chip for 16MB programming
+    info!("Erasing entire Flash chip (this may take several minutes)...");
+    match programmer.erase_chip().await {
         Ok(()) => {
-            info!("✓ Test pattern programmed and verified successfully");
-            info!("Now trying full bitmap...");
+            info!("✓ Flash chip erased successfully");
+        }
+        Err(e) => {
+            error!("✗ Failed to erase Flash chip");
+            return Err(e);
+        }
+    }
 
-            // Now try the full bitmap
-            match programmer.program_and_verify(startup_bitmap_addr, STARTUP_BITMAP).await {
-                Ok(()) => {
-                    info!("✓ Startup bitmap (140x40) programmed and verified successfully");
-                }
-                Err(_e) => {
-                    error!("Full bitmap programming failed");
+    // Calculate how many times to repeat the test image to fill 16MB
+    const FLASH_SIZE: u32 = 16 * 1024 * 1024; // 16MB
+    let image_size = TEST_IMAGE.len() as u32;
+    let repeat_count = FLASH_SIZE / image_size;
+    let remaining_bytes = FLASH_SIZE % image_size;
+
+    info!("Will write {} complete images + {} remaining bytes", repeat_count, remaining_bytes);
+
+    // Program the test image repeatedly
+    let mut current_address = 0u32;
+    for i in 0..repeat_count {
+        info!("Programming image {} of {} at address 0x{:08X}", i + 1, repeat_count, current_address);
+
+        match programmer.program_data(current_address, TEST_IMAGE).await {
+            Ok(()) => {
+                current_address += image_size;
+                if (i + 1) % 100 == 0 {
+                    info!("  Progress: {}/{} images written", i + 1, repeat_count);
                 }
             }
-        }
-        Err(_e) => {
-            error!("Test pattern programming failed");
-
-            // Let's read back what was actually written
-            info!("Reading back what was actually written...");
-            let mut read_buffer = [0u8; 32];
-            match programmer.read_data(test_address, &mut read_buffer).await {
-                Ok(()) => {
-                    info!("Actual data written: {:?}", &read_buffer[0..16]);
-                    info!("Expected data:      {:?}", &test_pattern);
-                }
-                Err(_e) => {
-                    error!("Failed to read back data");
-                }
+            Err(e) => {
+                error!("✗ Failed to program image {} at address 0x{:08X}", i + 1, current_address);
+                return Err(e);
             }
         }
     }
+
+    // Program remaining partial image if any
+    if remaining_bytes > 0 {
+        info!("Programming remaining {} bytes at address 0x{:08X}", remaining_bytes, current_address);
+        let partial_image = &TEST_IMAGE[..(remaining_bytes as usize)];
+        match programmer.program_data(current_address, partial_image).await {
+            Ok(()) => {
+                info!("✓ Remaining bytes programmed successfully");
+            }
+            Err(e) => {
+                error!("✗ Failed to program remaining bytes");
+                return Err(e);
+            }
+        }
+    }
+
+    info!("✓ Test image programmed successfully to entire 16MB Flash");
 
     // Example 1: Program test data (commented out for debugging)
     // let test_data = include_bytes!("../test_data.bin");

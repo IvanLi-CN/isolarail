@@ -761,7 +761,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     let rst_pin = Output::new(p.PC4, Level::Low, Speed::VeryHigh);
 
     let mut spi_config = SpiConfig::default();
-    spi_config.frequency = Hertz(48_000_000);
+    spi_config.frequency = Hertz(8_000_000); // 8MHz - safe frequency for display
 
     let spi_bus = Stm32Spi::new_txonly(
         spi_peripheral_instance,

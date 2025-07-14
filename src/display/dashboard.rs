@@ -25,6 +25,7 @@ use core::convert::TryInto; // Added import for try_into
 use embedded_hal::digital::OutputPin;
 use embedded_hal_async::spi::SpiDevice;
 use gc9d01::Timer as Gc9d01Timer; // Moved this import up // Added import for alloc::format!
+use sw2303::registers::{SystemStatus0Flags, SystemStatus1Flags, SystemStatus2Flags};
 
 #[derive(Debug)]
 pub enum Error {
@@ -61,6 +62,10 @@ pub struct Dashboard {
     selected_port: usize,
     // Previous selected port for background clearing
     previous_selected_port: Option<usize>,
+    // SW2303 system status for Port 1 anomaly detection
+    sw2303_system_status0: Option<SystemStatus0Flags>,
+    sw2303_system_status1: Option<SystemStatus1Flags>,
+    sw2303_system_status2: Option<SystemStatus2Flags>,
 }
 
 impl Dashboard {
@@ -88,6 +93,9 @@ impl Dashboard {
             draw_count: 0,                // Initialize draw counter
             selected_port: 1,             // Default to Port 2 (index 1)
             previous_selected_port: None, // No previous selection initially
+            sw2303_system_status0: None,  // Initialize SW2303 system status
+            sw2303_system_status1: None,
+            sw2303_system_status2: None,
         };
 
         // Calculate initial power allocation
@@ -116,6 +124,32 @@ impl Dashboard {
         if connection_changed || port1_power_changed {
             self.calculate_power_allocation();
         }
+    }
+
+    // Update SW2303 system status for Port 1 anomaly detection
+    pub fn update_sw2303_status(
+        &mut self,
+        status0: Option<SystemStatus0Flags>,
+        status1: Option<SystemStatus1Flags>,
+        status2: Option<SystemStatus2Flags>,
+    ) {
+        self.sw2303_system_status0 = status0;
+        self.sw2303_system_status1 = status1;
+        self.sw2303_system_status2 = status2;
+    }
+
+    // Get SW2303 anomaly text and color for display - ONLY real anomalies from official docs
+    // Returns (text, color) if anomaly detected, None if normal
+    fn get_sw2303_anomaly_text(&self) -> Option<(&'static str, Rgb565)> {
+        // Only check for overcurrent detection as explicitly requested by user
+        if let Some(status1) = self.sw2303_system_status1 {
+            if status1.contains(SystemStatus1Flags::OVERCURRENT_112_5_PERCENT) {
+                defmt::warn!("SW2303 Port 1 Anomaly: Overcurrent 112.5% detected");
+                return Some(("OCP", Rgb565::RED)); // 过流保护
+            }
+        }
+
+        None // No anomaly detected
     }
 
     // Set the selected port (0, 1, or 2)
@@ -534,7 +568,7 @@ impl Dashboard {
                 )
                 .await?;
             } else {
-                // Display power (Row 3 data) - Show status based on priority: USB comm > OCP > power value
+                // Display power (Row 3 data) - Show status based on priority: USB comm > SW2303 anomalies > OCP > power value
                 if !self.usb_comm_enabled[i] {
                     // Display "DISC" in orange when USB communication is disabled
                     draw_string(
@@ -548,8 +582,52 @@ impl Dashboard {
                         &mut char_pixel_buffer,
                     )
                     .await?; // Orange color
+                } else if i == 0 {
+                    // Port 1: Check SW2303 system status for anomalies
+                    let sw2303_anomaly = self.get_sw2303_anomaly_text();
+                    if let Some((anomaly_text, anomaly_color)) = sw2303_anomaly {
+                        draw_string(
+                            display,
+                            anomaly_text,
+                            col_right_edge_x as usize,
+                            6,
+                            (actual_row_height * 2) as usize,
+                            anomaly_color,
+                            text_bg_color,
+                            &mut char_pixel_buffer,
+                        )
+                        .await?;
+                    } else if self.port_overcurrent[i] {
+                        // Display "OCP" in red when overcurrent is detected
+                        draw_string(
+                            display,
+                            "OCP",
+                            col_right_edge_x as usize,
+                            6,
+                            (actual_row_height * 2) as usize,
+                            Rgb565::RED,
+                            text_bg_color,
+                            &mut char_pixel_buffer,
+                        )
+                        .await?;
+                    } else {
+                        // Display normal power value
+                        let power_str =
+                            self.float_with_unit_to_string(&mut buffer, port_power, 'W');
+                        draw_string(
+                            display,
+                            power_str,
+                            col_right_edge_x as usize,
+                            6,
+                            (actual_row_height * 2) as usize,
+                            final_power_color,
+                            text_bg_color,
+                            &mut char_pixel_buffer,
+                        )
+                        .await?;
+                    }
                 } else if self.port_overcurrent[i] {
-                    // Display "OCP" in red when overcurrent is detected
+                    // Display "OCP" in red when overcurrent is detected (for ports 2 and 3)
                     draw_string(
                         display,
                         "OCP",
@@ -562,7 +640,7 @@ impl Dashboard {
                     )
                     .await?;
                 } else {
-                    // Display normal power value
+                    // Display normal power value (for ports 2 and 3)
                     let power_str = self.float_with_unit_to_string(&mut buffer, port_power, 'W');
                     draw_string(
                         display,

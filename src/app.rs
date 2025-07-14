@@ -288,6 +288,53 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         let port2_connected = p2_ufp_state == PinState::Low;
         let port3_connected = p3_ufp_state == PinState::Low;
 
+        // Read SW2303 system status for Port 1 anomaly detection
+        let sw2303_system_status0 = hardware.sw2303_controller.get_system_status0().await.ok();
+        let sw2303_system_status1 = hardware.sw2303_controller.get_system_status_1().await.ok();
+        let sw2303_system_status2 = hardware.sw2303_controller.get_system_status_2().await.ok();
+
+        // Log SW2303 system status for debugging (every 10 seconds to avoid spam)
+        static mut LAST_STATUS_LOG_TIME: u64 = 0;
+        let current_time = embassy_time::Instant::now().as_millis();
+        let should_log_status = unsafe {
+            current_time - LAST_STATUS_LOG_TIME > 10000 // 10 seconds
+        };
+
+        if should_log_status {
+            if let Some(status0) = sw2303_system_status0 {
+                info!(
+                    "SW2303 Status0: OPTOCOUPLER={}, CC_LOOP={}, LINE_COMP={}, PASS_TRANS={}",
+                    status0.contains(sw2303::registers::SystemStatus0Flags::ABNORMAL_OPTOCOUPLER),
+                    status0.contains(sw2303::registers::SystemStatus0Flags::CC_LOOP_CLOSED),
+                    status0.contains(sw2303::registers::SystemStatus0Flags::LINE_COMPENSATION_OPEN),
+                    status0.contains(sw2303::registers::SystemStatus0Flags::PASS_TRANSISTOR_OPEN)
+                );
+            }
+            if let Some(status1) = sw2303_system_status1 {
+                info!(
+                    "SW2303 Status1: VIN_25V={}, OCP_112={}, DIE_TEMP={}, CC_LOOP={}, VIN_OVP={}, VIN_UVP={}",
+                    status1.contains(sw2303::registers::SystemStatus1Flags::VIN_OVER_25V),
+                    status1
+                        .contains(sw2303::registers::SystemStatus1Flags::OVERCURRENT_112_5_PERCENT),
+                    status1.contains(sw2303::registers::SystemStatus1Flags::DIE_OVERTEMPERATURE),
+                    status1.contains(sw2303::registers::SystemStatus1Flags::CC_LOOP_OPEN),
+                    status1.contains(sw2303::registers::SystemStatus1Flags::VIN_OVERVOLTAGE),
+                    status1.contains(sw2303::registers::SystemStatus1Flags::VIN_UNDERVOLTAGE)
+                );
+            }
+            if let Some(status2) = sw2303_system_status2 {
+                info!(
+                    "SW2303 Status2: CC1_OVP={}, CC2_OVP={}, DP_OVP={}",
+                    status2.contains(sw2303::registers::SystemStatus2Flags::CC1_OVERVOLTAGE),
+                    status2.contains(sw2303::registers::SystemStatus2Flags::CC2_OVERVOLTAGE),
+                    status2.contains(sw2303::registers::SystemStatus2Flags::DP_OVERVOLTAGE)
+                );
+            }
+            unsafe {
+                LAST_STATUS_LOG_TIME = current_time;
+            }
+        }
+
         // Check overcurrent/fault conditions for all ports
         // Port 1: SW2303 overcurrent detection
         let port1_overcurrent = match hardware.sw2303_controller.is_overcurrent().await {
@@ -432,6 +479,13 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         // Update Dashboard data
         dashboard.update_data(sensor_data, connection_status, overcurrent_status);
+
+        // Update SW2303 system status for Port 1 anomaly detection
+        dashboard.update_sw2303_status(
+            sw2303_system_status0,
+            sw2303_system_status1,
+            sw2303_system_status2,
+        );
 
         // Handle joystick input with software debouncing
         let current_time_ms = embassy_time::Instant::now().as_millis();

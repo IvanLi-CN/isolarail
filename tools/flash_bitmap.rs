@@ -128,11 +128,11 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
     const PAGE_SIZE: u32 = 256;
     const SECTOR_SIZE: u32 = 4096; // 4KB per sector
     let header_end = BitmapHeader::SIZE as u32;
-    let data_start_address = ((header_end + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE; // Round up to next page boundary
+    let data_start_address = header_end.div_ceil(PAGE_SIZE) * PAGE_SIZE; // Round up to next page boundary
 
     // Calculate how many sectors we need to erase
     let total_size = data_start_address + startup_bitmap_data.len() as u32;
-    let sectors_needed = (total_size + SECTOR_SIZE - 1) / SECTOR_SIZE; // Round up
+    let sectors_needed = total_size.div_ceil(SECTOR_SIZE); // Round up
 
     info!(
         "Total data size: {} bytes, sectors needed: {}",

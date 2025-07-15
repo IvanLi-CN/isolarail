@@ -13,10 +13,11 @@ path = "src/main.rs"
 name = "flash-bitmap"
 path = "tools/flash_bitmap.rs"
 
-[[example]]
-name = "bitmap_flasher"
-path = "examples/bitmap_flasher.rs"
-test = false
+# Exclude bitmap_flasher due to stack overflow issues
+# [[example]]
+# name = "bitmap_flasher"
+# path = "examples/bitmap_flasher.rs"
+# test = false
 
 # Exclude examples that require std
 [[example]]
@@ -28,6 +29,7 @@ required-features = ["std"]
 [features]
 default = ["alloc"]
 alloc = []
+std = []
 
 [build-dependencies]
 # Add this to enable build.rs

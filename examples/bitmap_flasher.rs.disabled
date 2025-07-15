@@ -9,6 +9,7 @@
 
 #![no_std]
 #![no_main]
+#![cfg(not(target_arch = "arm"))]
 
 use defmt::*;
 use embassy_executor::Spawner;

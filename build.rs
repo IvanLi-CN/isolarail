@@ -23,24 +23,17 @@ fn main() {
     match (config_value, env_value) {
         (Some(config), Some(env_val)) => {
             println!(
-                "cargo:warning=Config file TOTAL_POWER_BUDGET={}, Environment TOTAL_POWER_BUDGET={}",
-                config, env_val
+                "cargo:warning=Config file TOTAL_POWER_BUDGET={config}, Environment TOTAL_POWER_BUDGET={env_val}"
             );
             if config != env_val {
                 println!("cargo:warning=Environment variable overrides config file value");
             }
         }
         (Some(config), None) => {
-            println!(
-                "cargo:warning=Using TOTAL_POWER_BUDGET={} from config file",
-                config
-            );
+            println!("cargo:warning=Using TOTAL_POWER_BUDGET={config} from config file");
         }
         (None, Some(env_val)) => {
-            println!(
-                "cargo:warning=Using TOTAL_POWER_BUDGET={} from environment",
-                env_val
-            );
+            println!("cargo:warning=Using TOTAL_POWER_BUDGET={env_val} from environment");
         }
         (None, None) => {
             println!("cargo:warning=Using default TOTAL_POWER_BUDGET=100");
@@ -49,7 +42,7 @@ fn main() {
 
     // Force rebuild if config file timestamp is newer than last build
     if Path::new(config_path).exists() {
-        println!("cargo:rerun-if-changed={}", config_path);
+        println!("cargo:rerun-if-changed={config_path}");
     }
 }
 

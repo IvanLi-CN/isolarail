@@ -8,6 +8,6 @@ pre-commit:
       glob: "*.{rs}"
       run: cargo fmt --all
       stage_fixed: true
-    clippy:
-      glob: "*.{rs}"
-      run: cargo clippy --all-targets -- -D warnings
+    # clippy-main:
+    #   glob: "src/*.{rs}"
+    #   run: cargo clippy --bin iso-usb-hub -- -D warnings

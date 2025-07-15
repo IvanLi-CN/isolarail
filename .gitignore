@@ -27,5 +27,10 @@ Thumbs.db
 *.elf
 *.map
 
+# Exception for required binary files
+!startup_bitmap.bin
+!combined_images_correct.bin
+!combined_images.bin
+
 # Probe-rs
 .probe-rs/

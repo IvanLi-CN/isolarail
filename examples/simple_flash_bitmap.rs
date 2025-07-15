@@ -102,7 +102,7 @@ fn create_test_bitmap() -> alloc::vec::Vec<u8> {
     bitmap.extend_from_slice(&0x12345678u32.to_le_bytes()); // Checksum (placeholder)
 
     // Pixel data - create a simple gradient pattern
-    for y in 0..height {
+    for _y in 0..height {
         for x in 0..width {
             // Create a blue to cyan gradient
             let ratio = x as f32 / width as f32;

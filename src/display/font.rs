@@ -1,4 +1,5 @@
 // src/display/font.rs
+#![allow(clippy::needless_range_loop)]
 // Manually generated font data and rendering functions
 use embedded_graphics::pixelcolor::Rgb565;
 

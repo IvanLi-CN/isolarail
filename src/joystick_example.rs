@@ -1,4 +1,5 @@
 // src/joystick_example.rs
+#![allow(dead_code)]
 //! Five-way joystick usage example
 //!
 //! This module demonstrates how to use the five-way joystick for navigation

@@ -6,7 +6,6 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice as EmbassySpiDevice
 use embassy_executor::Spawner;
 use embassy_stm32::{
     gpio::{Level, Output, Speed},
-    peripherals,
     spi::{Config as SpiConfig, Spi as Stm32Spi},
     time::Hertz,
 };

@@ -146,6 +146,7 @@ async fn main(_spawner: Spawner) {
     }
 }
 
+#[allow(dead_code)]
 async fn verify_checkerboard_image(
     hardware: &mut hardware::HardwareConfig<'_>,
     start_address: u32,
@@ -218,6 +219,7 @@ async fn verify_checkerboard_image(
     verification_passed
 }
 
+#[allow(dead_code)]
 async fn display_flash_image(hardware: &mut hardware::HardwareConfig<'_>, start_address: u32) {
     const BITMAP_WIDTH: u16 = 160;
     const BITMAP_HEIGHT: u16 = 40;

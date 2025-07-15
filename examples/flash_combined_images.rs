@@ -59,7 +59,7 @@ async fn main(_spawner: Spawner) {
     }
 
     // 分块写入数据
-    let total_chunks = (COMBINED_IMAGES_DATA.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    let total_chunks = COMBINED_IMAGES_DATA.len().div_ceil(CHUNK_SIZE);
     info!("开始写入数据，共{}个块...", total_chunks);
 
     for (chunk_index, chunk) in COMBINED_IMAGES_DATA.chunks(CHUNK_SIZE).enumerate() {

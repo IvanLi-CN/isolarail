@@ -42,6 +42,7 @@ pub async fn play_alarm_beep(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) 
 }
 
 /// Display test pattern on startup
+#[allow(dead_code)]
 pub async fn display_test_pattern<'a, BUS, DC, RST, TIMER, BusE, PinE>(
     display: &mut gc9d01::GC9D01<'a, BUS, DC, RST, TIMER>,
 ) -> Result<(), gc9d01::Error<BusE, PinE>>
@@ -266,11 +267,11 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
             .unwrap_or(0.0);
 
         // Read SW2303 connection status for Port 1
-        let sw2303_port1_connected =
-            match hardware.sw2303_controller.is_sink_device_connected().await {
-                Ok(device_online) => device_online,
-                Err(_) => false,
-            };
+        let sw2303_port1_connected = hardware
+            .sw2303_controller
+            .is_sink_device_connected()
+            .await
+            .unwrap_or_default();
 
         // Read P2_UFP (P01) and P3_UFP (P25) states
         let p2_ufp_state = hardware

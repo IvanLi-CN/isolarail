@@ -1,4 +1,5 @@
 // src/hardware.rs
+#![allow(dead_code, clippy::collapsible_if, clippy::type_complexity)]
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as EmbassyI2cDevice;
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice as EmbassySpiDevice;
 use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
@@ -109,6 +110,7 @@ impl FiveWayJoystick {
     }
 
     /// Get all button states as a tuple (up, down, left, right, center)
+    #[allow(dead_code)]
     pub fn get_all_states(&self) -> (bool, bool, bool, bool, bool) {
         (
             self.is_up_pressed(),

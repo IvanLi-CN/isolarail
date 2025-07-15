@@ -6,7 +6,7 @@ use core::ptr;
 use defmt::*;
 use embassy_executor::Spawner;
 use embedded_alloc::LlffHeap as Heap;
-use embedded_graphics::{pixelcolor::Rgb565, prelude::RgbColor};
+// use embedded_graphics::prelude::WebColors;
 use {defmt_rtt as _, panic_probe as _};
 
 mod app;

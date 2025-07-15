@@ -68,6 +68,13 @@ pub struct Dashboard {
     sw2303_system_status2: Option<SystemStatus2Flags>,
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    clippy::needless_range_loop,
+    clippy::unnecessary_cast,
+    clippy::if_same_then_else,
+    clippy::type_complexity
+)]
 impl Dashboard {
     // Create new Dashboard instance
     pub fn new() -> Self {
@@ -716,6 +723,7 @@ impl Dashboard {
     }
 
     // Simplified float to string function (moved from inside draw)
+    #[allow(dead_code)]
     fn float_to_string<'a>(&self, buffer: &'a mut [u8], value: f32) -> &'a str {
         // Added &self and value parameter and lifetime
         // This is a very simplified implementation for demonstration only

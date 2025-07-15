@@ -1,0 +1,77 @@
+name: Code Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        targets: thumbv7em-none-eabihf
+        components: rustfmt, clippy
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Check code formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run clippy
+      run: cargo clippy --all-targets -- -D warnings
+    
+    - name: Build main binary
+      run: cargo build --bin iso-usb-hub --target thumbv7em-none-eabihf
+    
+    - name: Build examples
+      run: cargo build --examples --target thumbv7em-none-eabihf
+
+    - name: Install cargo-binutils
+      run: cargo install cargo-binutils
+
+    - name: Install llvm-tools-preview
+      run: rustup component add llvm-tools-preview
+
+    - name: Generate binary files (test)
+      run: |
+        cargo objcopy --bin iso-usb-hub --target thumbv7em-none-eabihf -- -O binary target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin
+        echo "Generated binary file: iso-usb-hub.bin ($(stat -c%s target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin) bytes)"
+    
+    - name: Check build artifacts
+      run: |
+        if [ ! -f target/thumbv7em-none-eabihf/debug/iso-usb-hub ]; then
+          echo "Build failed: main binary not found"
+          exit 1
+        fi
+        echo "Build successful: binary size $(stat -c%s target/thumbv7em-none-eabihf/debug/iso-usb-hub) bytes"
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: build-artifacts-${{ github.sha }}
+        path: |
+          target/thumbv7em-none-eabihf/debug/iso-usb-hub
+          target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin
+          target/thumbv7em-none-eabihf/debug/examples/*
+        retention-days: 7

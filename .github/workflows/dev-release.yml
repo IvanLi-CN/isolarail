@@ -1,0 +1,136 @@
+name: Development Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  dev-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+        fetch-depth: 0
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        targets: thumbv7em-none-eabihf
+        components: rustfmt, clippy
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build release binary
+      run: cargo build --bin iso-usb-hub --target thumbv7em-none-eabihf --release
+    
+    - name: Build examples
+      run: cargo build --examples --target thumbv7em-none-eabihf --release
+
+    - name: Install cargo-binutils
+      run: cargo install cargo-binutils
+
+    - name: Install llvm-tools-preview
+      run: rustup component add llvm-tools-preview
+
+    - name: Generate binary files
+      run: |
+        cargo objcopy --bin iso-usb-hub --target thumbv7em-none-eabihf --release -- -O binary target/thumbv7em-none-eabihf/release/iso-usb-hub.bin
+        echo "Generated binary file: iso-usb-hub.bin ($(stat -c%s target/thumbv7em-none-eabihf/release/iso-usb-hub.bin) bytes)"
+    
+    - name: Generate development version
+      id: dev_version
+      run: |
+        # Generate development version: dev-YYYYMMDD-HHMMSS-short_commit_hash
+        DEV_VERSION="dev-$(date +'%Y%m%d-%H%M%S')-$(git rev-parse --short HEAD)"
+        echo "version=$DEV_VERSION" >> $GITHUB_OUTPUT
+        echo "Development version: $DEV_VERSION"
+    
+    - name: Create development release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.dev_version.outputs.version }}
+        name: "Development Build ${{ steps.dev_version.outputs.version }}"
+        body: |
+          🚧 **Development Build**
+
+          **Commit Message:** ${{ github.event.head_commit.message }}
+          **Commit Hash:** ${{ github.sha }}
+          **Build Time:** $(date +'%Y-%m-%d %H:%M:%S UTC')
+
+          ⚠️ This is an automatically generated development version for testing purposes only.
+
+          ## File Description
+          - `iso-usb-hub` - Main firmware file (ELF format)
+          - `iso-usb-hub.bin` - Binary firmware file
+          - `examples/` - Example programs
+
+          ## How to Flash Firmware
+
+          Using probe-rs or other STM32 flashing tools:
+          ```bash
+          # Using probe-rs
+          probe-rs run --chip STM32G431CBUx iso-usb-hub
+
+          # Or using cargo run (requires .cargo/config.toml configuration)
+          cargo run --bin iso-usb-hub --release
+          ```
+        files: |
+          target/thumbv7em-none-eabihf/release/iso-usb-hub
+          target/thumbv7em-none-eabihf/release/iso-usb-hub.bin
+          target/thumbv7em-none-eabihf/release/examples/*
+        prerelease: true
+        draft: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Clean up old development releases
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: releases } = await github.rest.repos.listReleases({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+
+          // Keep the latest 10 development versions, delete older ones
+          const devReleases = releases
+            .filter(release => release.tag_name.startsWith('dev-'))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+          if (devReleases.length > 10) {
+            const releasesToDelete = devReleases.slice(10);
+            for (const release of releasesToDelete) {
+              console.log(`Deleting old dev release: ${release.tag_name}`);
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+              });
+
+              // Also delete the corresponding tag
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${release.tag_name}`,
+                });
+              } catch (error) {
+                console.log(`Failed to delete tag ${release.tag_name}: ${error.message}`);
+              }
+            }
+          }

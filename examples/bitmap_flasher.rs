@@ -148,11 +148,11 @@ where
         let total_size = header_size + data.len() as u32;
 
         // Erase required sectors
-        let start_sector = address / w25q128::constants::SECTOR_SIZE;
-        let end_sector = (address + total_size - 1) / w25q128::constants::SECTOR_SIZE;
+        let start_sector = address / w25q32jv::SECTOR_SIZE as u32;
+        let end_sector = (address + total_size - 1) / w25q32jv::SECTOR_SIZE as u32;
 
         for sector in start_sector..=end_sector {
-            let sector_addr = sector * w25q128::constants::SECTOR_SIZE;
+            let sector_addr = sector * w25q32jv::SECTOR_SIZE as u32;
             info!("Erasing sector {} at 0x{:06X}", sector, sector_addr);
             let sector_num = sector_addr / w25q32jv::SECTOR_SIZE as u32;
             self.flash.erase_sector_async(sector_num).await?;
@@ -219,7 +219,7 @@ where
     }
 
     /// List all bitmaps in Flash
-    pub async fn list_bitmaps(&mut self) -> Result<(), w25q128::Error<SPI::Error>> {
+    pub async fn list_bitmaps(&mut self) -> Result<(), w25q32jv::Error<SPI::Error, DummyError>> {
         info!("=== Bitmap Inventory ===");
 
         // Check startup bitmap

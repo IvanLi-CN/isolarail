@@ -2,6 +2,7 @@
 #![no_main]
 
 use defmt::*;
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice as EmbassySpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     gpio::{Level, Output, Speed},
@@ -9,14 +10,23 @@ use embassy_stm32::{
     spi::{Config as SpiConfig, Spi as Stm32Spi},
     time::Hertz,
 };
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use embedded_alloc::LlffHeap as Heap;
-use w25q32jv::{Flash, W25Q32JV};
+use static_cell::StaticCell;
+use w25q32jv::W25q32jv;
 use {defmt_rtt as _, panic_probe as _};
+
+// Include hardware module for DummyPin
+#[path = "../src/hardware.rs"]
+mod hardware;
+use hardware::DummyPin;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
 // This is a minimal Flash-only verification program
+// It tests Flash reading without using the hardware module
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -60,8 +70,23 @@ async fn main(_spawner: Spawner) {
         flash_spi_config,
     );
 
+    // Create SPI bus mutex
+    static FLASH_SPI_BUS_CELL: StaticCell<
+        Mutex<CriticalSectionRawMutex, Stm32Spi<'static, embassy_stm32::mode::Async>>,
+    > = StaticCell::new();
+    let flash_spi_bus_mutex_ref = FLASH_SPI_BUS_CELL.init(Mutex::new(flash_spi_bus));
+
+    // Create SPI device
+    let flash_spi_device = EmbassySpiDevice::<
+        'static,
+        CriticalSectionRawMutex,
+        Stm32Spi<'static, embassy_stm32::mode::Async>,
+        Output<'static>,
+    >::new(flash_spi_bus_mutex_ref, flash_cs_pin);
+
     // Initialize W25Q32JV Flash driver
-    let mut flash = W25Q32JV::new(flash_spi_bus, flash_cs_pin);
+    let mut flash =
+        W25q32jv::new(flash_spi_device, DummyPin, DummyPin).expect("Failed to initialize Flash");
 
     info!("Flash driver initialized");
 
@@ -145,25 +170,4 @@ async fn main(_spawner: Spawner) {
     }
 
     info!("=== Flash Verification Complete ===");
-
-    // Keep running and show periodic status
-    let mut counter = 0;
-    loop {
-        embassy_time::Timer::after_millis(5000).await;
-        counter += 1;
-        info!("Flash verification test running... {}", counter);
-
-        // Every 10 iterations, try reading Flash again
-        if counter % 10 == 0 {
-            let mut verify_buffer = [0u8; 16];
-            match flash.read_async(0x000000, &mut verify_buffer).await {
-                Ok(_) => {
-                    info!("✓ Flash still readable: {:?}", &verify_buffer[0..8]);
-                }
-                Err(e) => {
-                    error!("✗ Flash read error: {:?}", e);
-                }
-            }
-        }
-    }
 }

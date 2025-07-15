@@ -18,6 +18,11 @@ name = "bitmap_flasher"
 path = "examples/bitmap_flasher.rs"
 test = false
 
+# Exclude examples that require std
+[[example]]
+name = "generate_startup_screen"
+path = "examples/generate_startup_screen.rs"
+required-features = ["std"]
 
 
 [features]

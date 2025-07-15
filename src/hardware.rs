@@ -594,7 +594,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     static I2C_DEVICE_TCA6424_CELL: StaticCell<
         EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>,
     > = StaticCell::new();
-    let mut i2c_device_tca6424 =
+    let i2c_device_tca6424 =
         I2C_DEVICE_TCA6424_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
     let mut tca6424_expander = Tca6424::new(i2c_device_tca6424, tca6424::DEFAULT_ADDRESS).unwrap();
 
@@ -697,8 +697,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
     static I2C_DEVICE_SW2303_CELL: StaticCell<
         EmbassyI2cDevice<'static, CriticalSectionRawMutex, I2c<'static, mode::Async>>,
     > = StaticCell::new();
-    let mut i2c_device_sw2303 =
-        I2C_DEVICE_SW2303_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
+    let i2c_device_sw2303 = I2C_DEVICE_SW2303_CELL.init(EmbassyI2cDevice::new(i2c1_bus_mutex_ref));
     let mut sw2303_controller = SW2303::new(
         i2c_device_sw2303,
         sw2303::registers::constants::DEFAULT_ADDRESS,

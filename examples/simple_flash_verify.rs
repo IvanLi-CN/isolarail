@@ -5,7 +5,7 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embedded_alloc::LlffHeap as Heap;
 use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::{RgbColor, WebColors};
+use embedded_graphics::prelude::WebColors;
 use {defmt_rtt as _, panic_probe as _};
 
 #[path = "../src/hardware.rs"]

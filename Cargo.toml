@@ -19,17 +19,12 @@ path = "tools/flash_bitmap.rs"
 # path = "examples/bitmap_flasher.rs"
 # test = false
 
-# Exclude examples that require std
-[[example]]
-name = "generate_startup_screen"
-path = "examples/generate_startup_screen.rs"
-required-features = ["std"]
+# generate_startup_screen example removed as it requires std library
 
 
 [features]
 default = ["alloc"]
 alloc = []
-std = []
 
 [build-dependencies]
 # Add this to enable build.rs

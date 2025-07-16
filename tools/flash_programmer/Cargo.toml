@@ -54,8 +54,8 @@ portable-atomic = { version = "1.11.0", features = ["critical-section"] }
 static_cell = "2.1.0"
 embedded-alloc = "0.6.0"
 
-# W25Q32JV driver (with 128Mbit support)
-w25q32jv = { version = "0.5.1", features = ["async", "defmt", "megabits128"] }
+# W25 driver (with 128Mbit support)
+w25 = { version = "0.6.0", features = ["defmt"] }
 
 [profile.dev]
 codegen-units = 1

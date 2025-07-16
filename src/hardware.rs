@@ -19,7 +19,7 @@ use ina226::INA226;
 use static_cell::StaticCell;
 use sw2303::SW2303;
 use tca6424::{Pin, PinDirection, PinState, Tca6424};
-use w25q32jv::W25q32jv;
+use w25::{Q, W25};
 
 // Dummy pin implementation for Flash WP and HOLD pins
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +40,10 @@ impl embedded_hal::digital::Error for DummyError {
     }
 }
 
+impl embedded_hal::digital::ErrorType for DummyPin {
+    type Error = DummyError;
+}
+
 impl embedded_hal::digital::OutputPin for DummyPin {
     fn set_low(&mut self) -> Result<(), Self::Error> {
         Ok(())
@@ -48,10 +52,6 @@ impl embedded_hal::digital::OutputPin for DummyPin {
     fn set_high(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
-}
-
-impl embedded_hal::digital::ErrorType for DummyPin {
-    type Error = DummyError;
 }
 
 // Interrupt bindings
@@ -305,7 +305,8 @@ pub struct HardwareConfig<'a> {
         Output<'static>,
         EmbassyDisplayTimer,
     >,
-    pub flash: W25q32jv<
+    pub flash: W25<
+        Q,
         EmbassySpiDevice<
             'static,
             CriticalSectionRawMutex,
@@ -875,7 +876,7 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         Output<'static>,
     >::new(flash_spi_bus_mutex_ref, flash_cs_pin);
 
-    let flash = W25q32jv::new(flash_spi_device, DummyPin, DummyPin)
+    let flash = W25::new(flash_spi_device, DummyPin, DummyPin, 16 * 1024 * 1024) // 128Mbit = 16MB
         .expect("Failed to initialize W25Q128 Flash");
     info!("W25Q128 Flash initialized successfully!");
 

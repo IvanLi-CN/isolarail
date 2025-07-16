@@ -91,7 +91,7 @@ gc9d01 = { version = "*", path = "./gc9d01", features = ["async", "defmt"] }
 tca6424 = { version = "*", path = "./tca6424", features = ["async", "defmt"] }
 sw2303 = { version = "*", path = "./sw2303", features = ["async", "defmt"] }
 ina226 = { version = "0.3.0", features = ["async"] }
-w25q32jv = { version = "0.5.1", features = ["async", "defmt", "megabits128"] }
+w25 = { version = "0.6.0", features = ["defmt"] }
 
 [profile.dev]
 codegen-units = 1
@@ -104,12 +104,12 @@ overflow-checks = true  # <-
 # cargo build/run --release
 [profile.release]
 codegen-units = 1
-debug = 0
-strip = "symbols"
+debug = 2                # Enable debug info to preserve defmt symbols
+strip = "none"           # Don't strip symbols to preserve defmt
 debug-assertions = false # <-
 incremental = false
-lto = 'fat'
-opt-level = 3            # <-
+lto = 'thin'             # Changed from 'fat' to 'thin' to preserve defmt symbols
+opt-level = 2            # Reduced from 3 to 2 to preserve defmt symbols
 overflow-checks = false  # <-
 
 # cargo test --release

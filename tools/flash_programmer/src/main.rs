@@ -15,7 +15,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 // use embedded_alloc::Heap;
 use static_cell::StaticCell;
-use w25q32jv::{W25q32jv, Error};
+use w25::{W25, Q, Error};
 use programmer::FlashProgrammer;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -53,7 +53,7 @@ fn configure_stm32() -> embassy_stm32::Config {
 use crate::programmer::DummyPin;
 
 /// Initialize SPI2 for W25Q128 Flash communication
-async fn initialize_flash_spi(p: embassy_stm32::Peripherals) -> W25q32jv<EmbassySpiDevice<'static, CriticalSectionRawMutex, Stm32Spi<'static, mode::Async>, Output<'static>>, DummyPin, DummyPin> {
+async fn initialize_flash_spi(p: embassy_stm32::Peripherals) -> W25<Q, EmbassySpiDevice<'static, CriticalSectionRawMutex, Stm32Spi<'static, mode::Async>, Output<'static>>, DummyPin, DummyPin> {
     info!("Initializing SPI2 for W25Q128 Flash...");
 
     // SPI2 pins for W25Q128 Flash
@@ -95,7 +95,7 @@ async fn initialize_flash_spi(p: embassy_stm32::Peripherals) -> W25q32jv<Embassy
         Output<'static>,
     >::new(spi_bus_mutex_ref, cs_pin_output);
 
-    let flash = match W25q32jv::new(spi_device, hold_pin, wp_pin) {
+    let flash = match W25::new(spi_device, hold_pin, wp_pin, 16 * 1024 * 1024) { // 128Mbit = 16MB
         Ok(flash) => {
             info!("W25Q128 Flash initialized successfully!");
             flash

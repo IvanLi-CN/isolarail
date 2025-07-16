@@ -145,7 +145,7 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
             "Erasing sector {} (index {})...",
             sector_index, sector_index
         );
-        if let Err(e) = hardware.flash.erase_sector_async(sector_index).await {
+        if let Err(e) = hardware.flash.erase_sector(sector_index).await {
             error!("Failed to erase sector {}: {:?}", sector_index, e);
             return;
         }
@@ -153,7 +153,7 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
 
     // Write the bitmap header first
     info!("Writing bitmap header to Flash...");
-    if let Err(e) = hardware.flash.write_async(0x000000, &header_bytes).await {
+    if let Err(e) = hardware.flash.write(0x000000, &header_bytes).await {
         error!("Failed to write bitmap header: {:?}", e);
         return;
     }
@@ -171,7 +171,7 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
     // Write bitmap data in page-sized chunks
     let mut offset = data_start_address;
     for chunk in startup_bitmap_data.chunks(PAGE_SIZE as usize) {
-        if let Err(e) = hardware.flash.write_async(offset, chunk).await {
+        if let Err(e) = hardware.flash.write(offset, chunk).await {
             error!(
                 "Failed to write bitmap data chunk at offset 0x{:06X}: {:?}",
                 offset, e
@@ -189,11 +189,7 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
     // Verify the write by reading back the header and some data
     info!("Verifying Flash write...");
     let mut verify_header = [0u8; BitmapHeader::SIZE];
-    if let Err(e) = hardware
-        .flash
-        .read_async(0x000000, &mut verify_header)
-        .await
-    {
+    if let Err(e) = hardware.flash.read(0x000000, &mut verify_header).await {
         error!("Failed to read back header: {:?}", e);
         return;
     }
@@ -201,7 +197,7 @@ async fn program_startup_bitmap(hardware: &mut hardware::HardwareConfig<'_>) {
     let mut verify_data = [0u8; 64]; // Read first 64 bytes of bitmap data
     if let Err(e) = hardware
         .flash
-        .read_async(data_start_address, &mut verify_data)
+        .read(data_start_address, &mut verify_data)
         .await
     {
         error!("Failed to read back data: {:?}", e);

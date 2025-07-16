@@ -1,5 +1,5 @@
 use defmt::*;
-use w25q32jv::{W25q32jv, Error};
+use w25::{W25, Q, Error};
 use embedded_hal::digital::{OutputPin, PinState};
 
 /// Dummy pin implementation for HOLD and WP pins
@@ -40,7 +40,7 @@ impl embedded_hal::digital::ErrorType for DummyPin {
 
 /// Flash programming operations
 pub struct FlashProgrammer<SPI> {
-    flash: W25q32jv<SPI, DummyPin, DummyPin>,
+    flash: W25<Q, SPI, DummyPin, DummyPin>,
 }
 
 impl<SPI> FlashProgrammer<SPI>
@@ -49,34 +49,35 @@ where
     SPI::Error: core::fmt::Debug,
 {
     /// Create a new Flash programmer instance
-    pub fn new(flash: W25q32jv<SPI, DummyPin, DummyPin>) -> Self {
+    pub fn new(flash: W25<Q, SPI, DummyPin, DummyPin>) -> Self {
         Self { flash }
     }
 
     /// Get device information
     pub async fn get_device_info(&mut self) -> Result<DeviceInfo, Error<SPI::Error, DummyError>> {
-        let device_id_bytes = self.flash.device_id_async().await?;
+        let device_id_bytes = self.flash.device_id().await?;
         // Convert [u8; 8] to u32 by taking first 4 bytes
         let device_id = u32::from_be_bytes([device_id_bytes[0], device_id_bytes[1], device_id_bytes[2], device_id_bytes[3]]);
 
         Ok(DeviceInfo {
             device_id,
-            status: 0, // w25q32jv doesn't expose status register directly
-            total_size: w25q32jv::CAPACITY,
-            page_size: w25q32jv::PAGE_SIZE,
-            sector_size: w25q32jv::SECTOR_SIZE,
-            block_size: w25q32jv::BLOCK_64K_SIZE,
+            status: 0, // w25 doesn't expose status register directly
+            total_size: self.flash.capacity(),
+            page_size: w25::Q::PAGE_SIZE,
+            sector_size: w25::Q::SECTOR_SIZE,
+            block_size: 65536, // 64K block size
         })
     }
 
     /// Erase a specific sector
     pub async fn erase_sector(&mut self, sector: u32) -> Result<(), Error<SPI::Error, DummyError>> {
-        if sector >= w25q32jv::N_SECTORS {
+        let n_sectors = self.flash.capacity() / w25::Q::SECTOR_SIZE;
+        if sector >= n_sectors {
             return Err(Error::OutOfBounds);
         }
 
-        info!("Erasing sector {} at address 0x{:06X}", sector, sector * w25q32jv::SECTOR_SIZE as u32);
-        self.flash.erase_sector_async(sector).await
+        info!("Erasing sector {} at address 0x{:06X}", sector, sector * w25::Q::SECTOR_SIZE);
+        self.flash.erase_sector(sector).await
     }
 
     /// Erase a range of sectors
@@ -90,7 +91,7 @@ where
     /// Erase entire chip
     pub async fn erase_chip(&mut self) -> Result<(), Error<SPI::Error, DummyError>> {
         info!("Erasing entire chip...");
-        self.flash.erase_chip_async().await
+        self.flash.erase_chip().await
     }
 
     /// Program data to Flash with automatic sector erase
@@ -109,20 +110,20 @@ where
 
         // Verify sector was erased
         let mut erase_verify = [0u8; 16];
-        self.flash.read_async(address, &mut erase_verify).await?;
+        self.flash.read(address, &mut erase_verify).await?;
         info!("After sector erase, data at 0x{:06X}: {:?}", address, erase_verify);
 
         // Write data
         info!("Writing data...");
         info!("About to write {} bytes starting with: {:?}", data.len(), &data[..data.len().min(8)]);
-        self.flash.write_async(address, data).await?;
+        self.flash.write(address, data).await?;
 
         info!("Data written successfully");
 
         // Immediately read back to check what was written
         let verify_size = data.len().min(16);
         let mut immediate_verify = [0u8; 16];
-        self.flash.read_async(address, &mut immediate_verify[..verify_size]).await?;
+        self.flash.read(address, &mut immediate_verify[..verify_size]).await?;
         info!("Immediate readback (first {} bytes): {:?}", verify_size, &immediate_verify[..verify_size]);
         Ok(())
     }
@@ -153,7 +154,7 @@ where
             let mut read_buffer = heapless::Vec::<u8, CHUNK_SIZE>::new();
             read_buffer.resize(chunk_size, 0).unwrap();
 
-            self.flash.read_async(current_address, &mut read_buffer).await?;
+            self.flash.read(current_address, &mut read_buffer).await?;
 
             let expected_chunk = &expected_data[verified_bytes..verified_bytes + chunk_size];
             if read_buffer.as_slice() != expected_chunk {
@@ -171,7 +172,7 @@ where
 
     /// Read data from Flash
     pub async fn read_data(&mut self, address: u32, buffer: &mut [u8]) -> Result<(), Error<SPI::Error, DummyError>> {
-        self.flash.read_async(address, buffer).await
+        self.flash.read(address, buffer).await
     }
 
     // Note: w25q32jv crate doesn't expose status register methods directly
@@ -189,7 +190,7 @@ where
             let remaining = (end_address - current_address) as usize;
             let chunk_size = core::cmp::min(remaining, DUMP_CHUNK_SIZE);
 
-            self.flash.read_async(current_address, &mut buffer[..chunk_size]).await?;
+            self.flash.read(current_address, &mut buffer[..chunk_size]).await?;
 
             // Format output as hex dump
             info!("0x{:06X}: {:02X}", current_address, buffer[..chunk_size]);

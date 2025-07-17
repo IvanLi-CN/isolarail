@@ -66,11 +66,7 @@ async fn main(_spawner: Spawner) {
         let mut row_buffer = [0u8; BYTES_PER_ROW];
 
         // 从Flash读取一行数据
-        match hardware
-            .flash
-            .read_async(row_address, &mut row_buffer)
-            .await
-        {
+        match hardware.flash.read(row_address, &mut row_buffer).await {
             Ok(_) => {
                 // 验证读取成功
                 if y < 3 {
@@ -174,11 +170,7 @@ async fn verify_checkerboard_image(
         let chunk_address = start_address + (y as u32 * CHUNK_SIZE as u32);
 
         // Read chunk from Flash
-        match hardware
-            .flash
-            .read_async(chunk_address, &mut chunk_buffer)
-            .await
-        {
+        match hardware.flash.read(chunk_address, &mut chunk_buffer).await {
             Ok(_) => {
                 // Verify checkerboard pattern
                 for x in 0..(BITMAP_WIDTH as usize) {
@@ -236,11 +228,7 @@ async fn display_flash_image(hardware: &mut hardware::HardwareConfig<'_>, start_
         let chunk_address = start_address + (y as u32 * CHUNK_SIZE as u32);
 
         // Read chunk from Flash
-        match hardware
-            .flash
-            .read_async(chunk_address, &mut chunk_buffer)
-            .await
-        {
+        match hardware.flash.read(chunk_address, &mut chunk_buffer).await {
             Ok(_) => {
                 // Convert raw bytes to RGB565 pixels
                 let mut rgb565_chunk = [Rgb565::BLACK; 160]; // Max pixels per row

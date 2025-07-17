@@ -48,7 +48,7 @@ async fn main(_spawner: Spawner) {
     // 擦除Flash芯片 (W25Q32JV只支持整片擦除)
     info!("擦除Flash芯片...");
 
-    match hardware.flash.erase_chip_async().await {
+    match hardware.flash.erase_chip().await {
         Ok(_) => {
             info!("✓ Flash芯片擦除成功");
         }
@@ -65,7 +65,7 @@ async fn main(_spawner: Spawner) {
     for (chunk_index, chunk) in COMBINED_IMAGES_DATA.chunks(CHUNK_SIZE).enumerate() {
         let address = STARTUP_ADDRESS + (chunk_index * CHUNK_SIZE) as u32;
 
-        match hardware.flash.write_async(address, chunk).await {
+        match hardware.flash.write(address, chunk).await {
             Ok(_) => {
                 if chunk_index % 10 == 0 {
                     let progress = ((chunk_index + 1) * 100) / total_chunks;
@@ -93,7 +93,7 @@ async fn main(_spawner: Spawner) {
     let mut verify_buffer = [0u8; 32];
     match hardware
         .flash
-        .read_async(STARTUP_ADDRESS, &mut verify_buffer)
+        .read(STARTUP_ADDRESS, &mut verify_buffer)
         .await
     {
         Ok(_) => {
@@ -107,7 +107,7 @@ async fn main(_spawner: Spawner) {
     // 验证棋盘图案数据
     match hardware
         .flash
-        .read_async(CHECKERBOARD_ADDRESS, &mut verify_buffer)
+        .read(CHECKERBOARD_ADDRESS, &mut verify_buffer)
         .await
     {
         Ok(_) => {

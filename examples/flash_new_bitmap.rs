@@ -58,7 +58,7 @@ async fn main(_spawner: Spawner) {
     // Erase the first 4 sectors (16KB total) to be safe
     for sector in 0..4 {
         info!("Erasing sector {}...", sector);
-        if let Err(e) = hardware.flash.erase_sector_async(sector).await {
+        if let Err(e) = hardware.flash.erase_sector(sector).await {
             error!("Failed to erase sector {}: {:?}", sector, e);
             return;
         }
@@ -66,11 +66,7 @@ async fn main(_spawner: Spawner) {
 
     // Write bitmap data
     info!("Writing bitmap data...");
-    if let Err(e) = hardware
-        .flash
-        .write_async(0x000000, &bitmap_with_header)
-        .await
-    {
+    if let Err(e) = hardware.flash.write(0x000000, &bitmap_with_header).await {
         error!("Failed to write bitmap: {:?}", e);
         return;
     }
@@ -78,7 +74,7 @@ async fn main(_spawner: Spawner) {
     // Verify the write
     info!("Verifying write...");
     let mut read_buffer = alloc::vec![0u8; bitmap_with_header.len()];
-    if let Err(e) = hardware.flash.read_async(0x000000, &mut read_buffer).await {
+    if let Err(e) = hardware.flash.read(0x000000, &mut read_buffer).await {
         error!("Failed to read back data: {:?}", e);
         return;
     }

@@ -13,7 +13,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_alloc::LlffHeap as Heap;
 use static_cell::StaticCell;
-use w25q32jv::W25q32jv;
+use w25::{Q, W25};
 use {defmt_rtt as _, panic_probe as _};
 
 // Include hardware module for DummyPin
@@ -83,9 +83,9 @@ async fn main(_spawner: Spawner) {
         Output<'static>,
     >::new(flash_spi_bus_mutex_ref, flash_cs_pin);
 
-    // Initialize W25Q32JV Flash driver
-    let mut flash =
-        W25q32jv::new(flash_spi_device, DummyPin, DummyPin).expect("Failed to initialize Flash");
+    // Initialize W25Q128 Flash driver
+    let mut flash = W25::<Q, _, _, _>::new(flash_spi_device, DummyPin, DummyPin, 16 * 1024 * 1024)
+        .expect("Failed to initialize Flash");
 
     info!("Flash driver initialized");
 
@@ -93,7 +93,7 @@ async fn main(_spawner: Spawner) {
     info!("=== Testing Flash Read ===");
     let mut test_buffer = [0u8; 64];
 
-    match flash.read_async(0x000000, &mut test_buffer).await {
+    match flash.read(0x000000, &mut test_buffer).await {
         Ok(_) => {
             info!("✓ Flash read successful!");
             info!("First 32 bytes: {:?}", &test_buffer[0..32]);
@@ -139,7 +139,7 @@ async fn main(_spawner: Spawner) {
 
     for (i, &address) in test_addresses.iter().enumerate() {
         let mut location_buffer = [0u8; 16];
-        match flash.read_async(address, &mut location_buffer).await {
+        match flash.read(address, &mut location_buffer).await {
             Ok(_) => {
                 info!(
                     "✓ Location {} (0x{:06X}): {:?}",

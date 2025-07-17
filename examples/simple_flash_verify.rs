@@ -39,7 +39,7 @@ async fn main(_spawner: Spawner) {
     info!("=== Testing Flash Read ===");
     let mut test_buffer = [0u8; 64];
 
-    match hardware.flash.read_async(0x000000, &mut test_buffer).await {
+    match hardware.flash.read(0x000000, &mut test_buffer).await {
         Ok(_) => {
             info!("✓ Flash read successful!");
             info!("First 32 bytes: {:?}", &test_buffer[0..32]);
@@ -139,11 +139,7 @@ async fn main(_spawner: Spawner) {
         // Every 10 iterations, try reading Flash again
         if counter % 10 == 0 {
             let mut verify_buffer = [0u8; 16];
-            match hardware
-                .flash
-                .read_async(0x000000, &mut verify_buffer)
-                .await
-            {
+            match hardware.flash.read(0x000000, &mut verify_buffer).await {
                 Ok(_) => {
                     info!("✓ Flash still readable: {:?}", &verify_buffer[0..8]);
                 }

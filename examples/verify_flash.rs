@@ -44,11 +44,7 @@ async fn main(_spawner: Spawner) {
 
     // Read bitmap header (24 bytes)
     let mut header_buffer = [0u8; 24];
-    if let Err(e) = hardware
-        .flash
-        .read_async(0x000000, &mut header_buffer)
-        .await
-    {
+    if let Err(e) = hardware.flash.read(0x000000, &mut header_buffer).await {
         error!("Failed to read bitmap header: {:?}", e);
         return;
     }
@@ -134,7 +130,7 @@ async fn main(_spawner: Spawner) {
 
     // Read first few pixels to verify data
     let mut pixel_buffer = [0u8; 32]; // Read first 16 pixels (32 bytes)
-    if let Err(e) = hardware.flash.read_async(24, &mut pixel_buffer).await {
+    if let Err(e) = hardware.flash.read(24, &mut pixel_buffer).await {
         error!("Failed to read pixel data: {:?}", e);
         return;
     }

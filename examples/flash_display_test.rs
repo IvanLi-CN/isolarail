@@ -70,11 +70,7 @@ async fn main(_spawner: Spawner) {
             let mut row_buffer = [0u8; BYTES_PER_ROW];
 
             // 从Flash读取一行数据
-            match hardware
-                .flash
-                .read_async(row_address, &mut row_buffer)
-                .await
-            {
+            match hardware.flash.read(row_address, &mut row_buffer).await {
                 Ok(_) => {
                     // 转换为RGB565像素
                     let mut pixel_row = [Rgb565::BLACK; BITMAP_WIDTH as usize];

@@ -156,16 +156,16 @@ where
             let sector_addr = sector * w25q32jv::SECTOR_SIZE as u32;
             info!("Erasing sector {} at 0x{:06X}", sector, sector_addr);
             let sector_num = sector_addr / w25q32jv::SECTOR_SIZE as u32;
-            self.flash.erase_sector_async(sector_num).await?;
+            self.flash.erase_sector(sector_num).await?;
         }
 
         // Write header
         info!("Writing bitmap header ({} bytes)", header_size);
-        self.flash.write_async(address, header.as_bytes()).await?;
+        self.flash.write(address, header.as_bytes()).await?;
 
         // Write bitmap data
         info!("Writing bitmap data ({} bytes)", data.len());
-        self.flash.write_async(address + header_size, data).await?;
+        self.flash.write(address + header_size, data).await?;
 
         info!("✓ Bitmap programmed successfully");
         Ok(())
@@ -177,7 +177,7 @@ where
         address: u32,
     ) -> Result<BitmapHeader, w25q32jv::Error<SPI::Error, DummyError>> {
         let mut header_bytes = [0u8; core::mem::size_of::<BitmapHeader>()];
-        self.flash.read_async(address, &mut header_bytes).await?;
+        self.flash.read(address, &mut header_bytes).await?;
 
         let header =
             unsafe { core::ptr::read_unaligned(header_bytes.as_ptr() as *const BitmapHeader) };
@@ -208,7 +208,7 @@ where
         let header_size = core::mem::size_of::<BitmapHeader>() as u32;
         let data_buffer = &mut buffer[..header.data_size as usize];
         self.flash
-            .read_async(address + header_size, data_buffer)
+            .read(address + header_size, data_buffer)
             .await?;
 
         // Verify checksum

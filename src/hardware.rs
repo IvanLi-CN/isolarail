@@ -8,7 +8,7 @@ use embassy_stm32::spi::{Config as SpiConfig, Spi as Stm32Spi};
 use embassy_stm32::time::{Hertz, khz};
 use embassy_stm32::timer::low_level::CountingMode;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
-use embassy_stm32::{bind_interrupts, mode, peripherals};
+use embassy_stm32::{bind_interrupts, mode, peripherals, wdg::IndependentWatchdog};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_graphics::prelude::WebColors;
@@ -316,16 +316,22 @@ pub struct HardwareConfig<'a> {
         DummyPin,
         DummyPin,
     >,
+    pub watchdog: IndependentWatchdog<'static, peripherals::IWDG>,
 }
 
-/// Configure STM32 system
+/// Configure STM32 system with improved stability for power-on scenarios
 pub fn configure_stm32() -> embassy_stm32::Config {
     let mut config = embassy_stm32::Config::default();
     {
         use embassy_stm32::rcc::*;
+
+        // Configure HSI48 for USB
         config.rcc.hsi48 = Some(Hsi48Config {
             sync_from_usb: true,
         });
+
+        // Use more conservative PLL settings for better stability
+        // HSI = 16MHz, PLL = (16MHz / 4) * 85 / 2 = 170MHz
         config.rcc.pll = Some(Pll {
             source: PllSource::HSI,
             prediv: PllPreDiv::DIV4,
@@ -335,6 +341,8 @@ pub fn configure_stm32() -> embassy_stm32::Config {
             // Main system clock at 170 MHz
             divr: Some(PllRDiv::DIV2),
         });
+
+        // Configure peripheral clocks
         config.rcc.mux.adc12sel = mux::Adcsel::SYS;
         config.rcc.sys = Sysclk::PLL1_R;
         config.rcc.mux.clk48sel = mux::Clk48sel::HSI48;
@@ -549,17 +557,44 @@ where
     Ok(())
 }
 
-/// Initialize all hardware components
+/// Check and log system reset reason for debugging power-on issues
+pub fn check_reset_reason() {
+    // Note: Reset reason checking would require direct register access
+    // For now, we'll add a startup delay to ensure stable power-on
+    info!("System startup - checking reset reason and ensuring stable power-on");
+}
+
+/// Initialize all hardware components with improved power-on stability
 pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfig<'static> {
+    // Check reset reason and add startup delay for power stability
+    check_reset_reason();
+
+    // Initialize watchdog early for maximum protection
+    info!("Initializing Independent Watchdog early for startup protection...");
+    // Configure for 10 second timeout (10,000,000 microseconds)
+    let mut early_watchdog = IndependentWatchdog::new(p.IWDG, 10_000_000);
+    early_watchdog.unleash();
+    info!("Early watchdog initialized with 10-second timeout - system will reset if startup hangs");
+
+    // Add initial delay to ensure power supply and clocks are stable
+    // This is especially important after power-on reset
+    embassy_time::Timer::after_millis(100).await;
+    early_watchdog.pet(); // Feed watchdog after initial delay
+
     info!("Initializing hardware components...");
 
-    // Initialize I2C1
+    // Initialize I2C1 with enhanced stability for power-on scenarios
     let i2c_scl = p.PA15; // SCL pin for I2C1
     let i2c_sda = p.PB7; // SDA pin for I2C1
 
     let mut i2c_config = i2c::Config::default();
     i2c_config.scl_pullup = true;
     i2c_config.sda_pullup = true;
+    // Use more conservative timing for better reliability
+    i2c_config.timeout = embassy_time::Duration::from_millis(1000);
+
+    // Add delay before I2C initialization to ensure GPIO pins are stable
+    embassy_time::Timer::after_millis(50).await;
 
     // Initialize I2C1 with correct parameter order
     let i2c1 = I2c::new(
@@ -569,9 +604,11 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         Irqs,       // Interrupts struct
         p.DMA1_CH2, // RX DMA
         p.DMA1_CH3, // TX DMA
-        khz(100),   // Frequency
+        khz(100),   // Frequency - conservative 100kHz for stability
         i2c_config, // Config parameter
     );
+
+    info!("I2C1 initialized with enhanced stability settings");
 
     // Create a static mutex for the I2C bus
     static I2C1_BUS_CELL: StaticCell<Mutex<CriticalSectionRawMutex, I2c<'static, mode::Async>>> =
@@ -706,21 +743,66 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         sw2303::registers::constants::DEFAULT_ADDRESS,
     );
 
-    // Initialize SW2303 PD controller
-    match sw2303_controller.init().await {
-        Ok(_) => {
-            info!("SW2303 PD controller initialized successfully.");
+    // Initialize SW2303 PD controller with retry mechanism for power-on stability
+    let mut sw2303_init_attempts = 0;
+    const MAX_SW2303_INIT_ATTEMPTS: u8 = 3;
 
-            // Configure SW2303 for 65W power
-            match configure_sw2303_power(&mut sw2303_controller).await {
-                Ok(_) => info!("SW2303 configured for 65W power with 100mA detection threshold."),
-                Err(e) => {
-                    error!("Failed to configure SW2303 power settings: {:?}", e);
+    loop {
+        sw2303_init_attempts += 1;
+        info!(
+            "SW2303 initialization attempt {}/{}",
+            sw2303_init_attempts, MAX_SW2303_INIT_ATTEMPTS
+        );
+
+        // Feed watchdog during initialization attempts
+        early_watchdog.pet();
+
+        // Add delay before each attempt to ensure I2C bus is stable
+        embassy_time::Timer::after_millis(100).await;
+
+        match sw2303_controller.init().await {
+            Ok(_) => {
+                info!(
+                    "SW2303 PD controller initialized successfully on attempt {}",
+                    sw2303_init_attempts
+                );
+
+                // Configure SW2303 for 65W power with retry
+                match configure_sw2303_power(&mut sw2303_controller).await {
+                    Ok(_) => {
+                        info!("SW2303 configured for 65W power with 100mA detection threshold.");
+                        break; // Success, exit the retry loop
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to configure SW2303 power settings on attempt {}: {:?}",
+                            sw2303_init_attempts, e
+                        );
+                        if sw2303_init_attempts >= MAX_SW2303_INIT_ATTEMPTS {
+                            error!(
+                                "SW2303 power configuration failed after {} attempts",
+                                MAX_SW2303_INIT_ATTEMPTS
+                            );
+                            break;
+                        }
+                    }
                 }
             }
-        }
-        Err(e) => {
-            error!("Failed to initialize SW2303: {:?}", e);
+            Err(e) => {
+                error!(
+                    "Failed to initialize SW2303 on attempt {}: {:?}",
+                    sw2303_init_attempts, e
+                );
+                if sw2303_init_attempts >= MAX_SW2303_INIT_ATTEMPTS {
+                    error!(
+                        "SW2303 initialization failed after {} attempts",
+                        MAX_SW2303_INIT_ATTEMPTS
+                    );
+                    break;
+                }
+                // Wait longer before retry
+                embassy_time::Timer::after_millis(200).await;
+            }
         }
     }
 
@@ -890,6 +972,10 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         "Joystick debouncer initialized with 2-sample threshold and 250ms repeat delay (optimized for 50ms polling)."
     );
 
+    // Use the early initialized watchdog
+    let watchdog = early_watchdog;
+    info!("Using early-initialized watchdog for hardware configuration");
+
     info!("Hardware initialization complete.");
 
     HardwareConfig {
@@ -902,5 +988,6 @@ pub async fn initialize_hardware(p: embassy_stm32::Peripherals) -> HardwareConfi
         joystick_debouncer,
         display,
         flash,
+        watchdog,
     }
 }

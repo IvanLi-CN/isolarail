@@ -175,8 +175,15 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
         error!("Startup splash failed: {}", e);
     }
 
-    // Wait for 3 seconds
-    embassy_time::Timer::after_secs(3).await;
+    // Wait for 3 seconds with watchdog feeding
+    info!("Waiting 3 seconds for startup splash screen...");
+    for i in 0..30 {
+        embassy_time::Timer::after_millis(100).await;
+        hardware.watchdog.pet(); // Feed watchdog every 100ms during splash screen
+        if i % 10 == 9 {
+            info!("Splash screen: {}s remaining", 3 - (i + 1) / 10);
+        }
+    }
     info!("Startup splash screen timeout completed");
 
     // Clear display and continue with normal application
@@ -589,6 +596,9 @@ pub async fn run_application(mut hardware: crate::hardware::HardwareConfig<'stat
 
         // Draw Dashboard directly to the display
         dashboard.draw(&mut hardware.display).await.unwrap();
+
+        // Feed the watchdog to prevent system reset
+        hardware.watchdog.pet();
 
         // Wait for 50ms before the next update (improved responsiveness for joystick)
         embassy_time::Timer::after_millis(50).await;

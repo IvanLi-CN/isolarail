@@ -21,11 +21,17 @@ static HEAP: Heap = Heap::empty();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    info!("Starting ISO USB Hub");
+    info!("Starting ISO USB Hub - Enhanced Power-On Stability Version");
 
-    // Configure STM32 system
+    // Configure STM32 system with improved stability
     let config = hardware::configure_stm32();
     let p = embassy_stm32::init(config);
+
+    // Add initial system stabilization delay
+    // This is critical for reliable startup after power-on reset
+    info!("System initialization - waiting for power and clocks to stabilize...");
+    embassy_time::Timer::after_millis(200).await;
+    info!("System stabilization complete");
 
     // Initialize the allocator BEFORE you use it
     {

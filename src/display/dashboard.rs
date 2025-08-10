@@ -418,41 +418,42 @@ impl Dashboard {
         }
 
         // Only clear previous selection background if selection has changed
-        if let Some(prev_selected) = self.previous_selected_port {
-            if prev_selected != self.selected_port {
-                // Clear the previous selection's background area
-                let (prev_col_start_x, prev_col_end_x) = col_positions[prev_selected];
-                let prev_bg_x = (prev_col_start_x as i32 - 4).max(0) as u16;
-                let prev_bg_y = 0u16.saturating_sub(4);
-                let prev_col_width = prev_col_end_x - prev_col_start_x;
-                let prev_bg_width =
-                    (prev_col_width as u16 + 8).min(screen_width as u16 - prev_bg_x);
-                let prev_bg_height = screen_height as u16 + 8;
+        if self
+            .previous_selected_port
+            .is_some_and(|prev_selected| prev_selected != self.selected_port)
+        {
+            // Clear the previous selection's background area
+            let prev_selected = self.previous_selected_port.unwrap(); // Safe because we checked is_some_and
+            let (prev_col_start_x, prev_col_end_x) = col_positions[prev_selected];
+            let prev_bg_x = (prev_col_start_x as i32 - 4).max(0) as u16;
+            let prev_bg_y = 0u16.saturating_sub(4);
+            let prev_col_width = prev_col_end_x - prev_col_start_x;
+            let prev_bg_width = (prev_col_width as u16 + 8).min(screen_width as u16 - prev_bg_x);
+            let prev_bg_height = screen_height as u16 + 8;
 
-                // Clear previous background in chunks to avoid memory issues
-                // Use very small fixed buffer to minimize memory usage
-                const MAX_CLEAR_PIXELS: usize = 64; // Only 64 pixels = 128 bytes
-                let clear_buffer: [Rgb565; MAX_CLEAR_PIXELS] = [Rgb565::BLACK; MAX_CLEAR_PIXELS];
+            // Clear previous background in chunks to avoid memory issues
+            // Use very small fixed buffer to minimize memory usage
+            const MAX_CLEAR_PIXELS: usize = 64; // Only 64 pixels = 128 bytes
+            let clear_buffer: [Rgb565; MAX_CLEAR_PIXELS] = [Rgb565::BLACK; MAX_CLEAR_PIXELS];
 
-                // Clear in very small chunks to minimize memory usage
-                // Calculate how many pixels we can clear per row with our small buffer
-                let pixels_per_row = prev_bg_width as usize;
-                let rows_per_chunk = MAX_CLEAR_PIXELS / pixels_per_row.max(1);
-                let chunk_height = rows_per_chunk.max(1) as u16;
+            // Clear in very small chunks to minimize memory usage
+            // Calculate how many pixels we can clear per row with our small buffer
+            let pixels_per_row = prev_bg_width as usize;
+            let rows_per_chunk = MAX_CLEAR_PIXELS / pixels_per_row.max(1);
+            let chunk_height = rows_per_chunk.max(1) as u16;
 
-                for y_chunk in (0..prev_bg_height).step_by(chunk_height as usize) {
-                    let remaining_height = (prev_bg_height - y_chunk).min(chunk_height);
-                    let chunk_pixels =
-                        (prev_bg_width as usize * remaining_height as usize).min(MAX_CLEAR_PIXELS);
+            for y_chunk in (0..prev_bg_height).step_by(chunk_height as usize) {
+                let remaining_height = (prev_bg_height - y_chunk).min(chunk_height);
+                let chunk_pixels =
+                    (prev_bg_width as usize * remaining_height as usize).min(MAX_CLEAR_PIXELS);
 
-                    display.write_area(
-                        prev_bg_x,
-                        prev_bg_y + y_chunk,
-                        prev_bg_width,
-                        remaining_height,
-                        &clear_buffer[..chunk_pixels],
-                    );
-                }
+                display.write_area(
+                    prev_bg_x,
+                    prev_bg_y + y_chunk,
+                    prev_bg_width,
+                    remaining_height,
+                    &clear_buffer[..chunk_pixels],
+                );
             }
         }
 

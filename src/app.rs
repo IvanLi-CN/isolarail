@@ -43,8 +43,8 @@ pub async fn play_alarm_beep(buzzer_pwm: &mut SimplePwm<'_, peripherals::TIM3>) 
 
 /// Display test pattern on startup
 #[allow(dead_code)]
-pub async fn display_test_pattern<'a, BUS, DC, RST, TIMER, BusE, PinE>(
-    display: &mut gc9d01::GC9D01<'a, BUS, DC, RST, TIMER>,
+pub async fn display_test_pattern<BUS, DC, RST, TIMER, BusE, PinE>(
+    display: &mut gc9d01::GC9D01<'_, BUS, DC, RST, TIMER>,
 ) -> Result<(), gc9d01::Error<BusE, PinE>>
 where
     BUS: embedded_hal_async::spi::SpiDevice<Error = BusE>,

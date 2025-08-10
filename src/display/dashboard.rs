@@ -286,9 +286,9 @@ impl Dashboard {
 
     // Draw Dashboard directly to the display driver using write_area
     // Accept GC9D01 directly
-    pub async fn draw<'a, BUS, DC, RST, TIMER>(
+    pub async fn draw<BUS, DC, RST, TIMER>(
         &mut self,
-        display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
+        display: &mut GC9D01<'_, BUS, DC, RST, TIMER>,
     ) -> Result<(), Error>
     where
         BUS: SpiDevice,
@@ -329,8 +329,8 @@ impl Dashboard {
         let mut char_pixel_buffer = [Rgb565::BLACK; FONT_8X12_WIDTH * FONT_8X12_HEIGHT]; // Updated constant names
 
         // Helper function to draw a string with fixed width using space padding
-        async fn draw_string<'a, BUS, DC, RST, TIMER>(
-            display: &mut GC9D01<'a, BUS, DC, RST, TIMER>,
+        async fn draw_string<BUS, DC, RST, TIMER>(
+            display: &mut GC9D01<'_, BUS, DC, RST, TIMER>,
             s: &str,
             right_edge_x: usize,      // Right edge of the drawing area
             fixed_width_chars: usize, // Fixed width in characters (e.g., 6 for "12.34V")

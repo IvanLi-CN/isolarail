@@ -51,10 +51,9 @@ fn read_power_budget_from_config(config_path: &str) -> Option<String> {
         for line in content.lines() {
             let line = line.trim();
             if line.starts_with("TOTAL_POWER_BUDGET") && line.contains('=') {
-                if let Some(value_part) = line.split('=').nth(1) {
-                    let value = value_part.trim().trim_matches('"').trim_matches('\'');
-                    return Some(value.to_string());
-                }
+                let value_part = line.split('=').nth(1)?;
+                let value = value_part.trim().trim_matches('"').trim_matches('\'');
+                return Some(value.to_string());
             }
         }
     }

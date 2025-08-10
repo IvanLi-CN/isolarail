@@ -8,18 +8,22 @@ default-run = "iso-usb-hub"
 [[bin]]
 name = "iso-usb-hub"
 path = "src/main.rs"
+test = false
 
 [[bin]]
 name = "flash-bitmap"
 path = "tools/flash_bitmap.rs"
+test = false
 
 [[bin]]
 name = "startup-diagnostic"
 path = "tools/startup_diagnostic.rs"
+test = false
 
 [[bin]]
 name = "watchdog-test"
 path = "tools/watchdog_test.rs"
+test = false
 
 # Exclude bitmap_flasher due to stack overflow issues
 # [[example]]

@@ -149,11 +149,12 @@ impl Dashboard {
     // Returns (text, color) if anomaly detected, None if normal
     fn get_sw2303_anomaly_text(&self) -> Option<(&'static str, Rgb565)> {
         // Only check for overcurrent detection as explicitly requested by user
-        if let Some(status1) = self.sw2303_system_status1 {
-            if status1.contains(SystemStatus1Flags::OVERCURRENT_112_5_PERCENT) {
-                defmt::warn!("SW2303 Port 1 Anomaly: Overcurrent 112.5% detected");
-                return Some(("OCP", Rgb565::RED)); // 过流保护
-            }
+        if self
+            .sw2303_system_status1
+            .is_some_and(|status1| status1.contains(SystemStatus1Flags::OVERCURRENT_112_5_PERCENT))
+        {
+            defmt::warn!("SW2303 Port 1 Anomaly: Overcurrent 112.5% detected");
+            return Some(("OCP", Rgb565::RED)); // 过流保护
         }
 
         None // No anomaly detected

@@ -1,54 +1,160 @@
-# Ivan's Isolated USB HUB
+# ESP32-S3 Hello World
 
-3C1A, isolated High Speed USB Hub.
+A simple hello world project for ESP32-S3 using esp-hal and Embassy async framework.
 
-The FreeCAD project file is located at [`models/iso-usb-hub-with-pd.FCStd`](models/iso-usb-hub-with-pd.FCStd).
-Exported 3D printable models for the front and back covers are located at:
+## Features
 
-- [`models/iso-usb-hub-with-pd-Front.step`](models/iso-usb-hub-with-pd-Front.step)
-- [`models/iso-usb-hub-with-pd-Back.step`](models/iso-usb-hub-with-pd-Back.step)
+- **ESP32-S3 Support**: Built specifically for ESP32-S3 microcontroller
+- **Embassy Async**: Uses Embassy async framework for efficient task management
+- **Serial Output**: Prints hello world messages via esp-println
+- **Periodic Tasks**: Demonstrates async task spawning and timing
 
-## Hardware Architecture
+## Hardware Requirements
 
-### Port Configuration
+- **ESP32-S3 Development Board**: Any ESP32-S3 based board
+- **USB Connection**: For programming and serial output
 
-- **Port 1**: SW2303 PD controller with USB-C PD support (up to 65W)
-- **Port 2**: TPS25810 controller with 5V only
-- **Port 3**: TPS25810 controller with 5V only
+## Installation Prerequisites
 
-### Current Sensing Configuration
+### Method 1: Using espup (Recommended)
 
-Each port uses INA226 current sensors with different shunt resistor values:
+```bash
+# Install espup
+cargo install espup
 
-- **Port 1 (SW2303)**: 5mΩ current sensing resistor
-- **Port 2 (TPS25810)**: 10mΩ current sensing resistor
-- **Port 3 (TPS25810)**: 10mΩ current sensing resistor
+# Install ESP32 toolchain
+espup install
 
-### UFP Detection
+# Source the environment (add to your shell profile)
+source ~/export-esp.sh
 
-- **Port 1**: SW2303 sink device detection via I2C
-- **Port 2**: TCA6424 P01 pin (Low Active)
-- **Port 3**: TCA6424 P25 pin (Low Active)
+# Install espflash
+cargo install espflash
+```
 
-## Display Logic for USB Ports
+### Method 2: Manual Installation (if espup fails)
 
-The display on the device shows real-time voltage, current, and power for each USB port. The color of these readings is determined by the connection status of sink devices for all ports:
+If you encounter network issues with espup, you can try:
 
-### All Ports (Port 1, Port 2, and Port 3)
+1. **Download espup manually**:
 
-The colors are determined by the connection status of sink devices:
+   ```bash
+   # For macOS ARM64
+   curl -L https://github.com/esp-rs/espup/releases/latest/download/espup-aarch64-apple-darwin -o ~/.cargo/bin/espup
+   chmod +x ~/.cargo/bin/espup
 
-- **Port 1**: Sink device detection via SW2303 PD controller
-- **Port 2 and Port 3**: Sink device detection via `P_UFP` signal from TCA6424 I/O expander
+   # For macOS Intel
+   curl -L https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-apple-darwin -o ~/.cargo/bin/espup
+   chmod +x ~/.cargo/bin/espup
+   ```
 
-**When a sink device is connected**:
+2. **Run espup install**:
 
-- **Voltage Color**: Yellow
-- **Current Color**: Red
-- **Power Color**: Green
+   ```bash
+   espup install
+   source ~/export-esp.sh
+   ```
 
-**When no sink device is connected**:
+### Method 3: Alternative Installation
 
-- **Voltage Color**: Gray
-- **Current Color**: Gray
-- **Power Color**: Gray
+If all else fails, you can try using the ESP-IDF toolchain directly:
+
+```bash
+# Install ESP-IDF prerequisites
+brew install cmake ninja dfu-util
+
+# Clone ESP-IDF
+git clone --recursive https://github.com/espressif/esp-idf.git ~/esp-idf
+cd ~/esp-idf
+./install.sh esp32s3
+
+# Source ESP-IDF environment
+source ~/esp-idf/export.sh
+```
+
+### Verify Installation
+
+After installation, verify that the ESP32-S3 target is available:
+
+```bash
+rustup target list | grep esp32s3
+```
+
+You should see `xtensa-esp32s3-none-elf` in the list.
+
+## Building and Flashing
+
+### Building
+
+```bash
+# Build the project
+cargo build
+
+# Build in release mode
+cargo build --release
+```
+
+### Flashing and Monitoring
+
+```bash
+# Flash and monitor serial output
+cargo run
+
+# Flash release build
+cargo run --release
+```
+
+## Expected Output
+
+Once flashed and running, you should see output similar to:
+
+```
+ESP32-S3 Hello World Starting!
+Main task started, spawning hello task...
+Hello World from ESP32-S3! Counter: 0
+Main task heartbeat
+Hello World from ESP32-S3! Counter: 1
+Hello World from ESP32-S3! Counter: 2
+...
+```
+
+## Project Structure
+
+```
+├── src/
+│   └── main.rs              # Main application with hello world logic
+├── .cargo/
+│   └── config.toml          # Cargo configuration for ESP32-S3
+└── Cargo.toml               # Project dependencies and configuration
+```
+
+## Dependencies
+
+- `esp-hal`: Hardware abstraction layer for ESP32 series
+- `esp-hal-embassy`: Embassy integration for esp-hal
+- `embassy-executor`: Async task executor
+- `embassy-time`: Async time utilities
+- `esp-println`: Serial output for ESP32
+- `esp-backtrace`: Panic handler and backtrace support
+
+## Troubleshooting
+
+### Target Not Found
+
+If you get "target not found" errors, make sure you've:
+
+1. Installed espup: `cargo install espup`
+2. Run espup install: `espup install`
+3. Sourced the environment: `source ~/export-esp.sh`
+
+### Build Errors
+
+If you encounter build errors, try:
+
+1. Clean the project: `cargo clean`
+2. Update dependencies: `cargo update`
+3. Check that the ESP toolchain is properly installed
+
+## License
+
+This project is licensed under the MIT License.

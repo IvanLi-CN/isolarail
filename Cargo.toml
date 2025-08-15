@@ -1,135 +1,25 @@
 [package]
-authors = ["Ivan Li<ivanli2048@gmail.com>"]
-edition = "2024"
-name = "iso-usb-hub"
+name = "esp32s3-hello-world"
 version = "0.1.0"
-default-run = "iso-usb-hub"
-
-[[bin]]
-name = "iso-usb-hub"
-path = "src/main.rs"
-test = false
-
-[[bin]]
-name = "flash-bitmap"
-path = "tools/flash_bitmap.rs"
-test = false
-
-[[bin]]
-name = "startup-diagnostic"
-path = "tools/startup_diagnostic.rs"
-test = false
-
-[[bin]]
-name = "watchdog-test"
-path = "tools/watchdog_test.rs"
-test = false
-
-# Exclude bitmap_flasher due to stack overflow issues
-# [[example]]
-# name = "bitmap_flasher"
-# path = "examples/bitmap_flasher.rs"
-# test = false
-
-# generate_startup_screen example removed as it requires std library
-
-
-[features]
-default = ["alloc"]
-alloc = []
-
-[build-dependencies]
-# Add this to enable build.rs
-# This is needed to read environment variables at compile time
-# and make them available to the application via env! macro.
-# See https://doc.rust-lang.org/cargo/reference/build-scripts.html
-# for more details.
-# This is a common pattern in embedded Rust to inject configuration.
-# It will read USB_VID, USB_PID, and WEBUSB_LANDING_URL
-# and make them available as compile-time constants.
+authors = ["Ivan Li<ivanli2048@gmail.com>"]
+edition = "2021"
+publish = false
 
 [dependencies]
-# Change stm32g0b1re to your chip name, if necessary.
-embassy-stm32 = { version = "0.2.0", git = "https://github.com/IvanLi-CN/embassy", features = [
-  "defmt",
-  "time-driver-any",
-  "stm32g431cb",
-  "memory-x",
-  "unstable-pac",
-  "exti",
+embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
+embassy-time = "0.4.0"
+esp-backtrace = { version = "0.15.0", features = [
+    "esp32s3",
+    "panic-handler",
+    "println",
 ] }
-embassy-sync = { version = "0.7.0", git = "https://github.com/IvanLi-CN/embassy", features = [
-  "defmt",
-] }
-embassy-executor = { version = "0.7.0", git = "https://github.com/IvanLi-CN/embassy", features = [
-  "arch-cortex-m",
-  "executor-thread",
-  "defmt",
-] }
-embassy-time = { version = "0.4.0", git = "https://github.com/IvanLi-CN/embassy", features = [
-  "defmt",
-  "defmt-timestamp-uptime",
-  "tick-hz-32_768",
-] }
-embassy-usb = { version = "0.4.0", git = "https://github.com/IvanLi-CN/embassy", default-features = false, features = [
-  "defmt",
-] }
-embassy-futures = { version = "0.1.0", git = "https://github.com/IvanLi-CN/embassy" }
-embassy-embedded-hal = { version = "0.3.0", git = "https://github.com/IvanLi-CN/embassy" }
+esp-bootloader-esp-idf = { version = "0.1.0" }
+esp-hal = { version = "0.23.0", features = ["esp32s3"] }
+esp-hal-embassy = { version = "0.6.0", features = ["esp32s3"] }
+esp-println = { version = "0.13.0", features = ["esp32s3"] }
 
-defmt = "1.0.1"
-defmt-rtt = "1.0.0"
-
-cortex-m = { version = "0.7.7", features = [
-  "inline-asm",
-  "critical-section-single-core",
-] }
-cortex-m-rt = "0.7.5"
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-heapless = { version = "0.8", default-features = false }
-portable-atomic = { version = "1.11.0", features = ["critical-section"] }
-static_cell = "2.1.0"
-libm = "0.2.8"
-embedded-alloc = "0.6.0"
-
-embedded-io-async = { version = "0.6.1" }
-binrw = { version = "0.15", default-features = false }
-
-# Changed embedded-graphics version and features
-embedded-graphics = "0.8.1" # Changed version and removed features
-gc9d01 = { version = "*", path = "./gc9d01", features = ["async", "defmt"] }
-tca6424 = { version = "*", path = "./tca6424", features = ["async", "defmt"] }
-sw2303 = { version = "*", path = "./sw2303", features = ["async", "defmt"] }
-ina226 = { version = "0.3.0", features = ["async"] }
-w25 = { version = "0.6.0", features = ["defmt"] }
-
-[profile.dev]
-codegen-units = 1
-debug = 2
-debug-assertions = true # <-
-incremental = false
-opt-level = 3           # <-
-overflow-checks = true  # <-
-
-# cargo build/run --release
 [profile.release]
+debug = true
+debug-assertions = true
+lto = "fat"
 codegen-units = 1
-debug = 2                # Enable debug info to preserve defmt symbols
-strip = "none"           # Don't strip symbols to preserve defmt
-debug-assertions = false # <-
-incremental = false
-lto = 'thin'             # Changed from 'fat' to 'thin' to preserve defmt symbols
-opt-level = 2            # Reduced from 3 to 2 to preserve defmt symbols
-overflow-checks = false  # <-
-
-# cargo test --release
-[profile.bench]
-codegen-units = 1
-debug = 2
-debug-assertions = false # <-
-incremental = false
-lto = 'fat'
-opt-level = 3            # <-
-overflow-checks = false  # <-

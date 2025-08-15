@@ -1,30 +1,24 @@
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# Change this runner as required for your MCU.
-runner = "probe-rs run --chip STM32G431CBUx" # to list chips, run `probe-rs chip list.`
-
+[target.'cfg(target_arch = "riscv32")']
+runner    = "espflash flash --monitor"
 rustflags = [
-  "-C", "link-arg=-Tlink.x",
-  "-C", "link-arg=-Tdefmt.x",
-  # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
-  # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
-  "-C", "link-arg=--nmagic",
+  "-C", "link-arg=-Tlinkall.x",
+  "-C", "force-frame-pointers",
 ]
 
-[build]
-# Change this target as required for your MCU.
-target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (eg G4)
-# target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+ (eg G0)
-# target = "thumbv8m.main-none-eabihf" # Cortex-M33F and Cortex-M35F (eg L5, U5, H5)
+[target.'cfg(target_arch = "xtensa")']
+runner    = "espflash flash --monitor"
+rustflags = [
+  # GNU LD
+  "-C", "link-arg=-Wl,-Tlinkall.x",
+  "-C", "link-arg=-nostartfiles",
 
-[alias]
-rb = "run --bin"
-rrb = "run --release --bin"
-rr = "run --release"
-br = "build --release"
-# Clean build (useful when environment variables change)
-clean-build = "build --bin iso-usb-hub"
-clean-run = "run --bin iso-usb-hub"
+  # LLD
+  # "-C", "link-arg=-Tlinkall.x",
+  # "-C", "linker=rust-lld",
+]
 
 [env]
-DEFMT_LOG = "info"
-TOTAL_POWER_BUDGET = "100"
+ESP_LOG = "info"
+
+[unstable]
+build-std = ["core"]

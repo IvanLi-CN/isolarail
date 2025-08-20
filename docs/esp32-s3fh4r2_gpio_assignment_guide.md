@@ -70,45 +70,45 @@
 
 ### 引脚快速查找表
 
-| GPIO编号 | 功能 | 说明 | 特性 |
-|----------|------|------|------|
-| **GPIO0** | BOOT按钮 | 启动控制，可读取按钮状态 | ⚠️ Strapping引脚，谨慎使用 |
-| **GPIO1** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO2** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO3** | 不推荐 | JTAG信号源控制 | ⚠️ Strapping引脚，影响调试 |
-| **GPIO4** | 蜂鸣器 | PWM音调控制 | 安全的非启动配置引脚 |
-| **GPIO5** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO6** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO7** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO8** | I2C_SDA | I2C数据线 | 默认I2C引脚，最佳兼容性 |
-| **GPIO9** | I2C_SCL | I2C时钟线 | 默认I2C引脚，最佳兼容性 |
-| **GPIO10** | SPI_DC | 数据/命令控制 | SPI屏幕控制信号 |
-| **GPIO11** | SPI_MOSI | 主设备输出，从设备输入 | ⚡ IOMUX直连，高性能 |
-| **GPIO12** | SPI_SCLK | SPI时钟 | ⚡ IOMUX直连，最高80MHz |
-| **GPIO13** | SPI_CS | 片选信号 | ⚡ IOMUX直连，最低延迟 |
-| **GPIO14** | SPI_RES | 复位信号 | SPI屏幕复位控制 |
-| **GPIO15** | SPI_BLK | PWM背光控制 | SPI屏幕背光调节 |
-| **GPIO16** | I2C_INT | I2C设备中断引脚 | 中断处理 |
-| **GPIO17** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO18** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO21** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO26** | 不可用 | Flash/PSRAM CLK | 🚫 Flash专用，禁止使用 |
-| **GPIO27** | 不可用 | Flash/PSRAM CS0 | 🚫 Flash专用，禁止使用 |
-| **GPIO28** | 不可用 | Flash/PSRAM DATA0 | 🚫 Flash专用，禁止使用 |
-| **GPIO29** | 不可用 | Flash/PSRAM DATA1 | 🚫 Flash专用，禁止使用 |
-| **GPIO30** | 不可用 | Flash/PSRAM DATA2 | 🚫 Flash专用，禁止使用 |
-| **GPIO31** | 不可用 | Flash/PSRAM DATA3 | 🚫 Flash专用，禁止使用 |
-| **GPIO32** | 不可用 | Flash/PSRAM DATA4 | 🚫 PSRAM专用，禁止使用 |
-| **GPIO38** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO39** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO40** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO41** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO42** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO45** | 不推荐 | VDD_SPI电压选择 | ⚠️ Strapping引脚，影响Flash供电 |
-| **GPIO46** | 不推荐 | ROM消息打印控制 | ⚠️ Strapping引脚，影响启动日志 |
-| **GPIO47** | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO48** | 预留IO | 普通数字输入输出 | 通用IO |
-| **EN** | 复位按钮 | 系统复位控制 | 硬件复位信号 |
+| GPIO编号 | PIN序号 | 功能 | 说明 | 特性 |
+|----------|---------|------|------|------|
+| **GPIO0** | 5 | BOOT按钮 | 启动控制，可读取按钮状态 | ⚠️ Strapping引脚，谨慎使用 |
+| **GPIO1** | 6 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO2** | 7 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO3** | 8 | 不推荐 | JTAG信号源控制 | ⚠️ Strapping引脚，影响调试 |
+| **GPIO4** | 9 | 蜂鸣器 | PWM音调控制 | 安全的非启动配置引脚 |
+| **GPIO5** | 10 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO6** | 11 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO7** | 12 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO8** | 13 | I2C_SDA | I2C数据线 | 默认I2C引脚，最佳兼容性 |
+| **GPIO9** | 14 | I2C_SCL | I2C时钟线 | 默认I2C引脚，最佳兼容性 |
+| **GPIO10** | 15 | SPI_DC | 数据/命令控制 | SPI屏幕控制信号 |
+| **GPIO11** | 16 | SPI_MOSI | 主设备输出，从设备输入 | ⚡ IOMUX直连，高性能 |
+| **GPIO12** | 17 | SPI_SCLK | SPI时钟 | ⚡ IOMUX直连，最高80MHz |
+| **GPIO13** | 18 | SPI_CS | 片选信号 | ⚡ IOMUX直连，最低延迟 |
+| **GPIO14** | 19 | SPI_RES | 复位信号 | SPI屏幕复位控制 |
+| **GPIO15** | 21 | SPI_BLK | PWM背光控制 | SPI屏幕背光调节 |
+| **GPIO16** | 22 | I2C_INT | I2C设备中断引脚 | 中断处理 |
+| **GPIO17** | 23 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO18** | 24 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO21** | 27 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO26** | 28 | 不可用 | Flash/PSRAM CLK | 🚫 Flash专用，禁止使用 |
+| **GPIO27** | 30 | 不可用 | Flash/PSRAM CS0 | 🚫 Flash专用，禁止使用 |
+| **GPIO28** | 31 | 不可用 | Flash/PSRAM DATA0 | 🚫 Flash专用，禁止使用 |
+| **GPIO29** | 32 | 不可用 | Flash/PSRAM DATA1 | 🚫 Flash专用，禁止使用 |
+| **GPIO30** | 33 | 不可用 | Flash/PSRAM DATA2 | 🚫 Flash专用，禁止使用 |
+| **GPIO31** | 34 | 不可用 | Flash/PSRAM DATA3 | 🚫 Flash专用，禁止使用 |
+| **GPIO32** | 35 | 不可用 | Flash/PSRAM DATA4 | 🚫 PSRAM专用，禁止使用 |
+| **GPIO38** | 43 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO39** | 44 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO40** | 45 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO41** | 47 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO42** | 48 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO45** | 51 | 不推荐 | VDD_SPI电压选择 | ⚠️ Strapping引脚，影响Flash供电 |
+| **GPIO46** | 52 | 不推荐 | ROM消息打印控制 | ⚠️ Strapping引脚，影响启动日志 |
+| **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
+| **EN** | 4 | 复位按钮 | 系统复位控制 | 硬件复位信号 |
 
 ## 引脚特性说明
 

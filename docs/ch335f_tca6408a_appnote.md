@@ -123,6 +123,7 @@
 - 何时需要：
   - 需要一键恢复 IO 配置/总线恢复的系统场景。
   - 现场维护/异常 I2C 恢复策略的一部分。
+  - 基于 TPS82130SILR PG 信号的电源管理系统中，确保器件在电源稳定后可靠启动。
 
 #### 6.3 CH335F RESET#/CDP（低有效）
 
@@ -176,8 +177,15 @@
 - TCA6408A RESET 上拉：10 kΩ（或直连 VCCI）。
 - CH335F RESET#/CDP 上拉：4.7–10 kΩ（推荐 4.7 kΩ）。
 - TCA 去耦：VCCI/VCCP 各 0.1 µF + 1 µF，就近。
+- **电源管理相关（新增）**：
+  - TPS82130SILR PG 上拉：4.7 kΩ 至 3.3V
+  - ESP32-S3 CHIP_PU RC 延时：10 kΩ + 1 µF
+  - I2C 器件复位控制：GPIO38 开漏输出 + 10 kΩ 上拉
 
 ### 9. 参考资料
 
 - TI：TCA6408A Datasheet（SCPS192E，Rev.E，2023-01）：<https://www.ti.com/lit/ds/symlink/tca6408a.pdf>
+- TI：TPS82130SILR Datasheet（SLVSCY5F，Rev.F，2023-01）：<https://www.ti.com/lit/ds/symlink/tps82130.pdf>
+- Espressif：ESP32-S3 Hardware Design Guidelines：<https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/>
 - WCH：CH334/CH335 数据手册 V2.7（含 CH335F）：厂商资料与通道分发文档。
+- 项目文档：[基于 TPS82130SILR PG 信号的电源管理与 MCU 启动控制方案](./power_management_and_startup_control.md)

@@ -14,7 +14,7 @@
 
 ## 引脚分配方案
 
-### 专用功能引脚 (10个)
+### 专用功能引脚 (27个)
 
 #### SPI 屏幕接口 (6个引脚) - 高性能IOMUX配置
 
@@ -37,7 +37,7 @@
 
 #### 蜂鸣器 (1个引脚)
 
-- **GPIO4**: BUZZER (PWM音调控制)
+- **GPIO7**: BUZZER (PWM音调控制)
 
 #### USB 调试接口 (2个引脚) - 专用硬件功能
 
@@ -60,9 +60,8 @@
 
 **功能特点**: 基于RT9043GB LDO的PWM调压控制，支持5V 0.7A风扇，调速范围2V-5V，集成转速反馈
 
-#### USB HUB控制接口 (6个引脚) - 专用控制信号
+#### USB HUB控制接口 (5个引脚) - 专用控制信号
 
-- **GPIO7**: I2C_EN (I2C总线上拉电源使能)
 - **GPIO5**: HUB_RESET# (USB HUB芯片重置，低电平有效)
 - **GPIO17**: CE1 (USB下行端口1 VBUS使能，低电平有效)
 - **GPIO18**: CE2 (USB下行端口2 VBUS使能，低电平有效)
@@ -71,10 +70,23 @@
 
 **功能特点**: 专用于USB HUB芯片(CH335F)控制，支持独立端口电源管理
 
+#### TPS2490DGSR电源管理芯片 (2个引脚) - 输入电源保护
+
+- **GPIO41**: IN_EN (TPS2490DGSR使能控制，高电平有效，需内部上拉)
+- **GPIO42**: IN_PG (TPS2490DGSR电源良好状态，高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V)
+
+**功能特点**: 专用于输入电源保护和监控，提供过流、过压、欠压保护功能
+
 ### 系统控制引脚 (2个)
 
 - **CHIP_PU (EN)**: 复位按钮连接
 - **GPIO0**: BOOT按钮连接 (可读取按钮状态)
+
+#### 电压采样ADC (1个引脚)
+
+- **GPIO4**: VIN_ADC (输入电压采样，ADC1_CH3)
+
+**功能特点**: 12位ADC采样，配合分压网络监测5V~28V输入电压，分压比11:1 (100kΩ+10kΩ)
 
 #### ISOUSB211DPR隔离OK信号采集 (1个引脚)
 
@@ -82,11 +94,16 @@
 
 **功能特点**: 数字输入，监测ISOUSB211DPR芯片隔离侧工作状态，需外部4.7kΩ上拉电阻至3.3V
 
-### 预留的普通IO引脚 (5个)
+### ESP32-S3FH4R2额外可用引脚 (5个)
+
+以下引脚在ESP32-S3FH4R2中额外可用（因为使用Quad SPI而非Octal SPI）：
+
+- **GPIO33-37** (ESP32-S3FH4R2中可用作普通IO)
+
+### 预留的普通IO引脚 (2个)
 
 以下引脚保留作为普通数字IO使用：
 
-- **GPIO38, GPIO41, GPIO42**
 - **GPIO47, GPIO48**
 
 ### 引脚使用统计
@@ -95,17 +112,20 @@
 |----------|-------------|----------|
 | **SPI屏幕** | 6个 | GPIO10, GPIO11, GPIO12, GPIO13, GPIO14, GPIO15 |
 | **I2C总线** | 3个 | GPIO8, GPIO9, GPIO16 |
-| **蜂鸣器** | 1个 | GPIO4 |
+| **蜂鸣器** | 1个 | GPIO7 |
 | **PWM风扇控制** | 3个 | GPIO1, GPIO2, GPIO6 |
 | **USB调试接口** | 2个 | GPIO19, GPIO20 |
-| **USB HUB控制** | 6个 | GPIO5, GPIO7, GPIO17, GPIO18, GPIO39, GPIO40 |
+| **USB HUB控制** | 5个 | GPIO5, GPIO17, GPIO18, GPIO39, GPIO40 |
+| **TPS2490DGSR** | 2个 | GPIO41, GPIO42 |
+| **电压采样ADC** | 1个 | GPIO4 |
 | **ISOUSB211DPR** | 1个 | GPIO21 |
 | **电源管理复位** | 1个 | GPIO38 |
 | **系统控制** | 2个 | EN, GPIO0 |
-| **预留IO** | 4个 | GPIO41,42,47,48 |
-| **不可用** | 7个 | GPIO26,27,28,29,30,31,32 (Flash/PSRAM) |
+| **额外可用IO** | 5个 | GPIO33,34,35,36,37 (ESP32-S3FH4R2特有) |
+| **预留IO** | 2个 | GPIO47,48 |
+| **不可用** | 7个 | GPIO26,27,28,29,30,31,32 (Flash/PSRAM核心引脚) |
 | **不推荐** | 3个 | GPIO3,45,46 (Strapping引脚) |
-| **总计** | **37个引脚** | 完整GPIO映射 |
+| **总计** | **43个GPIO + EN** | 完整GPIO映射 |
 
 ### 引脚快速查找表 (按PIN序号排序)
 
@@ -116,12 +136,10 @@
 | **GPIO1** | 6 | FAN_PWM | PWM风扇调压控制 | 25kHz PWM输出，RT9043GB控制 |
 | **GPIO2** | 7 | FAN_EN | 风扇启停控制 | 数字输出，风扇使能信号 |
 | **GPIO3** | 8 | 不推荐 | JTAG信号源控制 | ⚠️ Strapping引脚，影响调试 |
-| **GPIO4** | 9 | 蜂鸣器 | PWM音调控制 | 安全的非启动配置引脚 |
-| **GPIO19** | 20 | USB_D+ | USB 调试数据正 | 🔌 USB 调试接口专用引脚 |
-| **GPIO20** | 25 | USB_D- | USB 调试数据负 | 🔌 USB 调试接口专用引脚 |
+| **GPIO4** | 9 | VIN_ADC | 输入电压采样 | ADC1_CH3，12位分辨率，分压比11:1 |
 | **GPIO5** | 10 | HUB_RESET# | USB HUB芯片重置控制 | 低电平有效重置 |
 | **GPIO6** | 11 | FAN_TACH | 风扇测速输入 | PCNT脉冲计数，转速反馈 |
-| **GPIO7** | 12 | I2C_EN | I2C总线上拉电源使能 | 高电平有效使能 |
+| **GPIO7** | 12 | BUZZER | PWM音调控制 | 安全的非启动配置引脚，支持PWM输出 |
 | **GPIO8** | 13 | I2C_SDA | I2C数据线 | 默认I2C引脚，最佳兼容性 |
 | **GPIO9** | 14 | I2C_SCL | I2C时钟线 | 默认I2C引脚，最佳兼容性 |
 | **GPIO10** | 15 | SPI_DC | 数据/命令控制 | SPI屏幕控制信号 |
@@ -133,23 +151,30 @@
 | **GPIO16** | 22 | I2C_INT | I2C设备中断引脚 | 中断处理 |
 | **GPIO17** | 23 | CE1 | USB下行端口1 VBUS使能 | 低电平有效使能 |
 | **GPIO18** | 24 | CE2 | USB下行端口2 VBUS使能 | 低电平有效使能 |
+| **GPIO19** | 25 | USB_D- | USB 调试数据负 | 🔌 USB 调试接口专用引脚 |
+| **GPIO20** | 26 | USB_D+ | USB 调试数据正 | 🔌 USB 调试接口专用引脚 |
 | **GPIO21** | 27 | ISO_OK | ISOUSB211DPR隔离侧OK状态输入 | 需外部4.7kΩ上拉电阻 |
-| **GPIO26** | 28 | 不可用 | Flash/PSRAM CLK | 🚫 Flash专用，禁止使用 |
-| **GPIO27** | 30 | 不可用 | Flash/PSRAM CS0 | 🚫 Flash专用，禁止使用 |
-| **GPIO28** | 31 | 不可用 | Flash/PSRAM DATA0 | 🚫 Flash专用，禁止使用 |
-| **GPIO29** | 32 | 不可用 | Flash/PSRAM DATA1 | 🚫 Flash专用，禁止使用 |
-| **GPIO30** | 33 | 不可用 | Flash/PSRAM DATA2 | 🚫 Flash专用，禁止使用 |
-| **GPIO31** | 34 | 不可用 | Flash/PSRAM DATA3 | 🚫 Flash专用，禁止使用 |
-| **GPIO32** | 35 | 不可用 | Flash/PSRAM DATA4 | 🚫 PSRAM专用，禁止使用 |
-| **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO26** | 28 | 不可用 | SPICS1 (Flash/PSRAM片选1) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO27** | 30 | 不可用 | SPIHD (Flash/PSRAM暂停) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO28** | 31 | 不可用 | SPIWP (Flash/PSRAM写保护) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO29** | 32 | 不可用 | SPICS0 (Flash/PSRAM片选0) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO30** | 33 | 不可用 | SPICLK (Flash/PSRAM时钟) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO31** | 34 | 不可用 | SPIQ (Flash/PSRAM数据输出) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO32** | 35 | 不可用 | SPID (Flash/PSRAM数据输入) | 🚫 Flash/PSRAM专用，禁止使用 |
+| **GPIO33** | 36 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
+| **GPIO34** | 37 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
+| **GPIO35** | 38 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
+| **GPIO36** | 39 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
+| **GPIO37** | 40 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
 | **GPIO38** | 43 | I2C_RESET | I2C器件复位控制 | 低电平有效复位，可控制多个器件 |
 | **GPIO39** | 44 | CE3 | USB下行端口3 VBUS使能 | 低电平有效使能 (MTCK) |
 | **GPIO40** | 45 | CE4 | USB下行端口4 VBUS使能 | 低电平有效使能 (MTDO) |
-| **GPIO41** | 47 | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO42** | 48 | 预留IO | 普通数字输入输出 | 通用IO |
-| **GPIO45** | 51 | 不推荐 | VDD_SPI电压选择 | ⚠️ Strapping引脚，影响Flash供电 |
-| **GPIO46** | 52 | 不推荐 | ROM消息打印控制 | ⚠️ Strapping引脚，影响启动日志 |
+| **GPIO41** | 47 | IN_EN | TPS2490DGSR使能控制 | 高电平有效，需内部上拉 |
+| **GPIO42** | 48 | IN_PG | TPS2490DGSR电源良好状态 | 高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V |
+| **GPIO45** | 46 | 不推荐 | VDD_SPI电压选择 | ⚠️ Strapping引脚，影响Flash供电 |
+| **GPIO46** | 47 | 不推荐 | ROM消息打印控制 | ⚠️ Strapping引脚，影响启动日志 |
+| **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
+| **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
 
 ## 引脚特性说明
 
@@ -162,15 +187,17 @@
 ### 标准功能引脚
 
 - **GPIO8/GPIO9**: I2C默认引脚，最佳兼容性
-- **GPIO4**: 安全的非启动配置引脚，适合PWM
+- **GPIO4**: ADC1_CH3，12位ADC功能，适合电压采样
 - **GPIO1/GPIO2/GPIO6**: PWM风扇控制专用引脚，完整风扇控制方案（调速+启停+测速）
+- **GPIO7**: 安全的非启动配置引脚，适合PWM输出
 - **GPIO0**: 启动控制引脚，低电平进入下载模式
 
 ### 通用IO引脚特性
 
 - **工作电压**: 3.3V
 - **最大驱动电流**: 40mA/引脚
-- **支持功能**: 数字输入/输出、PWM、ADC(部分引脚)
+- **支持功能**: 数字输入/输出、PWM、ADC(GPIO1-20)
+- **ADC特性**: 12位分辨率，0~3.3V输入范围，支持衰减器扩展量程
 - **内置功能**: 可配置上拉/下拉电阻
 
 ## 不推荐使用的GPIO引脚
@@ -179,13 +206,22 @@
 
 以下引脚被Flash和PSRAM占用，**不能用于用户应用**：
 
-- **GPIO26**: SPI Flash/PSRAM CLK
-- **GPIO27**: SPI Flash/PSRAM CS0
-- **GPIO28**: SPI Flash/PSRAM DATA0
-- **GPIO29**: SPI Flash/PSRAM DATA1
-- **GPIO30**: SPI Flash/PSRAM DATA2
-- **GPIO31**: SPI Flash/PSRAM DATA3
-- **GPIO32**: SPI Flash/PSRAM DATA4 (仅PSRAM)
+- **GPIO26**: SPICS1 (SPI Flash/PSRAM 片选1，用于PSRAM)
+- **GPIO27**: SPIHD (SPI Flash/PSRAM 暂停信号)
+- **GPIO28**: SPIWP (SPI Flash/PSRAM 写保护)
+- **GPIO29**: SPICS0 (SPI Flash/PSRAM 片选0，用于Flash)
+- **GPIO30**: SPICLK (SPI Flash/PSRAM 时钟)
+- **GPIO31**: SPIQ (SPI Flash/PSRAM 数据输出)
+- **GPIO32**: SPID (SPI Flash/PSRAM 数据输入)
+
+**ESP32-S3FH4R2特殊说明**：
+
+根据乐鑫官方芯片对比表，ESP32-S3FH4R2使用：
+
+- **4MB Flash (Quad SPI模式)**
+- **2MB PSRAM (Quad SPI模式)**
+
+由于使用Quad SPI而非Octal SPI模式，GPIO33-38在ESP32-S3FH4R2中是**可用的**，这与其他使用Octal SPI的ESP32-S3变体不同。
 
 ### Strapping引脚 (谨慎使用)
 
@@ -198,9 +234,29 @@
 
 ### 使用建议
 
-1. **绝对避免**: GPIO26-32 (Flash/PSRAM专用)
+1. **绝对避免**: GPIO26-32 (Flash/PSRAM核心引脚，被占用)
 2. **谨慎使用**: GPIO0, GPIO3, GPIO45, GPIO46 (Strapping引脚)
-3. **推荐使用**: 本文档中列出的预留IO引脚
+3. **优先推荐**: GPIO33-37, GPIO47-48 (ESP32-S3FH4R2额外可用的通用IO引脚)
+4. **已有分配**: GPIO38-42 (已分配给I2C复位、USB控制、电源管理功能)
+
+## USB-JTAG调试接口
+
+ESP32-S3内置USB-JTAG桥接器，通过以下引脚实现：
+
+- **GPIO19**: USB D- (白线)
+- **GPIO20**: USB D+ (绿线)
+- 通过USB线缆直接连接进行调试和编程
+
+**注意**: GPIO39-42虽然是传统JTAG引脚，但在使用USB-JTAG时可以谨慎用作普通IO
+
+## ESP32-S3FH4R2的优势
+
+相比其他ESP32-S3变体，ESP32-S3FH4R2具有以下优势：
+
+1. **更多可用GPIO**: 由于使用Quad SPI模式，GPIO33-37可用，提供5个额外的通用IO引脚
+2. **成本效益**: 集成2MB PSRAM，无需外部PSRAM芯片
+3. **设计简化**: 减少外部元件，降低PCB复杂度
+4. **引脚兼容性**: 与标准ESP32-S3引脚兼容，便于设计迁移
 
 ## 性能优化建议
 
@@ -215,7 +271,6 @@
 1. **时钟频率**: 推荐使用 400kHz 快速模式
 2. **上拉电阻**: 使用适当的上拉电阻 (通常 4.7kΩ)
 3. **中断处理**: 利用 GPIO16 进行高效的中断处理
-4. **电源控制**: 通过 GPIO7 (I2C_EN) 控制I2C总线上拉电源
 
 ### PWM 风扇控制优化
 
@@ -233,6 +288,24 @@
 3. **电源序列**: 建议先使能HUB芯片，再依次使能各端口
 4. **故障保护**: 低电平有效设计提供更好的故障安全特性
 
+### ADC 电压采样优化
+
+1. **分压网络设计**: GPIO4 (VIN_ADC) 使用100kΩ+10kΩ分压网络，分压比11:1
+2. **电压范围**: 支持5V~28V输入电压采样，28V输入时ADC读取约2.55V
+3. **采样精度**: 12位ADC分辨率，理论精度约8.9mV (36.3V/4096)
+4. **输入阻抗**: 110kΩ总阻抗设计，最大电流255μA，功耗低
+5. **滤波建议**: 在ADC输入端并联100nF电容，减少噪声干扰
+6. **校准方案**: 建议使用已知电压进行两点校准，提高测量精度
+7. **采样频率**: 建议采样频率不超过1kHz，避免ADC通道间干扰
+
+### TPS2490DGSR 电源保护芯片优化
+
+1. **使能控制**: GPIO41 (IN_EN) 高电平有效使能，建议配置内部上拉电阻
+2. **状态监测**: GPIO42 (IN_PG) 监测电源良好状态，高电平表示输入电源正常
+3. **上拉电阻**: IN_PG为开漏输出，必须使用外部4.7kΩ上拉电阻至3.3V
+4. **启动时序**: 建议在系统初始化时先检查IN_PG状态，确认输入电源正常后再使能其他模块
+5. **故障处理**: 当IN_PG变为低电平时，应立即进入保护模式，关闭非关键负载
+
 ### ISOUSB211DPR 隔离器控制优化
 
 1. **OK信号监测**: GPIO21 (ISO_OK) 监测隔离侧工作状态，高电平表示正常工作
@@ -245,6 +318,8 @@
 1. **电平兼容**: 注意 3.3V 电平兼容性
 2. **驱动能力**: 每个 GPIO 最大驱动电流 40mA
 3. **上拉下拉**: 根据需要配置内部上拉/下拉电阻
+4. **推荐引脚**: 优先使用GPIO33-38, GPIO47-48 (ESP32-S3FH4R2可用的高质量IO引脚)
+5. **ESP32-S3FH4R2优势**: 相比其他ESP32-S3变体，多出6个可用GPIO (GPIO33-38)
 
 ## 开发注意事项
 

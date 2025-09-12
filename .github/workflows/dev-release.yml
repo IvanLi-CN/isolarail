@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     steps:
     - name: Checkout code
@@ -16,13 +18,19 @@ jobs:
       with:
         submodules: 'recursive'
         fetch-depth: 0
-    
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install Rust toolchain for Xtensa (ESP32-S3)
+      uses: esp-rs/xtensa-toolchain@v1.5
       with:
-        toolchain: stable
-        targets: thumbv7em-none-eabihf
-        components: rustfmt, clippy
+        default: false
+        buildtargets: esp32s3
+        export: true
+        ldproxy: false
+
+    - name: Ensure clippy/rustfmt for esp toolchain
+      run: |
+        rustup component add clippy --toolchain esp || true
+        rustup component add rustfmt --toolchain esp || true
     
     - name: Cache cargo registry
       uses: actions/cache@v4
@@ -35,22 +43,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
     
-    - name: Build release binary
-      run: cargo build --bin iso-usb-hub --target thumbv7em-none-eabihf --release
+    - name: Build release binary (ESP32-S3)
+      run: cargo +esp build --release --target xtensa-esp32s3-none-elf
     
     - name: Build examples
-      run: cargo build --examples --target thumbv7em-none-eabihf --release
-
-    - name: Install cargo-binutils
-      run: cargo install cargo-binutils
-
-    - name: Install llvm-tools-preview
-      run: rustup component add llvm-tools-preview
-
-    - name: Generate binary files
-      run: |
-        cargo objcopy --bin iso-usb-hub --target thumbv7em-none-eabihf --release -- -O binary target/thumbv7em-none-eabihf/release/iso-usb-hub.bin
-        echo "Generated binary file: iso-usb-hub.bin ($(stat -c%s target/thumbv7em-none-eabihf/release/iso-usb-hub.bin) bytes)"
+      run: cargo +esp build --examples --target xtensa-esp32s3-none-elf --release
     
     - name: Generate development version
       id: dev_version
@@ -64,7 +61,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.dev_version.outputs.version }}
-        name: "Development Build ${{ steps.dev_version.outputs.version }}"
+        name: "Development Build ${{ steps.dev_version.outputs.version }} (ESP32-S3)"
         body: |
           🚧 **Development Build**
 
@@ -75,24 +72,21 @@ jobs:
           ⚠️ This is an automatically generated development version for testing purposes only.
 
           ## File Description
-          - `iso-usb-hub` - Main firmware file (ELF format)
-          - `iso-usb-hub.bin` - Binary firmware file
+          - `esp32s3-hello-world` - Main firmware (ELF format)
           - `examples/` - Example programs
 
           ## How to Flash Firmware
-
-          Using probe-rs or other STM32 flashing tools:
           ```bash
-          # Using probe-rs
-          probe-rs run --chip STM32G431CBUx iso-usb-hub
+          # Using espflash to flash ELF directly
+          cargo install espflash
+          espflash flash --monitor target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
 
-          # Or using cargo run (requires .cargo/config.toml configuration)
-          cargo run --bin iso-usb-hub --release
+          # Or using cargo run with esp toolchain (requires local setup via espup)
+          cargo +esp run --release
           ```
         files: |
-          target/thumbv7em-none-eabihf/release/iso-usb-hub
-          target/thumbv7em-none-eabihf/release/iso-usb-hub.bin
-          target/thumbv7em-none-eabihf/release/examples/*
+          target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+          target/xtensa-esp32s3-none-elf/release/examples/*
         prerelease: true
         draft: false
       env:

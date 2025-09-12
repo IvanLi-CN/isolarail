@@ -9,19 +9,27 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
-    
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install Rust toolchain for Xtensa (ESP32-S3)
+      uses: esp-rs/xtensa-toolchain@v1.5
       with:
-        toolchain: stable
-        targets: thumbv7em-none-eabihf
-        components: rustfmt, clippy
+        default: false
+        buildtargets: esp32s3
+        export: true
+        ldproxy: false
+
+    - name: Ensure clippy/rustfmt for esp toolchain
+      run: |
+        rustup component add clippy --toolchain esp || true
+        rustup component add rustfmt --toolchain esp || true
     
     - name: Cache cargo registry
       uses: actions/cache@v4
@@ -35,43 +43,34 @@ jobs:
           ${{ runner.os }}-cargo-
     
     - name: Check code formatting
-      run: cargo fmt --all -- --check
+      run: cargo +esp fmt --all -- --check
     
     - name: Run clippy
-      run: cargo clippy --bins --examples --no-deps -- -D warnings
+      run: cargo +esp clippy --bins --examples --no-deps --target xtensa-esp32s3-none-elf -- -D warnings
     
     - name: Build main binary
-      run: cargo build --bin iso-usb-hub --target thumbv7em-none-eabihf
+      run: cargo +esp build --target xtensa-esp32s3-none-elf
     
     - name: Build examples
-      run: cargo build --examples --target thumbv7em-none-eabihf
-
-    - name: Install cargo-binutils
-      run: cargo install cargo-binutils
-
-    - name: Install llvm-tools-preview
-      run: rustup component add llvm-tools-preview
-
-    - name: Generate binary files (test)
-      run: |
-        cargo objcopy --bin iso-usb-hub --target thumbv7em-none-eabihf -- -O binary target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin
-        echo "Generated binary file: iso-usb-hub.bin ($(stat -c%s target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin) bytes)"
+      run: cargo +esp build --examples --target xtensa-esp32s3-none-elf
+    
+    - name: Skip binary packaging for ESP32-S3
+      run: echo "Packaging .bin is skipped; use ELF with espflash for flashing."
     
     - name: Check build artifacts
       run: |
-        if [ ! -f target/thumbv7em-none-eabihf/debug/iso-usb-hub ]; then
+        if [ ! -f target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world ]; then
           echo "Build failed: main binary not found"
           exit 1
         fi
-        echo "Build successful: binary size $(stat -c%s target/thumbv7em-none-eabihf/debug/iso-usb-hub) bytes"
+        echo "Build successful: binary size $(stat -c%s target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world) bytes"
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       if: success()
       with:
-        name: build-artifacts-${{ github.sha }}
+        name: build-artifacts-${{ github.sha }}-esp32s3
         path: |
-          target/thumbv7em-none-eabihf/debug/iso-usb-hub
-          target/thumbv7em-none-eabihf/debug/iso-usb-hub.bin
-          target/thumbv7em-none-eabihf/debug/examples/*
+          target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world
+          target/xtensa-esp32s3-none-elf/debug/examples/*
         retention-days: 7

@@ -108,7 +108,7 @@ cargo run --release
 
 Once flashed and running, you should see output similar to:
 
-```
+```text
 ESP32-S3 Hello World Starting!
 Main task started, spawning hello task...
 Hello World from ESP32-S3! Counter: 0
@@ -120,13 +120,17 @@ Hello World from ESP32-S3! Counter: 2
 
 ## Project Structure
 
-```
+```text
 ├── src/
 │   └── main.rs              # Main application with hello world logic
 ├── .cargo/
 │   └── config.toml          # Cargo configuration for ESP32-S3
 └── Cargo.toml               # Project dependencies and configuration
 ```
+
+## Documentation
+
+- Hardware connection overview: [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
 
 ## Dependencies
 
@@ -162,7 +166,6 @@ This repository's GitHub Actions use the official `esp-rs/xtensa-toolchain` acti
 - Target: `xtensa-esp32s3-none-elf`
 - Toolchain: `+esp` (installed via the action)
 - Workflows: see `.github/workflows/`
-
 
 ## License
 

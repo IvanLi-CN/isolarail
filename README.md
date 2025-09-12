@@ -155,6 +155,15 @@ If you encounter build errors, try:
 2. Update dependencies: `cargo update`
 3. Check that the ESP toolchain is properly installed
 
+## CI
+
+This repository's GitHub Actions use the official `esp-rs/xtensa-toolchain` action to install the ESP Xtensa Rust toolchain.
+
+- Target: `xtensa-esp32s3-none-elf`
+- Toolchain: `+esp` (installed via the action)
+- Workflows: see `.github/workflows/`
+
+
 ## License
 
 This project is licensed under the MIT License.

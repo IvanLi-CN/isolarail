@@ -10,9 +10,9 @@
   - 类型建议（实现细节示例，不具强制性）：`static RwLock<PowerSwitchTarget>`。
   - 语义：目标状态（意图），不等同于实际导通状态。
 
-### 0.2 日志风格（defmt）
+### 0.2 日志风格
 
-- 统一使用 defmt，单行键值对风格，便于机读与筛选。
+- 统一使用分级日志（`log` → `esp-println`），单行键值对风格，便于机读与筛选。
 - 模块前缀使用短名加域，如：`pwr.in`（电源输入）。
 - SI 单位与后缀：电压 `V`、电流 `A` 等。
 - 级别：
@@ -54,16 +54,16 @@
   - 调用 `.split()` 获取四个下行通道的虚拟 I²C（`i2c0..i2c3`）；用于各通道扫描与后续设备初始化时的通道自动选择。
 - 成功日志：`i2c.mux: ok addr=0x70 parts=4`；失败日志并 `panic!`：`i2c.mux: err=...`。
 
-### 1.3 设备发现（四路模块：SC8815 + SW2303）
+### 1.3 设备发现/初始化（四路模块：SC8815 → SW2303）
 
 - 使用的设备驱动 crate：
   - `sc8815`（Git：IvanLi-CN/sc8815-rs，支持 blocking/async，默认地址参见 `sc8815::registers::constants::DEFAULT_ADDRESS`）。
   - `sw2303`（Git：IvanLi-CN/sw2303-rs，支持 blocking/async，默认地址参见 `sw2303::registers::constants::DEFAULT_ADDRESS`）。
-- 扫描策略（逐通道，串行）：
-  1) 通过 `Xca9545a::split()` 获得的 `i2c[ch]` 访问该通道。
-  2) SC8815：读取一个只读寄存器（如 `STATUS`）以判定是否应答；
-  3) SW2303：读取 `Device ID` 或 `SystemStatus` 类寄存器判定是否应答；
-  4) 记录通道发现结果。
+- 初始化/扫描策略（逐通道，串行）：
+  1) 通过 `Xca9545a::split()` 获得的 `i2c[ch]` 访问该通道，仅对 SC8815 做存在性 ACK 判定；
+  2) 若 SC8815 在线：完成初始化（外部电阻 `RS1/RS2=5mΩ`，`IBUS=5A`、`IBAT=6A`，`OTG`，`450kHz`，目标 `VBUS=5V`，使能 `ADC`/`OTG`），随后 MCU 拉低该路 `CE` 使能输出；
+  3) 轮询 SC8815 的 ADC，等待 `VBUS ≥ 4.0V`（≤1 s）；达标后初始化 SW2303；
+  4) 打印 `i2c.scan: ch=X sc8815=... sw2303=...`。若 SW2303 不在线，额外扫描 `0x30..0x3F` 打印 `sw2303_range=...` 辅助定位。
 - 发现结果日志（每通道一行）：
   - 正常：`i2c.scan: ch=0 sc8815=online sw2303=online`；
   - 异常（缺失其一）：`i2c.scan: ch=0 sc8815=online sw2303=offline`。
@@ -142,29 +142,28 @@
 
 ### 2.2 判定与周期任务
 
-#### 2.2.1 100 ms 资格判定
+#### 2.2.1 启动期资格判定（基于 INA226）
 
-- 触发条件：`PWR_SW_TARGET == Closed` 时执行；周期 `100 ms`。
+- 触发条件：上电启动阶段、闭合 `IN_EN` 之前执行，短暂重试（~5 次，20 ms 间隔）。
 - 计算：
   - `range_ok`：`9.0 V ≤ INA226.VBUS ≤ 24.0 V`；
-  - `vin_adc_low`：`VIN_ADC < 2.0 V`（ADC 端，未换算）；
-  - `ok_to_close = range_ok && vin_adc_low`。
-- 变化日志：仅当上述任一布尔量或原始量（`INA226.VBUS`、`VIN_ADC`）的判定结果发生变化时，打印一行 `info`：
-  - 示例：`pwr.in:chg ok_to_close=true range_ok=true vin_adc_low=true vbus=12.1V vin_adc=0.83V`。
-- 说明：该判定仅提供资格信息，不直接驱动硬件导通动作。
+  - `current_ok`：`|INA226.CURRENT| ≤ 10 mA`；
+  - `ok_to_close = range_ok && current_ok`。
+- 日志：每次读取打印一行 `info`：`pwr.in:qual vbus=..V i=..A range_ok= current_ok=`。
+- 成功后：闭合 `IN_EN`，并将本次 `VBUS/CURRENT` 写入共享测量，避免状态上报出现 `vin=n/a`。
+- `VIN_ADC` 不参与资格判定；仅在 `PG` 超时（100 ms）时单次读取用于诊断。
 
 #### 2.2.2 10 s 状态汇报
 
 - 周期：`10 s`，无条件输出一行状态：
-  - 字段：`vin`（INA226.VBUS, V）、`i`（INA226.CURRENT, A）、`sw`（PWR_SW_TARGET: open/closed）、`pg`（good/bad，由 IN_PG）、`ocp`（true/false）、`note`（可空）。
+  - 字段：`vin`（INA226.VBUS, V）、`i`（INA226.CURRENT, A）、`sw`（PWR_SW_TARGET: open/closed）、`pg`（good/bad，由 IN_PG）、`note`（可空）。
 - 判定：
   - `pg`：IN_PG 高为 `good`，低为 `bad`；
-  - `ocp`：当 `PWR_SW_TARGET == Closed` 且 `pg == bad`，判定可能触发过流/保护；
   - 异常：若 `PWR_SW_TARGET == Closed` 且 `pg == good`，但 `V_in_from_adc` 明显低于 `INA226.VBUS`，追加 `note` 告警：
     - 比值阈值：`V_in_from_adc / INA226.VBUS < 0.60`；
     - 或差值阈值：`INA226.VBUS - V_in_from_adc > 3.0 V`；
     - 示例：`note="anom: vin_adc<<ina_v (adc=4.2V, ina=12.1V)"`。
-- 示例：`pwr.in:stat vin=12.1V i=0.46A sw=closed pg=good ocp=false`。
+- 示例：`pwr.in:stat vin=12.1V i=0.46A sw=closed pg=good`。
 
 ### 2.3 边界与错误处理
 

@@ -9,6 +9,7 @@
 #![no_std]
 #![no_main]
 
+use core::sync::atomic::{AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -18,6 +19,7 @@ use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
+use sc8815::registers::Register as ScReg;
 
 // No global mutex in MVP
 
@@ -40,10 +42,14 @@ defmt::timestamp!("{=u64} ms", {
 
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
+#[repr(u8)]
 enum PowerSwitchTarget {
     Open,
     Closed,
 }
+
+// Global intent per docs/software_design.md 0.1
+static PWR_SW_TARGET: AtomicU8 = AtomicU8::new(PowerSwitchTarget::Open as u8);
 
 // No shared snapshot; status task logs directly
 
@@ -83,6 +89,11 @@ const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 // Anomaly detection thresholds (status task)
 const ADC_INA_RATIO_MIN: f32 = 0.60;
 const ADC_INA_DELTA_MAX_V: f32 = 3.0;
+
+// SC8815 VBUS readiness requirements
+const SC8815_VBUS_READY_MV: u16 = 4000;
+const SC8815_VBUS_READY_CONSECUTIVE: u8 = 2;
+const SC8815_VBUS_READY_INTERVAL_MS: u64 = 50;
 
 async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> bool {
     let mut buf = [0u8; 1];
@@ -180,7 +191,10 @@ async fn main(spawner: Spawner) {
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
-    // Upstream TCA6408A presence check (0x20) using async I2C
+    // Publish power-on intent first (only intent; actual switch controlled after qualification)
+    PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
+
+    // Upstream TCA6408A presence check (0x20) using async I2C — runs immediately after publishing intent
     let mut i2c = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
         .with_sda(p.GPIO8)
@@ -193,77 +207,28 @@ async fn main(spawner: Spawner) {
         warn!("i2c.front: tca6408a=offline addr=0x20");
     }
 
-    // I2C mux PCA9545A presence
-    if i2c.write_async(0x70, &[0x00]).await.is_ok() {
+    // I2C mux PCA9545A presence via reading control register (REG 0x00)
+    let mut mux_reg = [0u8; 1];
+    if embedded_hal_async::i2c::I2c::write_read(&mut i2c, 0x70, &[0x00], &mut mux_reg)
+        .await
+        .is_ok()
+    {
         info!("i2c.mux: ok addr=0x70 parts=4");
     } else {
         error!("i2c.mux: err=init addr=0x70");
         panic!("PCA9545A not found");
     }
 
-    let sc_addr = sc8815_const::DEFAULT_ADDRESS;
-    let sw_addr = sw2303_const::DEFAULT_ADDRESS;
-
-    // Per-channel: init SC8815 (async) then detect/init SW2303
-    for ch in 0u8..4u8 {
-        let _ = pca9545a_select(&mut i2c, ch).await;
-
-        let mut sc_ok = false;
-        {
-            let mut sc = sc8815::SC8815::new(&mut i2c, sc_addr);
-            if sc.init().await.is_ok() {
-                let _ = sc.set_otg_mode(true).await;
-                let _ = sc.set_vbus_internal_voltage(5000, 1).await;
-                match ch {
-                    0 => ce1.set_low(),
-                    1 => ce2.set_low(),
-                    2 => ce3.set_low(),
-                    3 => ce4.set_low(),
-                    _ => {}
-                }
-                for _ in 0..50 {
-                    if let Ok(meas) = sc.get_adc_measurements().await {
-                        if meas.vbus_mv >= 4000 {
-                            sc_ok = true;
-                            break;
-                        }
-                    }
-                    Timer::after(Duration::from_millis(20)).await;
-                }
+    // INA226 address probe by reading bus voltage register
+    let ina_addr = match ina226_read_bus_mv(&mut i2c, INA226_ADDR_PRIMARY).await {
+        Ok(_) => INA226_ADDR_PRIMARY,
+        Err(_) => match ina226_read_bus_mv(&mut i2c, INA226_ADDR_FALLBACK).await {
+            Ok(_) => INA226_ADDR_FALLBACK,
+            Err(_) => {
+                warn!("pwr.in: ina226=offline addr=0x44/0x40");
+                0
             }
-        }
-
-        let mut sw_ok = false;
-        if sc_ok {
-            let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
-            if sw.init().await.is_ok() {
-                sw_ok = true;
-            }
-        }
-
-        if sc_ok && sw_ok {
-            info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
-        } else {
-            info!(
-                "i2c.scan: ch={} sc8815={} sw2303={}",
-                ch,
-                if sc_ok { "online" } else { "offline" },
-                if sw_ok { "online" } else { "offline" }
-            );
-            if sc_ok ^ sw_ok {
-                error!("i2c.scan: ch={} anomaly=true reason=\"pair-mismatch\"", ch);
-            }
-        }
-    }
-
-    // INA226 address probe: prefer 0x44 if available, else 0x40
-    let ina_addr = if i2c.write_async(INA226_ADDR_PRIMARY, &[]).await.is_ok() {
-        INA226_ADDR_PRIMARY
-    } else if i2c.write_async(INA226_ADDR_FALLBACK, &[]).await.is_ok() {
-        INA226_ADDR_FALLBACK
-    } else {
-        warn!("pwr.in: ina226=offline addr=0x44/0x40");
-        0 // mark invalid
+        },
     };
 
     // ADC configuration for VIN sampling
@@ -302,15 +267,129 @@ async fn main(spawner: Spawner) {
         }
     }
 
-    // Determine target (intent) for status task
-    let target = if in_en.is_set_high() {
-        PowerSwitchTarget::Closed
+    // Wait until VIN is considered ON per docs: INA226 within range AND PG good
+    let mut vin_on = false;
+    let mut last_vbus_v = 0.0f32;
+    let mut last_pg_good = false;
+    if ina_addr != 0 {
+        for _ in 0..40 {
+            // up to ~2s
+            let pg_good = in_pg.is_high();
+            let v_mv = ina226_read_bus_mv(&mut i2c, ina_addr).await.unwrap_or(0.0);
+            let vbus_v = v_mv / 1000.0;
+            last_vbus_v = vbus_v;
+            last_pg_good = pg_good;
+            let range_ok = vbus_v >= VIN_MIN_V && vbus_v <= VIN_MAX_V;
+            if pg_good && range_ok {
+                vin_on = true;
+                break;
+            }
+            Timer::after(Duration::from_millis(50)).await;
+        }
+    }
+    if vin_on {
+        info!("pwr.in:vin_on=true vin={}V pg=good", last_vbus_v);
     } else {
-        PowerSwitchTarget::Open
-    };
+        warn!(
+            "pwr.in:vin_on=false vin={}V pg={}",
+            last_vbus_v,
+            if last_pg_good { "good" } else { "bad" }
+        );
+    }
+
+    // After VIN ON, scan SC8815 and conditionally init SW2303 per channel
+    let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+    let sw_addr = sw2303_const::DEFAULT_ADDRESS;
+    if vin_on {
+        info!("i2c.scan:start vin_on=true");
+        for ch in 0u8..4u8 {
+            let _ = pca9545a_select(&mut i2c, ch).await;
+
+            // Probe SC8815 by reading a status register
+            let mut sc_ok = false;
+            // SC8815 driver owns I2C; temporarily move and release back after use
+            let mut sc_drv = sc8815::SC8815::new(i2c, sc_addr);
+            let sc_present = sc_drv.read_register(ScReg::Status).await.is_ok();
+            if sc_present {
+                // Initialize SC8815 per design
+                if sc_drv.init().await.is_ok() {
+                    let _ = sc_drv.set_otg_mode(true).await;
+                    let _ = sc_drv.set_vbus_internal_voltage(5000, 1).await;
+                    match ch {
+                        0 => ce1.set_low(),
+                        1 => ce2.set_low(),
+                        2 => ce3.set_low(),
+                        3 => ce4.set_low(),
+                        _ => {}
+                    }
+                    // Require consecutive VBUS readings above threshold
+                    let mut consecutive = 0u8;
+                    for _ in 0..40 {
+                        // ~2s with 50ms intervals
+                        if let Ok(meas) = sc_drv.get_adc_measurements().await {
+                            if meas.vbus_mv >= SC8815_VBUS_READY_MV {
+                                consecutive += 1;
+                                if consecutive >= SC8815_VBUS_READY_CONSECUTIVE {
+                                    sc_ok = true;
+                                    break;
+                                }
+                            } else {
+                                consecutive = 0;
+                            }
+                        }
+                        Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
+                    }
+                }
+            }
+            // release I2C back from driver
+            i2c = sc_drv.release();
+
+            // Probe/init SW2303 if SC8815 VBUS ready
+            let mut sw_ok = false;
+            if sc_ok {
+                // Read SW2303 device ID register (0x00) for online detection
+                let mut id_buf = [0u8; 1];
+                let online = embedded_hal_async::i2c::I2c::write_read(
+                    &mut i2c,
+                    sw_addr,
+                    &[0x00],
+                    &mut id_buf,
+                )
+                .await
+                .is_ok();
+                if online {
+                    let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
+                    if sw.init().await.is_ok() {
+                        sw_ok = true;
+                    }
+                }
+            }
+
+            if sc_ok && sw_ok {
+                info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
+            } else {
+                info!(
+                    "i2c.scan: ch={} sc8815={} sw2303={}",
+                    ch,
+                    if sc_ok { "online" } else { "offline" },
+                    if sw_ok { "online" } else { "offline" }
+                );
+                if sc_ok && !sw_ok {
+                    warn!(
+                        "i2c.scan: ch={} anomaly=true reason=\"module-incomplete\"",
+                        ch
+                    );
+                } else if sc_ok ^ sw_ok {
+                    error!("i2c.scan: ch={} anomaly=true reason=\"pair-mismatch\"", ch);
+                }
+            }
+        }
+    } else {
+        warn!("pwr.in: vin_on=false; skip module scan");
+    }
 
     // Spawn periodic status task
-    spawner.spawn(status_task(ina_addr, target)).ok();
+    spawner.spawn(status_task(ina_addr)).ok();
 
     // Main loop idle
     loop {
@@ -319,7 +398,7 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn status_task(ina_addr: u8, target: PowerSwitchTarget) {
+async fn status_task(ina_addr: u8) {
     // Recreate peripherals locally
     let p = unsafe { esp_hal::peripherals::Peripherals::steal() };
     let mut i2c = I2c::new(p.I2C0, I2cConfig::default())
@@ -367,12 +446,16 @@ async fn status_task(ina_addr: u8, target: PowerSwitchTarget) {
         // PG
         let pg_good = in_pg.is_high();
 
-        // Capture target state
-        let sw_state = target;
-        let sw = match sw_state {
-            PowerSwitchTarget::Open => "open",
-            PowerSwitchTarget::Closed => "closed",
+        // Capture target state (intent) and actual (by PG)
+        let sw_state = match PWR_SW_TARGET.load(Ordering::Relaxed) {
+            x if x == PowerSwitchTarget::Closed as u8 => PowerSwitchTarget::Closed,
+            _ => PowerSwitchTarget::Open,
         };
+        let sw_intent = match sw_state {
+            PowerSwitchTarget::Open => "off",
+            PowerSwitchTarget::Closed => "on",
+        };
+        let sw_actual = if pg_good { "on" } else { "off" };
 
         // Anomaly note when closed & pg good
         let mut note: &str = "";
@@ -389,12 +472,13 @@ async fn status_task(ina_addr: u8, target: PowerSwitchTarget) {
             }
         }
 
-        // Log per spec
+        // Log per spec (use on/off; print both intent and actual)
         info!(
-            "pwr.in:stat vin={}V i={}A sw={} pg={}{}{}",
+            "pwr.in:stat vin={}V i={}A sw_intent={} sw_actual={} pg={}{}{}",
             vin_v,
             i_a,
-            sw,
+            sw_intent,
+            sw_actual,
             if pg_good { "good" } else { "bad" },
             if note.is_empty() { "" } else { " " },
             note

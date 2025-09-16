@@ -20,12 +20,19 @@ use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use sc8815::registers::Register as ScReg;
+// Shared I2C bus infrastructure
+use core::fmt::Write as _;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
+use static_cell::StaticCell;
 
 // No global mutex in MVP
 
 // We manually drive PCA9545A (0x70) via async I2C writes
 
-// INA226 minimal async helpers (manual register reads)
+// INA226 driver (ina226-tp, async)
+use ina226_tp as ina226;
 
 // Use SC8815/SW2303 crates only for their default I2C addresses
 use sc8815::registers::constants as sc8815_const;
@@ -39,6 +46,10 @@ defmt::timestamp!("{=u64} ms", {
         .duration_since_epoch()
         .as_millis()
 });
+
+// Type alias for the async I2C bus and a global container to share it
+type I2cBus = I2c<'static, esp_hal::Async>;
+static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2cBus>> = StaticCell::new();
 
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -71,9 +82,8 @@ const PIN_CE2: u8 = 18;
 const PIN_CE3: u8 = 39;
 const PIN_CE4: u8 = 40;
 
-// INA226 default addresses: docs prefer 0x40, field note suggests 0x44; probe both
-const INA226_ADDR_PRIMARY: u8 = 0x44;
-const INA226_ADDR_FALLBACK: u8 = 0x40;
+// INA226 fixed address (hardware-defined). No probing.
+const INA226_ADDR: u8 = 0x44;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
@@ -95,6 +105,53 @@ const SC8815_VBUS_READY_MV: u16 = 4000;
 const SC8815_VBUS_READY_CONSECUTIVE: u8 = 2;
 const SC8815_VBUS_READY_INTERVAL_MS: u64 = 50;
 
+// Minimal SC8815 status register address for ACK probe (per sc8815-rs README)
+const SC8815_STATUS_REG_ADDR: u8 = 0x17;
+
+// SC8815 detect retries to handle delayed device readiness (total ~2s)
+const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
+const SC8815_DETECT_TOTAL_MS: u64 = 2000; // overall grace per channel
+const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
+
+async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
+    i2c: &mut I2C,
+    addr: u8,
+) -> (bool, &'static str) {
+    let mut b = [0u8; 1];
+    if i2c
+        .write_read(addr, &[SC8815_STATUS_REG_ADDR], &mut b)
+        .await
+        .is_ok()
+    {
+        return (true, "wr_rd");
+    }
+    if i2c.read(addr, &mut b).await.is_ok() {
+        return (true, "rd");
+    }
+    if i2c.write(addr, &[]).await.is_ok() {
+        return (true, "addr");
+    }
+    (false, "no")
+}
+
+async fn i2c_scan_found<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> heapless::Vec<u8, 16> {
+    let mut found: heapless::Vec<u8, 16> = heapless::Vec::new();
+    let mut tmp = [0u8; 1];
+    for addr in 0x03u8..0x78u8 {
+        if embedded_hal_async::i2c::I2c::read(i2c, addr, &mut tmp)
+            .await
+            .is_ok()
+        {
+            let _ = found.push(addr);
+            if found.is_full() {
+                break;
+            }
+        }
+        Timer::after(Duration::from_millis(1)).await;
+    }
+    found
+}
+
 async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> bool {
     let mut buf = [0u8; 1];
     i2c.write_read(0x20, &[0x00], &mut buf).await.is_ok()
@@ -108,27 +165,7 @@ async fn pca9545a_select<I2C: embedded_hal_async::i2c::I2c>(
     i2c.write(0x70, &[mask]).await
 }
 
-async fn ina226_read_bus_mv<I2C: embedded_hal_async::i2c::I2c>(
-    i2c: &mut I2C,
-    addr: u8,
-) -> Result<f32, I2C::Error> {
-    // Bus voltage register 0x02, 16-bit BE, LSB = 1.25mV
-    let mut buf = [0u8; 2];
-    i2c.write_read(addr, &[0x02], &mut buf).await?;
-    let raw = u16::from_be_bytes(buf) as u32;
-    Ok(raw as f32 * 1.25)
-}
-
-async fn ina226_read_shunt_uv<I2C: embedded_hal_async::i2c::I2c>(
-    i2c: &mut I2C,
-    addr: u8,
-) -> Result<f32, I2C::Error> {
-    // Shunt voltage register 0x01, signed 16-bit, LSB = 2.5uV
-    let mut buf = [0u8; 2];
-    i2c.write_read(addr, &[0x01], &mut buf).await?;
-    let raw = i16::from_be_bytes(buf) as i32;
-    Ok(raw as f32 * 2.5)
-}
+// No extra helpers for INA226 per request; use driver inline at call sites
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -195,11 +232,14 @@ async fn main(spawner: Spawner) {
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
     // Upstream TCA6408A presence check (0x20) using async I2C — runs immediately after publishing intent
-    let mut i2c = I2c::new(p.I2C0, I2cConfig::default())
+    // Initialize I2C0 once and share via Mutex + I2cDevice
+    let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
         .with_sda(p.GPIO8)
         .with_scl(p.GPIO9)
         .into_async();
+    let bus = I2C_BUS.init(Mutex::new(i2c_hw));
+    let mut i2c = I2cDevice::new(bus);
     let tca_online = tca6408a_present(&mut i2c).await;
     if tca_online {
         info!("i2c.front: tca6408a=online addr=0x20");
@@ -219,16 +259,13 @@ async fn main(spawner: Spawner) {
         panic!("PCA9545A not found");
     }
 
-    // INA226 address probe by reading bus voltage register
-    let ina_addr = match ina226_read_bus_mv(&mut i2c, INA226_ADDR_PRIMARY).await {
-        Ok(_) => INA226_ADDR_PRIMARY,
-        Err(_) => match ina226_read_bus_mv(&mut i2c, INA226_ADDR_FALLBACK).await {
-            Ok(_) => INA226_ADDR_FALLBACK,
-            Err(_) => {
-                warn!("pwr.in: ina226=offline addr=0x44/0x40");
-                0
-            }
-        },
+    // INA226 initialize at fixed address and keep single initialized instance
+    let mut ina = {
+        let mut dev = ina226::INA226::new(None);
+        dev.set_ina_address(INA226_ADDR);
+        dev.initialize(&mut i2c)
+            .await
+            .unwrap_or_else(|_| panic!("INA226 init failed at fixed address 0x{:02X}", INA226_ADDR))
     };
 
     // ADC configuration for VIN sampling
@@ -236,56 +273,52 @@ async fn main(spawner: Spawner) {
     let mut vin_pin = adc_cfg.enable_pin(p.GPIO4, Attenuation::_11dB);
     let mut adc1 = Adc::new(p.ADC1, adc_cfg);
 
-    // Startup qualification: read INA226 up to 5 times, 20 ms apart
-    if ina_addr != 0 {
-        let mut ok_to_close = false;
-        for _ in 0..5 {
-            let v_mv = ina226_read_bus_mv(&mut i2c, ina_addr).await.unwrap_or(0.0);
-            let vbus_v = v_mv / 1000.0;
-            let sh_uv = ina226_read_shunt_uv(&mut i2c, ina_addr)
-                .await
-                .unwrap_or(0.0);
-            let ishunt_a = (sh_uv / 1_000_000.0) / SHUNT_RESISTANCE_OHMS;
-            let range_ok = vbus_v >= VIN_MIN_V && vbus_v <= VIN_MAX_V;
-            let current_ok = ishunt_a.abs() <= I_IDLE_MAX_A;
-            info!(
-                "pwr.in:qual vbus={}V i={}A range_ok={} current_ok={}",
-                vbus_v, ishunt_a, range_ok, current_ok
-            );
-            if range_ok && current_ok {
-                ok_to_close = true;
-                break;
-            }
-            Timer::after(Duration::from_millis(20)).await;
-        }
+    // Use the single INA226 instance `ina` for qualification and VIN_ON
 
-        if ok_to_close {
-            in_en.set_high();
-        } else {
-            warn!("pwr.in:qual failed; keep switch open");
-            in_en.set_low();
+    // Startup qualification: read INA226 up to 5 times, 20 ms apart
+    let mut ok_to_close = false;
+    for _ in 0..5 {
+        let vbus_v = ina.read_voltage().await as f32;
+        let sh_uv = (ina.read_shunt_voltage().await as f32) * 1_000_000.0;
+        let ishunt_a = (sh_uv / 1_000_000.0) / SHUNT_RESISTANCE_OHMS;
+        let range_ok = vbus_v >= VIN_MIN_V && vbus_v <= VIN_MAX_V;
+        let current_ok = ishunt_a.abs() <= I_IDLE_MAX_A;
+        info!(
+            "pwr.in:qual vbus={}V i={}A range_ok={} current_ok={}",
+            vbus_v, ishunt_a, range_ok, current_ok
+        );
+        if range_ok && current_ok {
+            ok_to_close = true;
+            break;
         }
+        Timer::after(Duration::from_millis(20)).await;
     }
+
+    if ok_to_close {
+        in_en.set_high();
+    } else {
+        warn!("pwr.in:qual failed; keep switch open");
+        in_en.set_low();
+    }
+
+    // VIN status computed using INA226 below; will drop INA226 instance after VIN checks
 
     // Wait until VIN is considered ON per docs: INA226 within range AND PG good
     let mut vin_on = false;
     let mut last_vbus_v = 0.0f32;
     let mut last_pg_good = false;
-    if ina_addr != 0 {
-        for _ in 0..40 {
-            // up to ~2s
-            let pg_good = in_pg.is_high();
-            let v_mv = ina226_read_bus_mv(&mut i2c, ina_addr).await.unwrap_or(0.0);
-            let vbus_v = v_mv / 1000.0;
-            last_vbus_v = vbus_v;
-            last_pg_good = pg_good;
-            let range_ok = vbus_v >= VIN_MIN_V && vbus_v <= VIN_MAX_V;
-            if pg_good && range_ok {
-                vin_on = true;
-                break;
-            }
-            Timer::after(Duration::from_millis(50)).await;
+    for _ in 0..40 {
+        // up to ~2s
+        let pg_good = in_pg.is_high();
+        let vbus_v = ina.read_voltage().await as f32;
+        last_vbus_v = vbus_v;
+        last_pg_good = pg_good;
+        let range_ok = vbus_v >= VIN_MIN_V && vbus_v <= VIN_MAX_V;
+        if pg_good && range_ok {
+            vin_on = true;
+            break;
         }
+        Timer::after(Duration::from_millis(50)).await;
     }
     if vin_on {
         info!("pwr.in:vin_on=true vin={}V pg=good", last_vbus_v);
@@ -303,13 +336,43 @@ async fn main(spawner: Spawner) {
     if vin_on {
         info!("i2c.scan:start vin_on=true");
         for ch in 0u8..4u8 {
-            let _ = pca9545a_select(&mut i2c, ch).await;
+            let select_ok = pca9545a_select(&mut i2c, ch).await.is_ok();
+            // read back mux control register for confirmation
+            let mut mux_reg = [0u8; 1];
+            let ctrl_read_ok =
+                embedded_hal_async::i2c::I2c::write_read(&mut i2c, 0x70, &[0x00], &mut mux_reg)
+                    .await
+                    .is_ok();
+            info!(
+                "i2c.mux: ch={} select={} ctrl_read={} reg=0x{:02X}",
+                ch,
+                if select_ok { "ok" } else { "err" },
+                if ctrl_read_ok { "ok" } else { "err" },
+                mux_reg[0]
+            );
+            // small settle time after mux switch
+            Timer::after(Duration::from_millis(2)).await;
 
-            // Probe SC8815 by reading a status register
+            // Pre-probe ACK on expected address with retries
+            let mut sc_ack = false;
+            let mut ack_method = "no";
+            let mut tries: u8 = 0;
+            for attempt in 0..SC8815_DETECT_RETRIES {
+                let (ok, method) = sc8815_ack(&mut i2c, sc_addr).await;
+                tries = attempt + 1;
+                if ok {
+                    sc_ack = true;
+                    ack_method = method;
+                    break;
+                }
+                Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
+            }
+
+            // Probe SC8815 by reading a status register (only if ACK)
             let mut sc_ok = false;
             // SC8815 driver owns I2C; temporarily move and release back after use
             let mut sc_drv = sc8815::SC8815::new(i2c, sc_addr);
-            let sc_present = sc_drv.read_register(ScReg::Status).await.is_ok();
+            let sc_present = sc_ack && sc_drv.read_register(ScReg::Status).await.is_ok();
             if sc_present {
                 // Initialize SC8815 per design
                 if sc_drv.init().await.is_ok() {
@@ -330,6 +393,10 @@ async fn main(spawner: Spawner) {
                             if meas.vbus_mv >= SC8815_VBUS_READY_MV {
                                 consecutive += 1;
                                 if consecutive >= SC8815_VBUS_READY_CONSECUTIVE {
+                                    info!(
+                                        "pwr.sc8815: ch={} vbus_ready=true vbus={}mV",
+                                        ch, meas.vbus_mv
+                                    );
                                     sc_ok = true;
                                     break;
                                 }
@@ -365,6 +432,33 @@ async fn main(spawner: Spawner) {
                 }
             }
 
+            // Always report ACK result to aid debug
+            info!(
+                "i2c.scan: ch={} mux_reg=0x{:02X} sc8815_ack={} via={} tries={}",
+                ch,
+                mux_reg[0],
+                if sc_ack { "yes" } else { "no" },
+                ack_method,
+                tries
+            );
+
+            if !sc_ack {
+                let found = i2c_scan_found(&mut i2c).await;
+                if !found.is_empty() {
+                    let mut line: heapless::String<128> = heapless::String::new();
+                    for (i, a) in found.iter().enumerate() {
+                        let _ = if i == 0 {
+                            write!(line, "0x{:02X}", a)
+                        } else {
+                            write!(line, ",0x{:02X}", a)
+                        };
+                    }
+                    info!("i2c.scan: ch={} found=[{}]", ch, line.as_str());
+                } else {
+                    info!("i2c.scan: ch={} found=[]", ch);
+                }
+            }
+
             if sc_ok && sw_ok {
                 info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
             } else {
@@ -385,27 +479,45 @@ async fn main(spawner: Spawner) {
             }
         }
     } else {
-        warn!("pwr.in: vin_on=false; skip module scan");
+        warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
+        // Even if VIN isn't considered ON, try an ACK-only scan per channel to aid debugging
+        let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+        for ch in 0u8..4u8 {
+            let _ = pca9545a_select(&mut i2c, ch).await;
+            // brief settle
+            Timer::after(Duration::from_millis(2)).await;
+            let mut present = false;
+            let mut method = "no";
+            let mut tries: u8 = 0;
+            for attempt in 0..SC8815_DETECT_RETRIES {
+                let (ok, m) = sc8815_ack(&mut i2c, sc_addr).await;
+                tries = attempt + 1;
+                if ok {
+                    present = true;
+                    method = m;
+                    break;
+                }
+                Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
+            }
+            info!(
+                "i2c.scan: ch={} sc8815_ack={} via={} tries={} vin_on=false",
+                ch,
+                if present { "yes" } else { "no" },
+                method,
+                tries
+            );
+        }
     }
 
-    // Spawn periodic status task
-    spawner.spawn(status_task(ina_addr)).ok();
-
-    // Main loop idle
-    loop {
-        Timer::after(Duration::from_secs(60)).await;
-    }
+    // Periodic status log using the single INA226 instance
+    loop { /* LOG_PLACEHOLDER */ }
 }
 
 #[embassy_executor::task]
-async fn status_task(ina_addr: u8) {
-    // Recreate peripherals locally
+async fn status_task(bus: &'static Mutex<NoopRawMutex, I2cBus>) {
+    // Recreate peripherals locally for ADC/PG, but reuse shared I2C bus
     let p = unsafe { esp_hal::peripherals::Peripherals::steal() };
-    let mut i2c = I2c::new(p.I2C0, I2cConfig::default())
-        .unwrap()
-        .with_sda(p.GPIO8)
-        .with_scl(p.GPIO9)
-        .into_async();
+    let mut i2c = I2cDevice::new(bus);
     let mut adc_cfg = AdcConfig::new();
     let mut vin_pin = adc_cfg.enable_pin(p.GPIO4, Attenuation::_11dB);
     let mut adc1 = Adc::new(p.ADC1, adc_cfg);
@@ -414,20 +526,21 @@ async fn status_task(ina_addr: u8) {
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
 
+    // Single INA226 instance for this task
+    let mut ina_dev = ina226::INA226::new(None);
+    ina_dev.set_ina_address(INA226_ADDR);
+    let mut ina = ina_dev
+        .initialize(&mut i2c)
+        .await
+        .unwrap_or_else(|_| panic!("INA226 init failed in status_task"));
+
     loop {
         // Read INA226
         let mut vin_v = core::f32::NAN;
         let mut i_a = core::f32::NAN;
-        if ina_addr != 0 {
-            match ina226_read_bus_mv(&mut i2c, ina_addr).await {
-                Ok(mv) => vin_v = mv / 1000.0,
-                Err(_) => warn!("pwr.in:read warn=ina_vbus"),
-            }
-            match ina226_read_shunt_uv(&mut i2c, ina_addr).await {
-                Ok(uv) => i_a = (uv / 1_000_000.0) / SHUNT_RESISTANCE_OHMS,
-                Err(_) => warn!("pwr.in:read warn=ina_shunt"),
-            }
-        }
+        vin_v = ina.read_voltage().await as f32;
+        let uv = (ina.read_shunt_voltage().await as f32) * 1_000_000.0;
+        i_a = (uv / 1_000_000.0) / SHUNT_RESISTANCE_OHMS;
 
         // Read ADC
         let vin_adc_v = match nb::block!(adc1.read_oneshot(&mut vin_pin)) {

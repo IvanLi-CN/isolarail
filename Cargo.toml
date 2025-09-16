@@ -20,6 +20,7 @@ xca9548a = "1"
 port-expander = "0.6"
 sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", default-features = false, features = ["async"] }
 sw2303 = { git = "https://github.com/IvanLi-CN/sw2303-rs", default-features = false, features = ["async"] }
+ina226-tp = { version = "0.4", default-features = false, features = ["async"] }
 defmt = "1"
 esp-backtrace = { version = "0.17.0", features = [
     "esp32s3",

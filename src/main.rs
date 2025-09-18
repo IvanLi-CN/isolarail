@@ -155,6 +155,34 @@ async fn pca9545a_select<I2C: embedded_hal_async::i2c::I2c>(
     i2c.write(0x70, &[mask]).await
 }
 
+async fn ack_scan_vin_off(bus: &'static SharedI2cBus, sc_addr: u8) {
+    for ch in 0u8..4u8 {
+        let mut i2c_scan = I2cDevice::new(bus);
+        let _ = pca9545a_select(&mut i2c_scan, ch).await;
+        Timer::after(Duration::from_millis(2)).await;
+        let mut present = false;
+        let mut method = "no";
+        let mut tries: u8 = 0;
+        for attempt in 0..SC8815_DETECT_RETRIES {
+            let (ok, m) = sc8815_ack(&mut i2c_scan, sc_addr).await;
+            tries = attempt + 1;
+            if ok {
+                present = true;
+                method = m;
+                break;
+            }
+            Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
+        }
+        info!(
+            "i2c.scan: ch={} sc8815_ack={} via={} tries={} vin_on=false",
+            ch,
+            if present { "yes" } else { "no" },
+            method,
+            tries
+        );
+    }
+}
+
 // No extra helpers for INA226 per request; use driver inline at call sites
 
 #[esp_hal_embassy::main]
@@ -289,8 +317,14 @@ async fn main(spawner: Spawner) {
         .spawn(power_in_log_task(power_in::status_receiver()))
         .expect("spawn power_in_log_task");
 
-    // Wait for VIN_ON signal before scanning SC8815 modules
-    power_in::vin_on_signal().wait().await;
+    // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
+    let vin_on = power_in::vin_on_signal().wait().await;
+    if !vin_on {
+        warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
+        let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+        ack_scan_vin_off(bus, sc_addr).await;
+        return;
+    }
 
     // After VIN ON, scan SC8815 and conditionally init SW2303 per channel
     let sc_addr = sc8815_const::DEFAULT_ADDRESS;

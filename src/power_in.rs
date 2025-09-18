@@ -44,13 +44,13 @@ pub struct Status {
 }
 
 static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
-static VIN_ON_SIG: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
 pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8> {
     STATUS_CH.receiver()
 }
 
-pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, ()> {
+pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &VIN_ON_SIG
 }
 
@@ -96,9 +96,7 @@ async fn task(
     }
 
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
-    if vin_on_state.vin_on {
-        VIN_ON_SIG.signal(());
-    }
+    VIN_ON_SIG.signal(vin_on_state.vin_on);
 
     loop {
         let status = sample_status(
@@ -118,7 +116,7 @@ async fn task(
         );
         if status.vin_on && !vin_on_state.vin_on {
             info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
-            VIN_ON_SIG.signal(());
+            VIN_ON_SIG.signal(true);
         }
         vin_on_state.vin_on |= status.vin_on;
 

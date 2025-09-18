@@ -298,9 +298,8 @@ async fn main(spawner: Spawner) {
     info!("i2c.scan:start vin_on=true");
     for ch in 0u8..4u8 {
         let mut i2c_scan = I2cDevice::new(bus);
-        let select_ok = pca9545a_select(&mut i2c_scan, ch).await.is_ok();
-        // read back mux control register for confirmation
         let mut mux_reg = [0u8; 1];
+        let select_ok = pca9545a_select(&mut i2c_scan, ch).await.is_ok();
         let ctrl_read_ok =
             embedded_hal_async::i2c::I2c::write_read(&mut i2c_scan, 0x70, &[0x00], &mut mux_reg)
                 .await
@@ -312,24 +311,18 @@ async fn main(spawner: Spawner) {
             if ctrl_read_ok { "ok" } else { "err" },
             mux_reg[0]
         );
-        // Ensure the SC8815 on this channel is not held in hardware disable.
-        // Datasheet states PSTOP is active-low; drive low before probing so the
-        // controller can acknowledge I2C while we keep outputs off via register defaults.
-        match ch {
-            0 => pstop1.set_low(),
-            1 => pstop2.set_low(),
-            2 => pstop3.set_low(),
-            3 => pstop4.set_low(),
-            _ => {}
-        }
-        // give the downstream rail a brief window after mux + PSTOP before probing
-        Timer::after(Duration::from_millis(10)).await;
+        // small settle time after mux switch to let downstream devices wake
+        Timer::after(Duration::from_millis(2)).await;
 
-        // Pre-probe ACK on expected address with retries
+        // Pre-probe ACK on expected address with retries.
         let mut sc_ack = false;
         let mut ack_method = "no";
         let mut tries: u8 = 0;
         for attempt in 0..SC8815_DETECT_RETRIES {
+            if attempt > 0 {
+                let _ = pca9545a_select(&mut i2c_scan, ch).await;
+                Timer::after(Duration::from_millis(2)).await;
+            }
             let (ok, method) = sc8815_ack(&mut i2c_scan, sc_addr).await;
             tries = attempt + 1;
             if ok {

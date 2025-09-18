@@ -234,8 +234,7 @@ async fn wait_vin_on<I2C: I2c>(
 }
 
 async fn read_signed_shunt_voltage<I2C: I2c>(ina: &mut InaOp<'_, I2C>) -> f32 {
-    // INA226 shunt register is a signed 16-bit value (two's complement);
-    // reinterpret the raw u16 before converting to volts.
+    // INA226 shunt register is a signed 16-bit value (two's complement); convert before scaling.
     let raw = ina.read_raw_shunt_voltage().await;
     let signed = i16::from_be_bytes(raw.to_be_bytes());
     signed as f32 * INA226_SHUNT_LSB_V

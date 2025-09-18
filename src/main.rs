@@ -12,17 +12,24 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
+use embassy_futures::block_on;
 use embassy_time::{Duration, Timer};
+use embedded_hal::i2c::I2c as _;
+use embedded_hal_async::i2c::I2c as _;
 use esp_backtrace as _;
 use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use sc8815::registers::Register as ScReg;
+use sc8815::{
+    CellCount, DeadTime, DeviceConfiguration, OperatingMode, SwitchingFrequency, VoltagePerCell,
+};
 // Shared I2C bus infrastructure
 use core::fmt::Write as _;
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_embedded_hal::shared_bus::I2cDeviceError;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
@@ -37,6 +44,7 @@ use static_cell::StaticCell;
 // Use SC8815/SW2303 crates only for their default I2C addresses
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
+use xca9548a::{I2cSlave, SlaveAddr as PcaSlaveAddr, Xca9545a};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -51,6 +59,12 @@ defmt::timestamp!("{=u64} ms", {
 type I2cBus = I2c<'static, esp_hal::Async>;
 type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
 static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
+static PCA9545: StaticCell<Xca9545a<AsyncBusBlocking>> = StaticCell::new();
+static PCA_CH0: StaticCell<MuxChannelMutex> = StaticCell::new();
+static PCA_CH1: StaticCell<MuxChannelMutex> = StaticCell::new();
+static PCA_CH2: StaticCell<MuxChannelMutex> = StaticCell::new();
+static PCA_CH3: StaticCell<MuxChannelMutex> = StaticCell::new();
+static mut PCA_CHANNELS: Option<[&'static MuxChannelMutex; 4]> = None;
 
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -68,18 +82,28 @@ static PWR_SW_TARGET: AtomicU8 = AtomicU8::new(PowerSwitchTarget::Open as u8);
 // I2C shared in init (blocking). We do not share across tasks for MVP; INA226 is accessed in tasks
 
 // Board-specific pins per docs/esp32-s3fh4r2_gpio_assignment_guide.md
+#[allow(dead_code)]
 const PIN_I2C_SDA: u8 = 8;
+#[allow(dead_code)]
 const PIN_I2C_SCL: u8 = 9;
+#[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
+#[allow(dead_code)]
 const PIN_I2C_RESET: u8 = 38; // open-drain, low to reset I2C peripherals
 
+#[allow(dead_code)]
 const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
+#[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
 // SC8815 PSTOP control lines (active-low enable)
+#[allow(dead_code)]
 const PIN_PSTOP1: u8 = 17;
+#[allow(dead_code)]
 const PIN_PSTOP2: u8 = 18;
+#[allow(dead_code)]
 const PIN_PSTOP3: u8 = 39;
+#[allow(dead_code)]
 const PIN_PSTOP4: u8 = 40;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
@@ -95,6 +119,32 @@ const SC8815_VBUS_READY_MV: u16 = 4000;
 const SC8815_VBUS_READY_CONSECUTIVE: u8 = 2;
 const SC8815_VBUS_READY_INTERVAL_MS: u64 = 50;
 
+const SC8815_OUTPUT_VOLTAGE_MV: u16 = 5000;
+const SC8815_VBUS_RATIO: u8 = 1; // 5x ratio per esp32c3 demo reference
+const SC8815_IBUS_LIMIT_MA: u16 = 5000;
+const SC8815_IBAT_LIMIT_MA: u16 = 6000;
+const SC8815_RS1_MOHM: u16 = 5;
+const SC8815_RS2_MOHM: u16 = 5;
+
+fn sc8815_default_device_config() -> DeviceConfiguration {
+    let mut config = DeviceConfiguration::default();
+    config.battery.cell_count = CellCount::Cells4S;
+    config.battery.voltage_per_cell = VoltagePerCell::Mv4200;
+    config.battery.use_internal_setting = true;
+    config.current_limits.rs1_mohm = SC8815_RS1_MOHM;
+    config.current_limits.rs2_mohm = SC8815_RS2_MOHM;
+    config.current_limits.ibus_limit_ma = SC8815_IBUS_LIMIT_MA;
+    config.current_limits.ibat_limit_ma = SC8815_IBAT_LIMIT_MA;
+    config.power.operating_mode = OperatingMode::OTG;
+    config.power.switching_frequency = SwitchingFrequency::Freq450kHz;
+    config.power.dead_time = DeadTime::Ns80;
+    config.power.vinreg_voltage_mv = SC8815_OUTPUT_VOLTAGE_MV;
+    config.trickle_charging = false;
+    config.charging_termination = false;
+    config.use_ibus_for_charging = false;
+    config
+}
+
 // Minimal SC8815 status register address for ACK probe (per sc8815-rs README)
 const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 
@@ -102,6 +152,178 @@ const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
 const SC8815_DETECT_TOTAL_MS: u64 = 2000; // overall grace per channel
 const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
+
+fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static str {
+    use sc8815::error::Error::*;
+    match err {
+        I2c(_) => "i2c",
+        InvalidRegisterOrParameter => "invalid_reg",
+        InvalidParameter => "invalid_param",
+        DeviceNotResponding => "no_device",
+        Timeout => "timeout",
+        PowerConfigError => "power_config",
+        InitializationFailed => "init_failed",
+        InvalidDeviceState => "bad_state",
+        OvercurrentDetected => "overcurrent",
+        OvervoltageDetected => "overvoltage",
+        ThermalProtection => "thermal",
+        BatteryError => "battery",
+        ChargingError => "charging",
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AsyncBusBlocking {
+    bus: &'static SharedI2cBus,
+}
+
+impl AsyncBusBlocking {
+    fn new(bus: &'static SharedI2cBus) -> Self {
+        Self { bus }
+    }
+
+    fn with_device<F, Fut, R>(&self, f: F) -> Result<R, MuxBusError>
+    where
+        F: FnOnce(I2cDevice<'static, CriticalSectionRawMutex, I2cBus>) -> Fut,
+        Fut: core::future::Future<Output = Result<R, I2cDeviceError<esp_hal::i2c::master::Error>>>,
+    {
+        let result = block_on(f(I2cDevice::new(self.bus)));
+        result.map_err(MuxBusError::from)
+    }
+}
+
+#[derive(Debug)]
+struct MuxBusError(I2cDeviceError<esp_hal::i2c::master::Error>);
+
+impl MuxBusError {
+    fn kind_from_hal(err: &esp_hal::i2c::master::Error) -> embedded_hal::i2c::ErrorKind {
+        use embedded_hal::i2c::{ErrorKind, NoAcknowledgeSource};
+        match err {
+            esp_hal::i2c::master::Error::FifoExceeded => ErrorKind::Other,
+            esp_hal::i2c::master::Error::AcknowledgeCheckFailed(reason) => {
+                ErrorKind::NoAcknowledge(NoAcknowledgeSource::from(reason))
+            }
+            esp_hal::i2c::master::Error::Timeout => ErrorKind::Other,
+            esp_hal::i2c::master::Error::ArbitrationLost => ErrorKind::ArbitrationLoss,
+            esp_hal::i2c::master::Error::ExecutionIncomplete => ErrorKind::Other,
+            esp_hal::i2c::master::Error::CommandNumberExceeded => ErrorKind::Other,
+            esp_hal::i2c::master::Error::ZeroLengthInvalid => ErrorKind::Other,
+            esp_hal::i2c::master::Error::AddressInvalid(_) => ErrorKind::Bus,
+            _ => ErrorKind::Other,
+        }
+    }
+}
+
+impl From<I2cDeviceError<esp_hal::i2c::master::Error>> for MuxBusError {
+    fn from(value: I2cDeviceError<esp_hal::i2c::master::Error>) -> Self {
+        Self(value)
+    }
+}
+
+impl embedded_hal::i2c::Error for MuxBusError {
+    fn kind(&self) -> embedded_hal::i2c::ErrorKind {
+        match &self.0 {
+            I2cDeviceError::I2c(err) => Self::kind_from_hal(err),
+            I2cDeviceError::Config => embedded_hal::i2c::ErrorKind::Other,
+        }
+    }
+}
+
+impl embedded_hal::i2c::ErrorType for AsyncBusBlocking {
+    type Error = MuxBusError;
+}
+
+impl embedded_hal::i2c::I2c for AsyncBusBlocking {
+    fn read(&mut self, address: u8, read: &mut [u8]) -> Result<(), Self::Error> {
+        self.with_device(|mut dev| async move { dev.read(address, read).await })
+    }
+
+    fn write(&mut self, address: u8, write: &[u8]) -> Result<(), Self::Error> {
+        self.with_device(|mut dev| async move { dev.write(address, write).await })
+    }
+
+    fn write_read(
+        &mut self,
+        address: u8,
+        write: &[u8],
+        read: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        self.with_device(|mut dev| async move { dev.write_read(address, write, read).await })
+    }
+
+    fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal::i2c::Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        self.with_device(|mut dev| async move { dev.transaction(address, operations).await })
+    }
+}
+
+type MuxChannelMutex =
+    Mutex<CriticalSectionRawMutex, I2cSlave<'static, Xca9545a<AsyncBusBlocking>, AsyncBusBlocking>>;
+
+struct ChannelDevice {
+    mutex: &'static MuxChannelMutex,
+    mask: u8,
+}
+
+impl ChannelDevice {
+    fn new(mutex: &'static MuxChannelMutex, mask: u8) -> Self {
+        Self { mutex, mask }
+    }
+
+    fn mask(&self) -> u8 {
+        self.mask
+    }
+}
+
+impl embedded_hal_async::i2c::ErrorType for ChannelDevice {
+    type Error = xca9548a::Error<MuxBusError>;
+}
+
+impl embedded_hal_async::i2c::I2c for ChannelDevice {
+    async fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal::i2c::Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        let mut guard = self.mutex.lock().await;
+        guard.transaction(address, operations)
+    }
+
+    async fn write(&mut self, address: u8, write: &[u8]) -> Result<(), Self::Error> {
+        let mut guard = self.mutex.lock().await;
+        guard.write(address, write)
+    }
+
+    async fn read(&mut self, address: u8, read: &mut [u8]) -> Result<(), Self::Error> {
+        let mut guard = self.mutex.lock().await;
+        guard.read(address, read)
+    }
+
+    async fn write_read(
+        &mut self,
+        address: u8,
+        write: &[u8],
+        read: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        let mut guard = self.mutex.lock().await;
+        guard.write_read(address, write, read)
+    }
+}
+
+#[allow(static_mut_refs)]
+fn mux_channel(ch: u8) -> ChannelDevice {
+    let channels = unsafe {
+        PCA_CHANNELS
+            .as_ref()
+            .expect("PCA9545 channels not initialized")
+    };
+    let idx = (ch & 0x03) as usize;
+    let mask = 1u8 << idx;
+    ChannelDevice::new(channels[idx], mask)
+}
 
 async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
     i2c: &mut I2C,
@@ -147,18 +369,9 @@ async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> b
     i2c.write_read(0x20, &[0x00], &mut buf).await.is_ok()
 }
 
-async fn pca9545a_select<I2C: embedded_hal_async::i2c::I2c>(
-    i2c: &mut I2C,
-    ch: u8,
-) -> Result<(), I2C::Error> {
-    let mask = 1u8 << (ch & 0x03);
-    i2c.write(0x70, &[mask]).await
-}
-
-async fn ack_scan_vin_off(bus: &'static SharedI2cBus, sc_addr: u8) {
+async fn ack_scan_vin_off(sc_addr: u8) {
     for ch in 0u8..4u8 {
-        let mut i2c_scan = I2cDevice::new(bus);
-        let _ = pca9545a_select(&mut i2c_scan, ch).await;
+        let mut i2c_scan = mux_channel(ch);
         Timer::after(Duration::from_millis(2)).await;
         let mut present = false;
         let mut method = "no";
@@ -174,8 +387,9 @@ async fn ack_scan_vin_off(bus: &'static SharedI2cBus, sc_addr: u8) {
             Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
         }
         info!(
-            "i2c.scan: ch={} sc8815_ack={} via={} tries={} vin_on=false",
+            "i2c.scan: ch={} mux_reg=0x{:02X} sc8815_ack={} via={} tries={} vin_on=false",
             ch,
+            i2c_scan.mask(),
             if present { "yes" } else { "no" },
             method,
             tries
@@ -210,7 +424,7 @@ async fn main(spawner: Spawner) {
     Timer::after(Duration::from_millis(5)).await;
 
     // IN_EN default off
-    let mut in_en = Output::new(p.GPIO41, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let in_en = Output::new(p.GPIO41, Level::Low, esp_hal::gpio::OutputConfig::default());
     // PG input
     let in_pg = Input::new(
         p.GPIO42,
@@ -265,16 +479,23 @@ async fn main(spawner: Spawner) {
         warn!("i2c.front: tca6408a=offline addr=0x20");
     }
 
-    // I2C mux PCA9545A presence via reading control register (REG 0x00)
-    let mut mux_reg = [0u8; 1];
-    if embedded_hal_async::i2c::I2c::write_read(&mut i2c, 0x70, &[0x00], &mut mux_reg)
-        .await
-        .is_ok()
-    {
-        info!("i2c.mux: ok addr=0x70 parts=4");
-    } else {
-        error!("i2c.mux: err=init addr=0x70");
-        panic!("PCA9545A not found");
+    // I2C mux PCA9545A initialization via dedicated driver
+    let mut mux_temp = Xca9545a::new(AsyncBusBlocking::new(bus), PcaSlaveAddr::default());
+    match mux_temp.get_channel_status() {
+        Ok(status) => info!("i2c.mux: ok addr=0x70 parts=4 status=0x{:02X}", status),
+        Err(_) => {
+            error!("i2c.mux: err=init addr=0x70");
+            panic!("PCA9545A not found");
+        }
+    }
+    let mux = PCA9545.init(mux_temp);
+    let parts = mux.split();
+    let ch0_mutex = PCA_CH0.init(Mutex::new(parts.i2c0));
+    let ch1_mutex = PCA_CH1.init(Mutex::new(parts.i2c1));
+    let ch2_mutex = PCA_CH2.init(Mutex::new(parts.i2c2));
+    let ch3_mutex = PCA_CH3.init(Mutex::new(parts.i2c3));
+    unsafe {
+        PCA_CHANNELS = Some([ch0_mutex, ch1_mutex, ch2_mutex, ch3_mutex]);
     }
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
@@ -295,7 +516,7 @@ async fn main(spawner: Spawner) {
     // Spawn a main-side subscriber to print status logs from Channel
     #[embassy_executor::task]
     async fn power_in_log_task(
-        mut rx: Receiver<
+        rx: Receiver<
             'static,
             embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
             power_in::Status,
@@ -322,7 +543,7 @@ async fn main(spawner: Spawner) {
     if !vin_on {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
         let sc_addr = sc8815_const::DEFAULT_ADDRESS;
-        ack_scan_vin_off(bus, sc_addr).await;
+        ack_scan_vin_off(sc_addr).await;
         return;
     }
 
@@ -331,32 +552,19 @@ async fn main(spawner: Spawner) {
     let sw_addr = sw2303_const::DEFAULT_ADDRESS;
     info!("i2c.scan:start vin_on=true");
     for ch in 0u8..4u8 {
-        let mut i2c_scan = I2cDevice::new(bus);
-        let mut mux_reg = [0u8; 1];
-        let select_ok = pca9545a_select(&mut i2c_scan, ch).await.is_ok();
-        let ctrl_read_ok =
-            embedded_hal_async::i2c::I2c::write_read(&mut i2c_scan, 0x70, &[0x00], &mut mux_reg)
-                .await
-                .is_ok();
+        let mut i2c_scan = mux_channel(ch);
+        let mux_mask = i2c_scan.mask();
         info!(
-            "i2c.mux: ch={} select={} ctrl_read={} reg=0x{:02X}",
-            ch,
-            if select_ok { "ok" } else { "err" },
-            if ctrl_read_ok { "ok" } else { "err" },
-            mux_reg[0]
+            "i2c.mux: ch={} select=ok ctrl_read=implicit reg=0x{:02X}",
+            ch, mux_mask
         );
-        // small settle time after mux switch to let downstream devices wake
-        Timer::after(Duration::from_millis(2)).await;
+        Timer::after(Duration::from_millis(10)).await;
 
         // Pre-probe ACK on expected address with retries.
         let mut sc_ack = false;
         let mut ack_method = "no";
         let mut tries: u8 = 0;
         for attempt in 0..SC8815_DETECT_RETRIES {
-            if attempt > 0 {
-                let _ = pca9545a_select(&mut i2c_scan, ch).await;
-                Timer::after(Duration::from_millis(2)).await;
-            }
             let (ok, method) = sc8815_ack(&mut i2c_scan, sc_addr).await;
             tries = attempt + 1;
             if ok {
@@ -366,44 +574,247 @@ async fn main(spawner: Spawner) {
             }
             Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
         }
+        if sc_ack {
+            info!(
+                "pwr.sc8815: ch={} ack=ok via={} tries={}",
+                ch, ack_method, tries
+            );
+        } else {
+            warn!(
+                "pwr.sc8815: ch={} ack=fail via={} tries={}",
+                ch, ack_method, tries
+            );
+        }
 
         // Probe SC8815 by reading a status register (only if ACK)
         let mut sc_ok = false;
+        let mut sc_present = false;
+        let mut sc_init_ok = false;
+        let mut sc_status_err = None;
+        let mut sc_init_err = None;
+        let mut sc_vbus_last = 0u16;
+        let mut sc_status_val: Option<u8> = None;
         // SC8815 driver owns I2C; temporarily move and release back after use
         let mut sc_drv = sc8815::SC8815::new(i2c_scan, sc_addr);
-        let sc_present = sc_ack && sc_drv.read_register(ScReg::Status).await.is_ok();
-        if sc_present {
-            // Initialize SC8815 per design
-            if sc_drv.init().await.is_ok() {
-                let _ = sc_drv.set_otg_mode(true).await;
-                let _ = sc_drv.set_vbus_internal_voltage(5000, 1).await;
-                match ch {
-                    0 => pstop1.set_low(),
-                    1 => pstop2.set_low(),
-                    2 => pstop3.set_low(),
-                    3 => pstop4.set_low(),
-                    _ => {}
+        if sc_ack {
+            match sc_drv.read_register(ScReg::Status).await {
+                Ok(v) => {
+                    sc_present = true;
+                    sc_status_val = Some(v);
+                    info!("pwr.sc8815: ch={} status=0x{:02X}", ch, v);
                 }
-                // Require consecutive VBUS readings above threshold
-                let mut consecutive = 0u8;
-                for _ in 0..40 {
-                    // ~2s with 50ms intervals
-                    if let Ok(meas) = sc_drv.get_adc_measurements().await {
-                        if meas.vbus_mv >= SC8815_VBUS_READY_MV {
-                            consecutive += 1;
-                            if consecutive >= SC8815_VBUS_READY_CONSECUTIVE {
+                Err(e) => {
+                    sc_status_err = Some(sc_err_tag(&e));
+                }
+            }
+        }
+        if !sc_present {
+            if let Some(tag) = sc_status_err {
+                warn!(
+                    "pwr.sc8815: ch={} status_read_err={} ack={}",
+                    ch,
+                    tag,
+                    if sc_ack { "yes" } else { "no" }
+                );
+            }
+        } else {
+            // Initialize SC8815 per design (keep PSTOP high until init succeeds)
+            match sc_drv.init().await {
+                Ok(()) => {
+                    sc_init_ok = true;
+                }
+                Err(e) => {
+                    sc_init_err = Some(sc_err_tag(&e));
+                }
+            }
+            if !sc_init_ok {
+                if let Some(tag) = sc_init_err {
+                    warn!("pwr.sc8815: ch={} init_err={}", ch, tag);
+                }
+            } else {
+                info!(
+                    "pwr.sc8815: ch={} init_ok status=0x{:02X}",
+                    ch,
+                    sc_status_val.unwrap_or(0x00)
+                );
+                match sc_drv.read_register(ScReg::Ctrl0Set).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} ctrl0=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} ctrl0_err={}", ch, sc_err_tag(&e)),
+                }
+                match sc_drv.read_register(ScReg::Ctrl1Set).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} ctrl1=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} ctrl1_err={}", ch, sc_err_tag(&e)),
+                }
+                match sc_drv.read_register(ScReg::Ctrl2Set).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} ctrl2=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} ctrl2_err={}", ch, sc_err_tag(&e)),
+                }
+                match sc_drv.read_register(ScReg::Mask).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} mask=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} mask_err={}", ch, sc_err_tag(&e)),
+                }
+                match sc_drv.read_register(ScReg::Ctrl3Set).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} ctrl3=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} ctrl3_err={}", ch, sc_err_tag(&e)),
+                }
+                let sc_config = sc8815_default_device_config();
+                let mut sc_startup_ok = true;
+
+                let foldback_res = sc_drv.set_short_foldback_disable(true).await;
+                if let Err(e) = foldback_res {
+                    warn!("pwr.sc8815: ch={} foldback_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    info!("pwr.sc8815: ch={} foldback=disabled", ch);
+                }
+
+                let config_res = sc_drv.configure_device(&sc_config).await;
+                if let Err(e) = config_res {
+                    warn!("pwr.sc8815: ch={} config_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    info!(
+                        "pwr.sc8815: ch={} config_applied otg={}mV ibus={}mA ibat={}mA",
+                        ch, SC8815_OUTPUT_VOLTAGE_MV, SC8815_IBUS_LIMIT_MA, SC8815_IBAT_LIMIT_MA
+                    );
+                }
+
+                let otg_res = sc_drv.set_otg_mode(true).await;
+                if let Err(e) = otg_res {
+                    warn!("pwr.sc8815: ch={} otg_mode_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    info!("pwr.sc8815: ch={} otg_mode=enabled", ch);
+                }
+
+                let vbus_res = sc_drv
+                    .set_vbus_internal_voltage(SC8815_OUTPUT_VOLTAGE_MV, SC8815_VBUS_RATIO)
+                    .await;
+                if let Err(e) = vbus_res {
+                    warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    let ratio_label: &str = if SC8815_VBUS_RATIO == 0 { "12.5" } else { "5" };
+                    info!(
+                        "pwr.sc8815: ch={} vbus_set={}mV ratio={}x",
+                        ch, SC8815_OUTPUT_VOLTAGE_MV, ratio_label
+                    );
+                }
+
+                match sc_drv.read_register(ScReg::Ratio).await {
+                    Ok(v) => info!("pwr.sc8815: ch={} ratio_reg=0x{:02X}", ch, v),
+                    Err(e) => warn!("pwr.sc8815: ch={} ratio_read_err={}", ch, sc_err_tag(&e)),
+                }
+
+                let adc_res = sc_drv.set_adc_conversion(true).await;
+                if let Err(e) = adc_res {
+                    warn!("pwr.sc8815: ch={} adc_start_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    info!("pwr.sc8815: ch={} adc=start", ch);
+                }
+
+                let pgate_res = sc_drv.set_pgate_control(true).await;
+                if let Err(e) = pgate_res {
+                    warn!("pwr.sc8815: ch={} pgate_err={}", ch, sc_err_tag(&e));
+                    sc_startup_ok = false;
+                } else {
+                    info!("pwr.sc8815: ch={} pgate=enabled", ch);
+                }
+                if sc_startup_ok {
+                    match ch {
+                        0 => pstop1.set_low(),
+                        1 => pstop2.set_low(),
+                        2 => pstop3.set_low(),
+                        3 => pstop4.set_low(),
+                        _ => {}
+                    }
+                    Timer::after(Duration::from_millis(5)).await;
+                    match sc_drv.read_register(ScReg::Ctrl3Set).await {
+                        Ok(v) => info!("pwr.sc8815: ch={} ctrl3_after=0x{:02X}", ch, v),
+                        Err(e) => warn!("pwr.sc8815: ch={} ctrl3_after_err={}", ch, sc_err_tag(&e)),
+                    }
+                    // Require consecutive VBUS readings above threshold
+                    let mut consecutive = 0u8;
+                    let mut sample_index = 0u8;
+                    let mut vbus_min = u16::MAX;
+                    let mut vbus_max = 0u16;
+                    let mut ibus_last = 0u16;
+                    let mut any_sample = false;
+                    for _ in 0..40 {
+                        // ~2s with 50ms intervals
+                        match sc_drv.get_adc_measurements().await {
+                            Ok(meas) => {
+                                any_sample = true;
+                                sc_vbus_last = meas.vbus_mv;
+                                ibus_last = meas.ibus_ma;
+                                if meas.vbus_mv < vbus_min {
+                                    vbus_min = meas.vbus_mv;
+                                }
+                                if meas.vbus_mv > vbus_max {
+                                    vbus_max = meas.vbus_mv;
+                                }
                                 info!(
-                                    "pwr.sc8815: ch={} vbus_ready=true vbus={}mV",
-                                    ch, meas.vbus_mv
+                                    "pwr.sc8815: ch={} adc_sample={} vbus={}mV ibus={}mA",
+                                    ch, sample_index, meas.vbus_mv, meas.ibus_ma
                                 );
-                                sc_ok = true;
+                                sample_index = sample_index.wrapping_add(1);
+                                if meas.vbus_mv >= SC8815_VBUS_READY_MV {
+                                    consecutive += 1;
+                                    if consecutive >= SC8815_VBUS_READY_CONSECUTIVE {
+                                        info!(
+                                            "pwr.sc8815: ch={} vbus_ready=true vbus={}mV",
+                                            ch, meas.vbus_mv
+                                        );
+                                        sc_ok = true;
+                                        break;
+                                    }
+                                } else {
+                                    consecutive = 0;
+                                }
+                            }
+                            Err(e) => {
+                                warn!("pwr.sc8815: ch={} adc_err={}", ch, sc_err_tag(&e));
                                 break;
                             }
-                        } else {
-                            consecutive = 0;
+                        }
+                        Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
+                    }
+                    if !sc_ok {
+                        let min_report = if any_sample { vbus_min } else { 0 };
+                        let max_report = if any_sample { vbus_max } else { 0 };
+                        let mut raw_vbus_lsb: Option<u32> = None;
+                        let mut raw_ratio_reg: Option<u8> = None;
+                        if let Ok(vh) = sc_drv.read_register(ScReg::VbusFbValue).await {
+                            if let Ok(vl) = sc_drv.read_register(ScReg::VbusFbValue2).await {
+                                let lsb = (4 * (vh as u32)) + (((vl >> 6) & 0x03) as u32) + 1;
+                                raw_vbus_lsb = Some(lsb);
+                            }
+                        }
+                        if let Ok(ratio) = sc_drv.read_register(ScReg::Ratio).await {
+                            raw_ratio_reg = Some(ratio);
+                        }
+                        warn!(
+                            "pwr.sc8815: ch={} vbus_ready=false last={}mV min={}mV max={}mV ibus={}mA raw_lsb={:?} ratio_reg={:?}",
+                            ch,
+                            sc_vbus_last,
+                            min_report,
+                            max_report,
+                            ibus_last,
+                            raw_vbus_lsb,
+                            raw_ratio_reg
+                        );
+                        if let Some(lsb) = raw_vbus_lsb {
+                            let mv_ratio5 = lsb * 10; // 2mV * 5x ratio
+                            let mv_ratio12 = lsb * 25; // 2mV * 12.5x ratio
+                            info!(
+                                "pwr.sc8815: ch={} raw_estimate ratio5={}mV ratio12={}mV",
+                                ch, mv_ratio5, mv_ratio12
+                            );
                         }
                     }
-                    Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
+                } else {
+                    warn!("pwr.sc8815: ch={} startup_aborted", ch);
                 }
             }
         }
@@ -435,7 +846,7 @@ async fn main(spawner: Spawner) {
         info!(
             "i2c.scan: ch={} mux_reg=0x{:02X} sc8815_ack={} via={} tries={}",
             ch,
-            mux_reg[0],
+            mux_mask,
             if sc_ack { "yes" } else { "no" },
             ack_method,
             tries
@@ -447,9 +858,9 @@ async fn main(spawner: Spawner) {
                 let mut line: heapless::String<128> = heapless::String::new();
                 for (i, a) in found.iter().enumerate() {
                     let _ = if i == 0 {
-                        write!(line, "0x{:02X}", a)
+                        write!(line, "0x{a:02X}")
                     } else {
-                        write!(line, ",0x{:02X}", a)
+                        write!(line, ",0x{a:02X}")
                     };
                 }
                 info!("i2c.scan: ch={} found=[{}]", ch, line.as_str());

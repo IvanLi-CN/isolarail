@@ -184,6 +184,7 @@ async fn qualify_startup<I2C: I2c>(
     ok
 }
 
+#[allow(dead_code)]
 struct VinOnResult {
     vin_on: bool,
     last_vbus_v: f32,

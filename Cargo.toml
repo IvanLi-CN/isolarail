@@ -16,6 +16,7 @@ embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 embedded-hal-bus = { version = "0.2", default-features = false }
 embassy-embedded-hal = "0.4"
+embassy-futures = "0.1"
 xca9548a = "1"
 port-expander = "0.6"
 sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", default-features = false, features = ["async"] }

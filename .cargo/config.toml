@@ -25,6 +25,7 @@ linker = "/Users/ivan/.espressif/tools/tools/xtensa-esp-elf/esp-14.2.0_20241119/
 
 [env]
 ESP_LOG = "info"
+DEFMT_LOG = "info"
 
 [unstable]
 build-std = ["core"]

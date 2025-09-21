@@ -144,7 +144,7 @@ const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 
 // SC8815 detect retries to handle delayed device readiness (total ~2s)
 const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
-const SC8815_DETECT_TOTAL_MS: u64 = 600; // overall grace per channel (reduced)
+const SC8815_DETECT_TOTAL_MS: u64 = 300; // overall grace per channel (faster: 6x50ms)
 const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
 
 fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static str {

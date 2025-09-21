@@ -144,7 +144,7 @@ const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 
 // SC8815 detect retries to handle delayed device readiness (total ~2s)
 const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
-const SC8815_DETECT_TOTAL_MS: u64 = 2000; // overall grace per channel
+const SC8815_DETECT_TOTAL_MS: u64 = 600; // overall grace per channel (reduced)
 const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
 
 fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static str {
@@ -244,23 +244,7 @@ async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
     (false, "no")
 }
 
-async fn i2c_scan_found<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> heapless::Vec<u8, 16> {
-    let mut found: heapless::Vec<u8, 16> = heapless::Vec::new();
-    let mut tmp = [0u8; 1];
-    for addr in 0x03u8..0x78u8 {
-        if embedded_hal_async::i2c::I2c::read(i2c, addr, &mut tmp)
-            .await
-            .is_ok()
-        {
-            let _ = found.push(addr);
-            if found.is_full() {
-                break;
-            }
-        }
-        Timer::after(Duration::from_millis(1)).await;
-    }
-    found
-}
+// NOTE: no arbitrary address enumeration; only probe known devices.
 
 async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> bool {
     let mut buf = [0u8; 1];
@@ -746,22 +730,7 @@ async fn main(spawner: Spawner) {
             tries
         );
 
-        if !sc_ack {
-            let found = i2c_scan_found(&mut i2c_scan).await;
-            if !found.is_empty() {
-                let mut line: heapless::String<128> = heapless::String::new();
-                for (i, a) in found.iter().enumerate() {
-                    let _ = if i == 0 {
-                        write!(line, "0x{a:02X}")
-                    } else {
-                        write!(line, ",0x{a:02X}")
-                    };
-                }
-                info!("i2c.scan: ch={} found=[{}]", ch, line.as_str());
-            } else {
-                info!("i2c.scan: ch={} found=[]", ch);
-            }
-        }
+        // do not enumerate unknown addresses
 
         if sc_ok && sw_ok {
             info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);

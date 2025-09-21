@@ -12,7 +12,6 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_futures::block_on;
 use embassy_time::{Duration, Timer};
 use embedded_hal::i2c::I2c as _;
 use embedded_hal_async::i2c::I2c as _;
@@ -29,7 +28,6 @@ use sc8815::{
 use core::fmt::Write as _;
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_embedded_hal::shared_bus::I2cDeviceError;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
@@ -44,7 +42,7 @@ use static_cell::StaticCell;
 // Use SC8815/SW2303 crates only for their default I2C addresses
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
-use xca9548a::{I2cSlave, SlaveAddr as PcaSlaveAddr, Xca9545a};
+use xca9545a_async as pca9545;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -59,12 +57,8 @@ defmt::timestamp!("{=u64} ms", {
 type I2cBus = I2c<'static, esp_hal::Async>;
 type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
 static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
-static PCA9545: StaticCell<Xca9545a<AsyncBusBlocking>> = StaticCell::new();
-static PCA_CH0: StaticCell<MuxChannelMutex> = StaticCell::new();
-static PCA_CH1: StaticCell<MuxChannelMutex> = StaticCell::new();
-static PCA_CH2: StaticCell<MuxChannelMutex> = StaticCell::new();
-static PCA_CH3: StaticCell<MuxChannelMutex> = StaticCell::new();
-static mut PCA_CHANNELS: Option<[&'static MuxChannelMutex; 4]> = None;
+static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
+// No per-channel statics; channels are lightweight views over the shared bus
 
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -172,114 +166,19 @@ fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static st
     }
 }
 
-#[derive(Clone, Copy)]
-struct AsyncBusBlocking {
-    bus: &'static SharedI2cBus,
-}
-
-impl AsyncBusBlocking {
-    fn new(bus: &'static SharedI2cBus) -> Self {
-        Self { bus }
-    }
-
-    fn with_device<F, Fut, R>(&self, f: F) -> Result<R, MuxBusError>
-    where
-        F: FnOnce(I2cDevice<'static, CriticalSectionRawMutex, I2cBus>) -> Fut,
-        Fut: core::future::Future<Output = Result<R, I2cDeviceError<esp_hal::i2c::master::Error>>>,
-    {
-        let result = block_on(f(I2cDevice::new(self.bus)));
-        result.map_err(MuxBusError::from)
-    }
-}
-
-#[derive(Debug)]
-struct MuxBusError(I2cDeviceError<esp_hal::i2c::master::Error>);
-
-impl MuxBusError {
-    fn kind_from_hal(err: &esp_hal::i2c::master::Error) -> embedded_hal::i2c::ErrorKind {
-        use embedded_hal::i2c::{ErrorKind, NoAcknowledgeSource};
-        match err {
-            esp_hal::i2c::master::Error::FifoExceeded => ErrorKind::Other,
-            esp_hal::i2c::master::Error::AcknowledgeCheckFailed(reason) => {
-                ErrorKind::NoAcknowledge(NoAcknowledgeSource::from(reason))
-            }
-            esp_hal::i2c::master::Error::Timeout => ErrorKind::Other,
-            esp_hal::i2c::master::Error::ArbitrationLost => ErrorKind::ArbitrationLoss,
-            esp_hal::i2c::master::Error::ExecutionIncomplete => ErrorKind::Other,
-            esp_hal::i2c::master::Error::CommandNumberExceeded => ErrorKind::Other,
-            esp_hal::i2c::master::Error::ZeroLengthInvalid => ErrorKind::Other,
-            esp_hal::i2c::master::Error::AddressInvalid(_) => ErrorKind::Bus,
-            _ => ErrorKind::Other,
-        }
-    }
-}
-
-impl From<I2cDeviceError<esp_hal::i2c::master::Error>> for MuxBusError {
-    fn from(value: I2cDeviceError<esp_hal::i2c::master::Error>) -> Self {
-        Self(value)
-    }
-}
-
-impl embedded_hal::i2c::Error for MuxBusError {
-    fn kind(&self) -> embedded_hal::i2c::ErrorKind {
-        match &self.0 {
-            I2cDeviceError::I2c(err) => Self::kind_from_hal(err),
-            I2cDeviceError::Config => embedded_hal::i2c::ErrorKind::Other,
-        }
-    }
-}
-
-impl embedded_hal::i2c::ErrorType for AsyncBusBlocking {
-    type Error = MuxBusError;
-}
-
-impl embedded_hal::i2c::I2c for AsyncBusBlocking {
-    fn read(&mut self, address: u8, read: &mut [u8]) -> Result<(), Self::Error> {
-        self.with_device(|mut dev| async move { dev.read(address, read).await })
-    }
-
-    fn write(&mut self, address: u8, write: &[u8]) -> Result<(), Self::Error> {
-        self.with_device(|mut dev| async move { dev.write(address, write).await })
-    }
-
-    fn write_read(
-        &mut self,
-        address: u8,
-        write: &[u8],
-        read: &mut [u8],
-    ) -> Result<(), Self::Error> {
-        self.with_device(|mut dev| async move { dev.write_read(address, write, read).await })
-    }
-
-    fn transaction(
-        &mut self,
-        address: u8,
-        operations: &mut [embedded_hal::i2c::Operation<'_>],
-    ) -> Result<(), Self::Error> {
-        self.with_device(|mut dev| async move { dev.transaction(address, operations).await })
-    }
-}
-
-type MuxChannelMutex =
-    Mutex<CriticalSectionRawMutex, I2cSlave<'static, Xca9545a<AsyncBusBlocking>, AsyncBusBlocking>>;
-
 struct ChannelDevice {
-    mutex: &'static MuxChannelMutex,
+    bus: &'static SharedI2cBus,
     mask: u8,
 }
 
 impl ChannelDevice {
-    fn new(mutex: &'static MuxChannelMutex, mask: u8) -> Self {
-        Self { mutex, mask }
-    }
-
-    fn mask(&self) -> u8 {
-        self.mask
+    fn new(bus: &'static SharedI2cBus, mask: u8) -> Self {
+        Self { bus, mask }
     }
 }
 
 impl embedded_hal_async::i2c::ErrorType for ChannelDevice {
-    type Error = xca9548a::Error<MuxBusError>;
+    type Error = esp_hal::i2c::master::Error;
 }
 
 impl embedded_hal_async::i2c::I2c for ChannelDevice {
@@ -288,18 +187,21 @@ impl embedded_hal_async::i2c::I2c for ChannelDevice {
         address: u8,
         operations: &mut [embedded_hal::i2c::Operation<'_>],
     ) -> Result<(), Self::Error> {
-        let mut guard = self.mutex.lock().await;
-        guard.transaction(address, operations)
+        let mut guard = self.bus.lock().await;
+        embedded_hal_async::i2c::I2c::write(&mut *guard, 0x70, &[self.mask]).await?;
+        embedded_hal_async::i2c::I2c::transaction(&mut *guard, address, operations).await
     }
 
     async fn write(&mut self, address: u8, write: &[u8]) -> Result<(), Self::Error> {
-        let mut guard = self.mutex.lock().await;
-        guard.write(address, write)
+        let mut guard = self.bus.lock().await;
+        embedded_hal_async::i2c::I2c::write(&mut *guard, 0x70, &[self.mask]).await?;
+        embedded_hal_async::i2c::I2c::write(&mut *guard, address, write).await
     }
 
     async fn read(&mut self, address: u8, read: &mut [u8]) -> Result<(), Self::Error> {
-        let mut guard = self.mutex.lock().await;
-        guard.read(address, read)
+        let mut guard = self.bus.lock().await;
+        embedded_hal_async::i2c::I2c::write(&mut *guard, 0x70, &[self.mask]).await?;
+        embedded_hal_async::i2c::I2c::read(&mut *guard, address, read).await
     }
 
     async fn write_read(
@@ -308,21 +210,17 @@ impl embedded_hal_async::i2c::I2c for ChannelDevice {
         write: &[u8],
         read: &mut [u8],
     ) -> Result<(), Self::Error> {
-        let mut guard = self.mutex.lock().await;
-        guard.write_read(address, write, read)
+        let mut guard = self.bus.lock().await;
+        embedded_hal_async::i2c::I2c::write(&mut *guard, 0x70, &[self.mask]).await?;
+        embedded_hal_async::i2c::I2c::write_read(&mut *guard, address, write, read).await
     }
 }
 
-#[allow(static_mut_refs)]
 fn mux_channel(ch: u8) -> ChannelDevice {
-    let channels = unsafe {
-        PCA_CHANNELS
-            .as_ref()
-            .expect("PCA9545 channels not initialized")
-    };
+    let bus = unsafe { I2C_BUS_REF.expect("I2C bus not initialized") };
     let idx = (ch & 0x03) as usize;
     let mask = 1u8 << idx;
-    ChannelDevice::new(channels[idx], mask)
+    ChannelDevice::new(bus, mask)
 }
 
 async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
@@ -386,10 +284,11 @@ async fn ack_scan_vin_off(sc_addr: u8) {
             }
             Timer::after(Duration::from_millis(SC8815_DETECT_INTERVAL_MS)).await;
         }
+        let mux_mask = 1u8 << (ch & 0x03);
         info!(
             "i2c.scan: ch={} mux_reg=0x{:02X} sc8815_ack={} via={} tries={} vin_on=false",
             ch,
-            i2c_scan.mask(),
+            mux_mask,
             if present { "yes" } else { "no" },
             method,
             tries
@@ -479,23 +378,18 @@ async fn main(spawner: Spawner) {
         warn!("i2c.front: tca6408a=offline addr=0x20");
     }
 
-    // I2C mux PCA9545A initialization via dedicated driver
-    let mut mux_temp = Xca9545a::new(AsyncBusBlocking::new(bus), PcaSlaveAddr::default());
-    match mux_temp.get_channel_status() {
+    // I2C mux PCA9545A presence check via async driver
+    let mut pca = pca9545::Pca9545a::new(I2cDevice::new(bus), pca9545::DEFAULT_ADDRESS);
+    match pca.get_channel_status().await {
         Ok(status) => info!("i2c.mux: ok addr=0x70 parts=4 status=0x{:02X}", status),
         Err(_) => {
             error!("i2c.mux: err=init addr=0x70");
             panic!("PCA9545A not found");
         }
     }
-    let mux = PCA9545.init(mux_temp);
-    let parts = mux.split();
-    let ch0_mutex = PCA_CH0.init(Mutex::new(parts.i2c0));
-    let ch1_mutex = PCA_CH1.init(Mutex::new(parts.i2c1));
-    let ch2_mutex = PCA_CH2.init(Mutex::new(parts.i2c2));
-    let ch3_mutex = PCA_CH3.init(Mutex::new(parts.i2c3));
+    // Record global bus reference for channel views
     unsafe {
-        PCA_CHANNELS = Some([ch0_mutex, ch1_mutex, ch2_mutex, ch3_mutex]);
+        I2C_BUS_REF = Some(bus);
     }
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
@@ -553,7 +447,7 @@ async fn main(spawner: Spawner) {
     info!("i2c.scan:start vin_on=true");
     for ch in 0u8..4u8 {
         let mut i2c_scan = mux_channel(ch);
-        let mux_mask = i2c_scan.mask();
+        let mux_mask = 1u8 << (ch & 0x03);
         info!(
             "i2c.mux: ch={} select=ok ctrl_read=implicit reg=0x{:02X}",
             ch, mux_mask

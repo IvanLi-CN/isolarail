@@ -11,6 +11,11 @@
 - 提交规范：必须使用 Conventional Commits；不得绕过校验；不得擅自 push。
 - 钩子与工具：`lefthook.yml` 使用 `cargo +esp fmt/clippy` 与 `bunx` 的 commitlint/markdownlint。
 
+### 代理执行准则
+
+- 在请求主人验证或合入前，代理必须先在本地完成一次可复现的构建（先 `cargo check`，然后至少 `cargo build --release` 成功）。
+- 仅在本地构建/自检通过后，才向主人提交验证请求或评审说明；未通过时应先自行排查并给出修复方案。
+
 ## 环境与工具链
 
 - 推荐使用 `espup` 安装 ESP Rust 工具链：

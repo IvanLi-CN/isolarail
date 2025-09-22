@@ -17,7 +17,7 @@ embedded-hal-async = "1.0.0"
 embedded-hal-bus = { version = "0.2", default-features = false }
 embassy-embedded-hal = "0.4"
 embassy-futures = "0.1"
-xca9545a-async = { path = "../xca9545a-async", default-features = false, features = ["async"] }
+xca9545a-async = { git = "https://github.com/IvanLi-CN/xca9545a-async-rs", default-features = false, features = ["async"] }
 port-expander = "0.6"
 sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", default-features = false, features = ["async"] }
 sw2303 = { git = "https://github.com/IvanLi-CN/sw2303-rs", default-features = false, features = ["async"] }

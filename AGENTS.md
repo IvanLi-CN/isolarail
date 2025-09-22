@@ -7,9 +7,14 @@
 - 语言与目标：Rust，目标 `xtensa-esp32s3-none-elf`（ESP32‑S3）。
 - 入口与结构：`src/main.rs` 为示例程序，使用 `esp-hal` + `embassy` 异步框架。
 - 运行器：由 `.cargo/config.toml` 指定 `runner = "espflash flash --monitor"`。
-- 打印与日志：`esp-println`，环境变量 `ESP_LOG=info` 可调日志级别。
+- 打印与日志：使用 defmt + `esp-println`；默认 `DEFMT_LOG=info`，可通过该环境变量调整日志级别。
 - 提交规范：必须使用 Conventional Commits；不得绕过校验；不得擅自 push。
 - 钩子与工具：`lefthook.yml` 使用 `cargo +esp fmt/clippy` 与 `bunx` 的 commitlint/markdownlint。
+
+### 代理执行准则
+
+- 在请求主人验证或合入前，代理必须先在本地完成一次可复现的构建（先 `cargo check`，然后至少 `cargo build --release` 成功）。
+- 仅在本地构建/自检通过后，才向主人提交验证请求或评审说明；未通过时应先自行排查并给出修复方案。
 
 ## 环境与工具链
 

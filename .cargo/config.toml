@@ -12,19 +12,14 @@ rustflags = [
 [target.'cfg(target_arch = "xtensa")']
 runner    = "espflash flash --monitor --log-format defmt"
 rustflags = [
-  # GNU LD
+  # Link script + defmt script
   "-C", "link-arg=-Wl,-Tlinkall.x",
   "-C", "link-arg=-nostartfiles",
   "-C", "link-arg=-Tdefmt.x",
-
-  # LLD
-  # "-C", "link-arg=-Tlinkall.x",
-  # "-C", "linker=rust-lld",
 ]
-linker = "/Users/ivan/.espressif/tools/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc"
 
 [env]
-ESP_LOG = "info"
+DEFMT_LOG = "info"
 
 [unstable]
 build-std = ["core"]

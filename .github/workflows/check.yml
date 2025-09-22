@@ -48,22 +48,22 @@ jobs:
     - name: Run clippy
       run: cargo +esp clippy --bins --examples --no-deps --target xtensa-esp32s3-none-elf -- -D warnings
     
-    - name: Build main binary
-      run: cargo +esp build --target xtensa-esp32s3-none-elf
+    - name: Build main binary (release)
+      run: cargo +esp build --release --target xtensa-esp32s3-none-elf
     
-    - name: Build examples
-      run: cargo +esp build --examples --target xtensa-esp32s3-none-elf
+    - name: Build examples (release)
+      run: cargo +esp build --examples --release --target xtensa-esp32s3-none-elf
     
     - name: Skip binary packaging for ESP32-S3
       run: echo "Packaging .bin is skipped; use ELF with espflash for flashing."
     
     - name: Check build artifacts
       run: |
-        if [ ! -f target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world ]; then
+        if [ ! -f target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world ]; then
           echo "Build failed: main binary not found"
           exit 1
         fi
-        echo "Build successful: binary size $(stat -c%s target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world) bytes"
+        echo "Build successful: binary size $(stat -c%s target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world) bytes"
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -71,6 +71,6 @@ jobs:
       with:
         name: build-artifacts-${{ github.sha }}-esp32s3
         path: |
-          target/xtensa-esp32s3-none-elf/debug/esp32s3-hello-world
-          target/xtensa-esp32s3-none-elf/debug/examples/*
+          target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+          target/xtensa-esp32s3-none-elf/release/examples/*
         retention-days: 7

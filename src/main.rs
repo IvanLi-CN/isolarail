@@ -13,8 +13,7 @@ use core::sync::atomic::{AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use embedded_hal::i2c::I2c as _;
-use embedded_hal_async::i2c::I2c as _;
+// Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
@@ -25,7 +24,6 @@ use sc8815::{
     CellCount, DeadTime, DeviceConfiguration, OperatingMode, SwitchingFrequency, VoltagePerCell,
 };
 // Shared I2C bus infrastructure
-use core::fmt::Write as _;
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -228,17 +226,22 @@ async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
     addr: u8,
 ) -> (bool, &'static str) {
     let mut b = [0u8; 1];
-    if i2c
-        .write_read(addr, &[SC8815_STATUS_REG_ADDR], &mut b)
+    if embedded_hal_async::i2c::I2c::write_read(i2c, addr, &[SC8815_STATUS_REG_ADDR], &mut b)
         .await
         .is_ok()
     {
         return (true, "wr_rd");
     }
-    if i2c.read(addr, &mut b).await.is_ok() {
+    if embedded_hal_async::i2c::I2c::read(i2c, addr, &mut b)
+        .await
+        .is_ok()
+    {
         return (true, "rd");
     }
-    if i2c.write(addr, &[]).await.is_ok() {
+    if embedded_hal_async::i2c::I2c::write(i2c, addr, &[])
+        .await
+        .is_ok()
+    {
         return (true, "addr");
     }
     (false, "no")
@@ -248,7 +251,9 @@ async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
 
 async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> bool {
     let mut buf = [0u8; 1];
-    i2c.write_read(0x20, &[0x00], &mut buf).await.is_ok()
+    embedded_hal_async::i2c::I2c::write_read(i2c, 0x20, &[0x00], &mut buf)
+        .await
+        .is_ok()
 }
 
 async fn ack_scan_vin_off(sc_addr: u8) {

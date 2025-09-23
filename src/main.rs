@@ -45,6 +45,7 @@ mod front_panel;
 // Use SC8815/SW2303 crates only for their default I2C addresses
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
+use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
@@ -129,7 +130,6 @@ const SC8815_VBUS_READY_CONSECUTIVE: u8 = 2;
 const SC8815_VBUS_READY_INTERVAL_MS: u64 = 50;
 
 const SC8815_OUTPUT_VOLTAGE_MV: u16 = 5000;
-const SC8815_VBUS_RATIO: u8 = 1; // 5x ratio per esp32c3 demo reference
 const SC8815_IBUS_LIMIT_MA: u16 = 5000;
 const SC8815_IBAT_LIMIT_MA: u16 = 6000;
 const SC8815_RS1_MOHM: u16 = 5;
@@ -578,6 +578,84 @@ async fn main(spawner: Spawner) {
         );
     }
 
+    // Spawn SW2303 CH0 telemetry task (prints once per second)
+    #[embassy_executor::task]
+    async fn sw2303_ch0_telemetry_task() {
+        info!("sw2303.ch0: task_start");
+        let sw_addr = swc::DEFAULT_ADDRESS;
+        loop {
+            let mut i2c_ch0 = mux_channel(0);
+            let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
+
+            // Read 12-bit ADC VBUS
+            let vbus_mv = async {
+                if sw
+                    .write_register(SwReg::AdcConfig, swc::adc::ADC_SELECT_VBUS)
+                    .await
+                    .is_ok()
+                {
+                    if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
+                        if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
+                            let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
+                            return Some(raw12 as f32 * swc::adc::VBUS_FACTOR_MV);
+                        }
+                    }
+                }
+                None
+            }
+            .await;
+
+            // Read 12-bit ADC ICH (3.125 mA/LSB)
+            let ich_ma = async {
+                if sw
+                    .write_register(SwReg::AdcConfig, swc::adc::ADC_SELECT_ICH)
+                    .await
+                    .is_ok()
+                {
+                    if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
+                        if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
+                            let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
+                            let ich_factor_ma_12 = swc::adc::ICH_FACTOR_MA / 16.0;
+                            return Some(raw12 as f32 * ich_factor_ma_12);
+                        }
+                    }
+                }
+                None
+            }
+            .await;
+
+            let online = match sw.is_sink_device_connected().await {
+                Ok(b) => b,
+                Err(_) => false,
+            };
+
+            match (vbus_mv, ich_ma) {
+                (Some(v), Some(i)) => {
+                    let v_mv: u32 = v as u32;
+                    let i_ma: u32 = i as u32;
+                    info!(
+                        "sw2303.ch0: online={} vbus={}mV ich={}mA",
+                        if online { "true" } else { "false" },
+                        v_mv,
+                        i_ma
+                    );
+                }
+                _ => {
+                    warn!(
+                        "sw2303.ch0: read_failed online={} ",
+                        if online { "true" } else { "false" }
+                    );
+                }
+            }
+
+            Timer::after(Duration::from_secs(1)).await;
+        }
+    }
+    info!("sw2303.ch0: spawn");
+    spawner
+        .spawn(sw2303_ch0_telemetry_task())
+        .expect("spawn sw2303_ch0_telemetry_task");
+
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(
         &spawner,
@@ -773,18 +851,14 @@ async fn main(spawner: Spawner) {
                     info!("pwr.sc8815: ch={} otg_mode=enabled", ch);
                 }
 
-                let vbus_res = sc_drv
-                    .set_vbus_internal_voltage(SC8815_OUTPUT_VOLTAGE_MV, SC8815_VBUS_RATIO)
-                    .await;
+                // Use external FB mode: set external reference (VBUSREF_E), select FB_SEL=external
+                let vref_e_mv: u16 = 1000; // 1.0V recommended default per datasheet
+                let vbus_res = sc_drv.set_vbus_external_reference(vref_e_mv).await;
                 if let Err(e) = vbus_res {
                     warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
                     sc_startup_ok = false;
                 } else {
-                    let ratio_label: &str = if SC8815_VBUS_RATIO == 0 { "12.5" } else { "5" };
-                    info!(
-                        "pwr.sc8815: ch={} vbus_set={}mV ratio={}x",
-                        ch, SC8815_OUTPUT_VOLTAGE_MV, ratio_label
-                    );
+                    info!("pwr.sc8815: ch={} fb=external vref_e={}mV", ch, vref_e_mv);
                 }
 
                 match sc_drv.read_register(ScReg::Ratio).await {

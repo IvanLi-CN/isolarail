@@ -6,21 +6,21 @@ edition = "2021"
 publish = false
 
 [dependencies]
-embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
+embassy-executor = "0.7.0"
 embassy-time = "0.4.0"
-embassy-sync = "0.7.0"
-static_cell = "2.1.0"
+embassy-sync = "0.6.2"
+static_cell = "2.1.1"
 nb = "1.1"
-heapless = { version = "0.8", default-features = false }
+heapless = { version = "0.9.1", default-features = false }
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
-embedded-hal-bus = { version = "0.2", default-features = false }
-embassy-embedded-hal = "0.4"
-embassy-futures = "0.1"
-xca9545a-async = { git = "https://github.com/IvanLi-CN/xca9545a-async-rs", default-features = false, features = ["async"] }
+embedded-hal-bus = { version = "0.3.0", default-features = false }
+embassy-embedded-hal = "0.3.2"
+embassy-futures = "0.1.2"
+xca9545a-async = { git = "https://github.com/IvanLi-CN/xca9545a-async-rs", rev = "7bcc109c70d202ce7d3554e3a7755d5f3eb24330", default-features = false, features = ["async"] }
 port-expander = "0.6"
-sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", default-features = false, features = ["async"] }
-sw2303 = { git = "https://github.com/IvanLi-CN/sw2303-rs", default-features = false, features = ["async"] }
+sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", rev = "8d9eccc3661ce909094a7e988f85a55c3431f994", default-features = false, features = ["async"] }
+sw2303 = { git = "https://github.com/IvanLi-CN/sw2303-rs", rev = "ba44c0c7eb0ff6256333b708925babc1f6a06a9c", default-features = false, features = ["async"] }
 ina226-tp = { version = "0.4", default-features = false, features = ["async"] }
 defmt = "1"
 esp-backtrace = { version = "0.17.0", features = [

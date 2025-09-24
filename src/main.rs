@@ -583,20 +583,29 @@ async fn main(spawner: Spawner) {
     async fn sw2303_ch0_telemetry_task() {
         info!("sw2303.ch0: task_start");
         let sw_addr = swc::DEFAULT_ADDRESS;
+        let mut diag_left: u8 = 3;
         loop {
             let mut i2c_ch0 = mux_channel(0);
             let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
 
             // Read 12-bit ADC VBUS
             let vbus_mv = async {
+                let adc_cfg_before = sw.read_register(SwReg::AdcConfig).await.ok();
                 if sw
                     .write_register(SwReg::AdcConfig, swc::adc::ADC_SELECT_VBUS)
                     .await
                     .is_ok()
                 {
+                    let adc_cfg_after = sw.read_register(SwReg::AdcConfig).await.ok();
                     if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
                         if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
                             let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
+                            if diag_left > 0 {
+                                info!(
+                                    "sw2303.ch0: adc.vbus cfg_bef={:?} cfg_aft={:?} raw_h=0x{:02X} raw_l=0x{:02X} raw12={}",
+                                    adc_cfg_before, adc_cfg_after, h, l, raw12
+                                );
+                            }
                             return Some(raw12 as f32 * swc::adc::VBUS_FACTOR_MV);
                         }
                     }
@@ -701,6 +710,10 @@ async fn main(spawner: Spawner) {
                                 );
                             }
                         }
+                    }
+
+                    if diag_left > 0 {
+                        diag_left -= 1;
                     }
                 }
                 _ => {

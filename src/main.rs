@@ -588,7 +588,7 @@ async fn main(spawner: Spawner) {
             let mut i2c_ch0 = mux_channel(0);
             let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
 
-            // Read 12-bit ADC VBUS
+            // Read 12-bit ADC VBUS (datasheet: 7.5 mV/LSB; write 0x3B then read 0x3C/0x3D after a short settle)
             let vbus_mv = async {
                 let adc_cfg_before = sw.read_register(SwReg::AdcConfig).await.ok();
                 if sw
@@ -596,6 +596,8 @@ async fn main(spawner: Spawner) {
                     .await
                     .is_ok()
                 {
+                    // Per datasheet, selecting source latches data into 0x3C/0x3D; allow conversion/settle
+                    Timer::after(Duration::from_millis(2)).await;
                     let adc_cfg_after = sw.read_register(SwReg::AdcConfig).await.ok();
                     if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
                         if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {

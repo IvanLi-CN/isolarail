@@ -612,6 +612,8 @@ async fn main(spawner: Spawner) {
                     .await
                     .is_ok()
                 {
+                    // Allow a brief conversion time after channel select
+                    Timer::after(Duration::from_micros(500)).await;
                     if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
                         if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
                             let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
@@ -641,22 +643,46 @@ async fn main(spawner: Spawner) {
                     let sc_ibus = sc.read_ibus_current(2, SC8815_RS1_MOHM).await.ok();
 
                     if online {
+                        // Also read SW2303 8-bit ICH value for cross-check
+                        let ich8_ma_opt: Option<u32> = match sw.read_register(SwReg::AdcIch).await {
+                            Ok(v8) => Some((v8 as f32 * swc::adc::ICH_FACTOR_MA) as u32),
+                            Err(_) => None,
+                        };
                         match sc_ibus {
                             Some(ibus_sc) => {
                                 let delta = ibus_sc as i32 - i_ma as i32;
-                                info!(
-                                    "sw2303.ch0: online=true vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
-                                    v_mv,
-                                    i_ma,
-                                    ibus_sc,
-                                    delta
-                                );
+                                match ich8_ma_opt {
+                                    Some(i8) => info!(
+                                        "sw2303.ch0: online=true vbus={}mV ich_sw12={}mA ich_sw8={}mA ibus_sc={}mA delta={}mA",
+                                        v_mv,
+                                        i_ma,
+                                        i8,
+                                        ibus_sc,
+                                        delta
+                                    ),
+                                    None => info!(
+                                        "sw2303.ch0: online=true vbus={}mV ich_sw12={}mA ich_sw8=na ibus_sc={}mA delta={}mA",
+                                        v_mv,
+                                        i_ma,
+                                        ibus_sc,
+                                        delta
+                                    ),
+                                }
                             }
                             None => {
-                                info!(
-                                    "sw2303.ch0: online=true vbus={}mV ich_sw={}mA ibus_sc=na",
-                                    v_mv, i_ma
-                                );
+                                match ich8_ma_opt {
+                                    Some(i8) => info!(
+                                        "sw2303.ch0: online=true vbus={}mV ich_sw12={}mA ich_sw8={}mA ibus_sc=na",
+                                        v_mv,
+                                        i_ma,
+                                        i8
+                                    ),
+                                    None => info!(
+                                        "sw2303.ch0: online=true vbus={}mV ich_sw12={}mA ich_sw8=na ibus_sc=na",
+                                        v_mv,
+                                        i_ma
+                                    ),
+                                }
                             }
                         }
                     } else {

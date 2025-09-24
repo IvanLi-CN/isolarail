@@ -583,7 +583,7 @@ async fn main(spawner: Spawner) {
     async fn sw2303_ch0_telemetry_task() {
         info!("sw2303.ch0: task_start");
         let sw_addr = swc::DEFAULT_ADDRESS;
-        let mut diag_left: u8 = 3;
+        let mut diag_left: u8 = 10;
         loop {
             let mut i2c_ch0 = mux_channel(0);
             let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
@@ -605,7 +605,12 @@ async fn main(spawner: Spawner) {
 
             // Read SW2303 ICH from 8-bit register (0x33), 50 mA/LSB
             let ich_ma: Option<f32> = match sw.read_register(SwReg::AdcIch).await {
-                Ok(v8) => Some(v8 as f32 * swc::adc::ICH_FACTOR_MA),
+                Ok(v8) => {
+                    if diag_left > 0 {
+                        info!("sw2303.ch0: adc.ich8 raw=0x{:02X}", v8);
+                    }
+                    Some(v8 as f32 * swc::adc::ICH_FACTOR_MA)
+                }
                 Err(_) => None,
             };
 
@@ -652,6 +657,19 @@ async fn main(spawner: Spawner) {
                     }
 
                     if diag_left > 0 {
+                        // Dump key SW2303 status/ctrl registers for validation
+                        if let Ok(s0) = sw.get_system_status0().await {
+                            info!("sw2303.ch0: sys0=0b{:08b}", s0.bits());
+                        }
+                        if let Ok(s3) = sw.get_system_status3().await {
+                            info!("sw2303.ch0: sys3=0b{:08b}", s3.bits());
+                        }
+                        if let Ok(fc) = sw.get_fast_charging_status().await {
+                            info!("sw2303.ch0: fastchg=0b{:08b}", fc.bits());
+                        }
+                        if let Ok(cc) = sw.read_register(SwReg::ConnectionControl).await {
+                            info!("sw2303.ch0: reg14(conn)=0x{:02X}", cc);
+                        }
                         diag_left = diag_left.saturating_sub(1);
                     }
                 }

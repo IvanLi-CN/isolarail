@@ -852,7 +852,7 @@ async fn main(spawner: Spawner) {
                 }
 
                 // Use external FB mode: set external reference (VBUSREF_E), select FB_SEL=external
-                let vref_e_mv: u16 = 1000; // 1.0V recommended default per datasheet
+                let vref_e_mv: u16 = 1200; // 1.2V external FB reference
                 let vbus_res = sc_drv.set_vbus_external_reference(vref_e_mv).await;
                 if let Err(e) = vbus_res {
                     warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));

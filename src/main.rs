@@ -588,31 +588,18 @@ async fn main(spawner: Spawner) {
             let mut i2c_ch0 = mux_channel(0);
             let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
 
-            // Read 12-bit ADC VBUS (datasheet: 7.5 mV/LSB; write 0x3B then read 0x3C/0x3D after a short settle)
+            // Read 8-bit ADC VBUS (datasheet: 7.5*16 mV/bit)
             let vbus_mv = async {
-                let adc_cfg_before = sw.read_register(SwReg::AdcConfig).await.ok();
-                if sw
-                    .write_register(SwReg::AdcConfig, swc::adc::ADC_SELECT_VBUS)
-                    .await
-                    .is_ok()
-                {
-                    // Per datasheet, selecting source latches data into 0x3C/0x3D; allow conversion/settle
-                    Timer::after(Duration::from_millis(2)).await;
-                    let adc_cfg_after = sw.read_register(SwReg::AdcConfig).await.ok();
-                    if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
-                        if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
-                            let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
-                            if diag_left > 0 {
-                                info!(
-                                    "sw2303.ch0: adc.vbus cfg_bef={:?} cfg_aft={:?} raw_h=0x{:02X} raw_l=0x{:02X} raw12={}",
-                                    adc_cfg_before, adc_cfg_after, h, l, raw12
-                                );
-                            }
-                            return Some(raw12 as f32 * swc::adc::VBUS_FACTOR_MV);
+                match sw.read_register(SwReg::AdcVbus).await {
+                    Ok(v8) => {
+                        let mv_per_lsb = swc::adc::VBUS_FACTOR_MV * 16.0; // 7.5*16 mV
+                        if diag_left > 0 {
+                            info!("sw2303.ch0: adc.vbus8 raw=0x{:02X}", v8);
                         }
+                        Some((v8 as f32) * mv_per_lsb)
                     }
+                    Err(_) => None,
                 }
-                None
             }
             .await;
 

@@ -834,6 +834,29 @@ async fn main(spawner: Spawner) {
                     sc_status_err = Some(sc_err_tag(&e));
                 }
             }
+            // Quick SW2303 diagnostics on same channel (once per scan)
+            let mut i2c_sw = mux_channel(ch);
+            let mut sw_dbg = sw2303::SW2303::new(&mut i2c_sw, sw_addr);
+            if let Ok(s3) = sw_dbg.get_system_status3().await {
+                info!("sw2303.ch{}: sys3=0b{:08b}", ch, s3.bits());
+            }
+            if let Ok(s0) = sw_dbg.get_system_status0().await {
+                info!("sw2303.ch{}: sys0=0b{:08b}", ch, s0.bits());
+            }
+            if let Ok(fc) = sw_dbg.get_fast_charging_status().await {
+                info!("sw2303.ch{}: fastchg=0b{:08b}", ch, fc.bits());
+            }
+            if let Ok(cc) = sw_dbg.read_register(SwReg::ConnectionControl).await {
+                info!("sw2303.ch{}: reg14(conn)=0x{:02X}", ch, cc);
+            }
+            match sw_dbg.is_sink_device_connected().await {
+                Ok(b) => info!(
+                    "sw2303.ch{}: sink_online={}",
+                    ch,
+                    if b { "true" } else { "false" }
+                ),
+                Err(_) => warn!("sw2303.ch{}: sink_online=err", ch),
+            }
         }
         if !sc_present {
             if let Some(tag) = sc_status_err {

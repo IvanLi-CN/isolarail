@@ -640,25 +640,40 @@ async fn main(spawner: Spawner) {
                     let mut sc = sc8815::SC8815::new(i2c_sc, sc_addr);
                     let sc_ibus = sc.read_ibus_current(2, SC8815_RS1_MOHM).await.ok();
 
-                    match sc_ibus {
-                        Some(ibus_sc) => {
-                            let delta = ibus_sc as i32 - i_ma as i32;
-                            info!(
-                                "sw2303.ch0: online={} vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
-                                if online { "true" } else { "false" },
-                                v_mv,
-                                i_ma,
-                                ibus_sc,
-                                delta
-                            );
+                    if online {
+                        match sc_ibus {
+                            Some(ibus_sc) => {
+                                let delta = ibus_sc as i32 - i_ma as i32;
+                                info!(
+                                    "sw2303.ch0: online=true vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
+                                    v_mv,
+                                    i_ma,
+                                    ibus_sc,
+                                    delta
+                                );
+                            }
+                            None => {
+                                info!(
+                                    "sw2303.ch0: online=true vbus={}mV ich_sw={}mA ibus_sc=na",
+                                    v_mv, i_ma
+                                );
+                            }
                         }
-                        None => {
-                            info!(
-                                "sw2303.ch0: online={} vbus={}mV ich_sw={}mA ibus_sc=na",
-                                if online { "true" } else { "false" },
-                                v_mv,
-                                i_ma
-                            );
+                    } else {
+                        match sc_ibus {
+                            Some(ibus_sc) => {
+                                info!(
+                                    "sw2303.ch0: online=false vbus={}mV ich_sw=NA ibus_sc={}mA delta=na",
+                                    v_mv,
+                                    ibus_sc
+                                );
+                            }
+                            None => {
+                                info!(
+                                    "sw2303.ch0: online=false vbus={}mV ich_sw=NA ibus_sc=na",
+                                    v_mv
+                                );
+                            }
                         }
                     }
                 }

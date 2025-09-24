@@ -614,36 +614,11 @@ async fn main(spawner: Spawner) {
             }
             .await;
 
-            // Read 12-bit ADC ICH (datasheet: 3.125 mA/LSB @ 5 mΩ; 2.083 mA/LSB @ 10 mΩ)
-            let (ich_ma, ich_raw12_opt): (Option<f32>, Option<u32>) = async {
-                // Read current ADC config and then select ICH
-                let cfg_bef = sw.read_register(SwReg::AdcConfig).await.ok();
-                if sw.write_register(SwReg::AdcConfig, swc::adc::ADC_SELECT_ICH).await.is_ok() {
-                    // Allow a longer conversion/settle time after channel select
-                    Timer::after(Duration::from_millis(2)).await;
-                    if let Ok(h) = sw.read_register(SwReg::AdcDataHigh).await {
-                        if let Ok(l) = sw.read_register(SwReg::AdcDataLow).await {
-                            let raw12 = (((h as u16) << 4) | ((l & 0x0F) as u16)) as u32;
-                            let ich_factor_ma_12 = swc::adc::ICH_FACTOR_MA / 16.0;
-                            let i_ma = raw12 as f32 * ich_factor_ma_12;
-                            if let Some(before) = cfg_bef {
-                                let cfg_aft = sw.read_register(SwReg::AdcConfig).await.ok();
-                                info!(
-                                    "sw2303.ch0: adc.ich cfg_bef=Some({}) cfg_aft={:?} raw_h=0x{:02X} raw_l=0x{:02X} raw12={}",
-                                    before,
-                                    cfg_aft,
-                                    h,
-                                    l,
-                                    raw12
-                                );
-                            }
-                            return (Some(i_ma), Some(raw12));
-                        }
-                    }
-                }
-                (None, None)
-            }
-            .await;
+            // Read SW2303 ICH from 8-bit register (0x33), 50 mA/LSB
+            let ich_ma: Option<f32> = match sw.read_register(SwReg::AdcIch).await {
+                Ok(v8) => Some(v8 as f32 * swc::adc::ICH_FACTOR_MA),
+                Err(_) => None,
+            };
 
             let online = match sw.is_sink_device_connected().await {
                 Ok(b) => b,
@@ -661,49 +636,13 @@ async fn main(spawner: Spawner) {
                     let mut sc = sc8815::SC8815::new(i2c_sc, sc_addr);
                     let sc_ibus = sc.read_ibus_current(2, SC8815_RS1_MOHM).await.ok();
 
-                    // Also read SW2303 8-bit ICH value for cross-check (always)
-                    let ich8_ma_opt: Option<u32> = match sw.read_register(SwReg::AdcIch).await {
-                        Ok(v8) => Some((v8 as f32 * swc::adc::ICH_FACTOR_MA) as u32),
-                        Err(_) => None,
-                    };
                     // Derive a simple source-active flag from VBUS level
                     let src_active = v_mv >= 4500;
-                    match (sc_ibus, ich8_ma_opt) {
-                        (Some(ibus_sc), Some(i8)) => {
+                    match sc_ibus {
+                        Some(ibus_sc) => {
                             let delta = ibus_sc as i32 - i_ma as i32;
                             info!(
-                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw12={}mA ich_sw8={}mA ibus_sc={}mA delta={}mA",
-                                if online { "true" } else { "false" },
-                                if src_active { "true" } else { "false" },
-                                v_mv,
-                                i_ma,
-                                i8,
-                                ibus_sc,
-                                delta
-                            );
-                            // Extra diagnostics for the first few iterations: show raw12 and expected raw
-                            if diag_left > 0 {
-                                if let Some(raw12) = ich_raw12_opt {
-                                    let ich_lsb_ma_5m = swc::adc::ICH_FACTOR_MA / 16.0; // 3.125
-                                    let exp_raw12_5m = (ibus_sc as f32 / ich_lsb_ma_5m) as u32;
-                                    // also show 10mΩ expectation for quick sanity compare
-                                    let ich_lsb_ma_10m = 25.0 / 12.0; // ≈2.0833 mA/bit
-                                    let exp_raw12_10m = (ibus_sc as f32 / ich_lsb_ma_10m) as u32;
-                                    info!(
-                                        "sw2303.ch0: adc.ich raw12={} exp_raw12[5m]={} exp_raw12[10m]={}",
-                                        raw12, exp_raw12_5m, exp_raw12_10m
-                                    );
-                                }
-                                // Also dump SystemStatus0 for pass transistor/loop hints
-                                if let Ok(s0) = sw.get_system_status0().await {
-                                    info!("sw2303.ch0: sys0=0b{:08b}", s0.bits());
-                                }
-                            }
-                        }
-                        (Some(ibus_sc), None) => {
-                            let delta = ibus_sc as i32 - i_ma as i32;
-                            info!(
-                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw12={}mA ich_sw8=na ibus_sc={}mA delta={}mA",
+                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
                                 if online { "true" } else { "false" },
                                 if src_active { "true" } else { "false" },
                                 v_mv,
@@ -711,35 +650,10 @@ async fn main(spawner: Spawner) {
                                 ibus_sc,
                                 delta
                             );
-                            if diag_left > 0 {
-                                if let Some(raw12) = ich_raw12_opt {
-                                    let ich_lsb_ma_5m = swc::adc::ICH_FACTOR_MA / 16.0; // 3.125
-                                    let exp_raw12_5m = (ibus_sc as f32 / ich_lsb_ma_5m) as u32;
-                                    let ich_lsb_ma_10m = 25.0 / 12.0; // ≈2.0833 mA/bit
-                                    let exp_raw12_10m = (ibus_sc as f32 / ich_lsb_ma_10m) as u32;
-                                    info!(
-                                        "sw2303.ch0: adc.ich raw12={} exp_raw12[5m]={} exp_raw12[10m]={}",
-                                        raw12, exp_raw12_5m, exp_raw12_10m
-                                    );
-                                }
-                                if let Ok(s0) = sw.get_system_status0().await {
-                                    info!("sw2303.ch0: sys0=0b{:08b}", s0.bits());
-                                }
-                            }
                         }
-                        (None, Some(i8)) => {
+                        None => {
                             info!(
-                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw12={}mA ich_sw8={}mA ibus_sc=na",
-                                if online { "true" } else { "false" },
-                                if src_active { "true" } else { "false" },
-                                v_mv,
-                                i_ma,
-                                i8
-                            );
-                        }
-                        (None, None) => {
-                            info!(
-                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw12={}mA ich_sw8=na ibus_sc=na",
+                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw={}mA ibus_sc=na",
                                 if online { "true" } else { "false" },
                                 if src_active { "true" } else { "false" },
                                 v_mv,

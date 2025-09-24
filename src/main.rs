@@ -633,12 +633,34 @@ async fn main(spawner: Spawner) {
                 (Some(v), Some(i)) => {
                     let v_mv: u32 = v as u32;
                     let i_ma: u32 = i as u32;
-                    info!(
-                        "sw2303.ch0: online={} vbus={}mV ich={}mA",
-                        if online { "true" } else { "false" },
-                        v_mv,
-                        i_ma
-                    );
+
+                    // Read SC8815 IBUS on CH0 for cross-check (ratio=3x, RS1=5mΩ)
+                    let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+                    let i2c_sc = mux_channel(0);
+                    let mut sc = sc8815::SC8815::new(i2c_sc, sc_addr);
+                    let sc_ibus = sc.read_ibus_current(2, SC8815_RS1_MOHM).await.ok();
+
+                    match sc_ibus {
+                        Some(ibus_sc) => {
+                            let delta = ibus_sc as i32 - i_ma as i32;
+                            info!(
+                                "sw2303.ch0: online={} vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
+                                if online { "true" } else { "false" },
+                                v_mv,
+                                i_ma,
+                                ibus_sc,
+                                delta
+                            );
+                        }
+                        None => {
+                            info!(
+                                "sw2303.ch0: online={} vbus={}mV ich_sw={}mA ibus_sc=na",
+                                if online { "true" } else { "false" },
+                                v_mv,
+                                i_ma
+                            );
+                        }
+                    }
                 }
                 _ => {
                     warn!(

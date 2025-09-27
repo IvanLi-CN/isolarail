@@ -104,6 +104,29 @@ cargo run
 cargo run --release
 ```
 
+### Makefile helpers (recommended)
+
+To simplify common tasks and ensure defmt logs decode correctly, a `Makefile` is provided. Examples:
+
+```bash
+# Build (release by default)
+make build
+
+# Flash and monitor with defmt decoding
+make run PORT=/dev/tty.usbmodem1101 BAUD=115200
+
+# Attach only to the serial monitor (no flashing), with defmt decoding
+make attach PORT=/dev/tty.usbmodem1101 BAUD=115200
+
+# List detected serial ports
+make ports
+```
+
+Notes:
+- If you run `espflash monitor` directly and see garbled output, it is because the app logs with `defmt`.
+- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/esp32s3-hello-world` so logs are decoded.
+- Default baud is `115200`; override with `BAUD=...` if needed.
+
 ## Expected Output
 
 Once flashed and running, you should see output similar to:

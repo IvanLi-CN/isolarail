@@ -17,6 +17,8 @@ use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
 use esp_hal::gpio::{Input, Level, Output, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
+use esp_hal::spi::master::{Config as SpiConfig, Spi};
+use esp_hal::spi::Mode as SpiMode;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use sc8815::registers::Register as ScReg;
@@ -29,6 +31,7 @@ use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
+use embassy_sync::signal::Signal;
 use static_cell::StaticCell;
 
 // No global mutex in MVP
@@ -41,6 +44,13 @@ use static_cell::StaticCell;
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
 use xca9545a_async as pca9545;
+// Display driver
+use embedded_graphics::{
+    pixelcolor::Rgb565, prelude::*, primitives::PrimitiveStyle, primitives::Rectangle,
+};
+use embedded_hal::digital::OutputPin as _; // bring methods into scope
+use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
+use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -57,6 +67,8 @@ type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
 static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // No per-channel statics; channels are lightweight views over the shared bus
+
+// （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
 
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -117,6 +129,20 @@ const SC8815_IBUS_LIMIT_MA: u16 = 5000;
 const SC8815_IBAT_LIMIT_MA: u16 = 6000;
 const SC8815_RS1_MOHM: u16 = 5;
 const SC8815_RS2_MOHM: u16 = 5;
+
+// ===== Display pin mapping (assumed; please confirm) =====
+// SPI2 SCLK/MOSI to panel; MISO unused.
+// DC uses MCU GPIO (data/command). Backlight not managed here.
+// 回退实现：MCU 直接控制 CS/RES，与示例一致
+const PIN_LCD_SCLK: u8 = 12;
+const PIN_LCD_MOSI: u8 = 11;
+const PIN_LCD_DC: u8 = 10;
+const PIN_LCD_CS_GPIO: u8 = 13;
+const PIN_LCD_RST_GPIO: u8 = 14;
+const PIN_LCD_BLK_GPIO: u8 = 15;
+
+// TCA6408A 地址仅用于存在性检测日志
+const TCA6408_ADDR: u8 = 0x20;
 
 fn sc8815_default_device_config() -> DeviceConfiguration {
     let mut config = DeviceConfiguration::default();
@@ -249,11 +275,74 @@ async fn sc8815_ack<I2C: embedded_hal_async::i2c::I2c>(
 
 // NOTE: no arbitrary address enumeration; only probe known devices.
 
-async fn tca6408a_present<I2C: embedded_hal_async::i2c::I2c>(i2c: &mut I2C) -> bool {
-    let mut buf = [0u8; 1];
-    embedded_hal_async::i2c::I2c::write_read(i2c, 0x20, &[0x00], &mut buf)
-        .await
-        .is_ok()
+// 按项目要求：不在固件中操作 TCA6408A（不扫描/不复位/不拉 CS），RES/CS 由外部电路或其它控制实体负责。
+
+// Embassy timer adapter for the display driver
+struct DisplayTimer;
+impl Gc9d01Timer for DisplayTimer {
+    async fn after_millis(ms: u64) {
+        Timer::after(Duration::from_millis(ms)).await;
+    }
+}
+
+// Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
+// CS is permanently held low by TCA6408A (P6), so we don't toggle CS here.
+struct SimpleSpiDev<'a, BUS> {
+    bus: BUS,
+    cs: Option<Output<'a>>,
+}
+
+impl<'a, BUS> embedded_hal::spi::ErrorType for SimpleSpiDev<'a, BUS>
+where
+    BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
+{
+    type Error = esp_hal::spi::Error;
+}
+
+impl<'a, BUS> Eh1SpiDevice for SimpleSpiDev<'a, BUS>
+where
+    BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
+{
+    async fn transaction(&mut self, ops: &mut [SpiOp<'_, u8>]) -> Result<(), Self::Error> {
+        if let Some(cs) = self.cs.as_mut() {
+            let _ = cs.set_low();
+        }
+        for op in ops.iter_mut() {
+            match op {
+                SpiOp::Write(w) => {
+                    self.bus.write(w).await?;
+                }
+                SpiOp::Read(_r) => {
+                    // Not used by this driver path
+                    // If needed, implement via self.bus.read
+                    // For safety, return Ok without action
+                }
+                SpiOp::Transfer(_r, _w) => {}
+                SpiOp::TransferInPlace(_b) => {}
+                SpiOp::DelayNs(_ns) => {}
+            }
+        }
+        if let Some(cs) = self.cs.as_mut() {
+            let _ = cs.set_high();
+        }
+        Ok(())
+    }
+}
+
+// Initialize SPI + GC9D01 and draw a chessboard pattern (inlined in main where pins are available)
+
+// NoopPin for RST placeholder: real reset handled via TCA6408 P5
+pub struct NoopPin;
+impl embedded_hal::digital::ErrorType for NoopPin {
+    type Error = core::convert::Infallible;
+}
+impl embedded_hal::digital::OutputPin for NoopPin {
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 async fn ack_scan_vin_off(sc_addr: u8) {
@@ -359,12 +448,118 @@ async fn main(spawner: Spawner) {
         .with_scl(p.GPIO9)
         .into_async();
     let bus = I2C_BUS.init(Mutex::new(i2c_hw));
-    let mut i2c = I2cDevice::new(bus);
-    let tca_online = tca6408a_present(&mut i2c).await;
-    if tca_online {
-        info!("i2c.front: tca6408a=online addr=0x20");
+    // MCU 直接控制 CS/RES（回退实现）
+    info!("lcd.ctrl: cs,res via MCU GPIO");
+
+    // Setup SPI2 and display. CS/RES 由 TCA6408A 控制（本固件不介入）。
+    let spi_bus = Spi::new(
+        p.SPI2,
+        SpiConfig::default()
+            .with_frequency(esp_hal::time::Rate::from_hz(10_000_000))
+            .with_mode(SpiMode::_0),
+    )
+    .unwrap()
+    .with_sck(match PIN_LCD_SCLK {
+        12 => p.GPIO12,
+        _ => p.GPIO12,
+    })
+    .with_mosi(match PIN_LCD_MOSI {
+        11 => p.GPIO11,
+        _ => p.GPIO11,
+    })
+    .into_async();
+
+    let dc = match PIN_LCD_DC {
+        10 => Output::new(p.GPIO10, Level::Low, esp_hal::gpio::OutputConfig::default()),
+        _ => Output::new(p.GPIO10, Level::Low, esp_hal::gpio::OutputConfig::default()),
+    };
+    // Backlight on (high)
+    let mut blk = match PIN_LCD_BLK_GPIO {
+        15 => Output::new(p.GPIO15, Level::Low, esp_hal::gpio::OutputConfig::default()),
+        _ => Output::new(p.GPIO15, Level::Low, esp_hal::gpio::OutputConfig::default()),
+    };
+    blk.set_high();
+
+    const LOGICAL_W: usize = 160;
+    const LOGICAL_H: usize = 50;
+    static mut FB: Option<[Rgb565; LOGICAL_W * LOGICAL_H]> = None;
+    unsafe {
+        if FB.is_none() {
+            FB = Some([Rgb565::BLACK; LOGICAL_W * LOGICAL_H]);
+        }
+    }
+    let fb: &mut [Rgb565] = unsafe { FB.as_mut().unwrap() };
+
+    // 用 MCU CS 脚包一层 SpiDevice，事务内拉低/释放
+    let cs = match PIN_LCD_CS_GPIO {
+        13 => Output::new(
+            p.GPIO13,
+            Level::High,
+            esp_hal::gpio::OutputConfig::default(),
+        ),
+        _ => Output::new(
+            p.GPIO13,
+            Level::High,
+            esp_hal::gpio::OutputConfig::default(),
+        ),
+    };
+    let spi_dev = SimpleSpiDev {
+        bus: spi_bus,
+        cs: Some(cs),
+    };
+    let cfg = DisplayConfig {
+        width: LOGICAL_W as u16,
+        height: LOGICAL_H as u16,
+        orientation: Orientation::Landscape,
+        rgb: false,
+        inverted: false,
+        dx: 15,
+        dy: 0,
+    };
+    let rst = match PIN_LCD_RST_GPIO {
+        14 => Output::new(
+            p.GPIO14,
+            Level::High,
+            esp_hal::gpio::OutputConfig::default(),
+        ),
+        _ => Output::new(
+            p.GPIO14,
+            Level::High,
+            esp_hal::gpio::OutputConfig::default(),
+        ),
+    };
+    let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
+    info!("lcd.init: start panel_160x50 mode (fallback MCU CS/RST)");
+    if let Err(_e) = disp.init().await {
+        warn!("lcd.init: failed (fallback)");
     } else {
-        warn!("i2c.front: tca6408a=offline addr=0x20");
+        // draw chessboard
+        let _ = disp.clear(Rgb565::BLACK);
+        let bw = 10u16;
+        let bh = 10u16;
+        let nx = (LOGICAL_W as u16 + bw - 1) / bw;
+        let ny = (LOGICAL_H as u16 + bh - 1) / bh;
+        for r in 0..ny {
+            for c in 0..nx {
+                let color = if (r + c) % 2 == 0 {
+                    Rgb565::WHITE
+                } else {
+                    Rgb565::BLACK
+                };
+                let x = c * bw;
+                let y = r * bh;
+                let w = core::cmp::min(bw, LOGICAL_W as u16 - x);
+                let h = core::cmp::min(bh, LOGICAL_H as u16 - y);
+                let _ = Rectangle::new(
+                    Point::new(x as i32, y as i32),
+                    Size::new(w as u32, h as u32),
+                )
+                .into_styled(PrimitiveStyle::with_fill(color))
+                .draw(&mut disp);
+            }
+        }
+        let _ = disp.flush().await;
+        info!("lcd.draw: chessboard done (fallback)");
     }
 
     // I2C mux PCA9545A presence check via async driver

@@ -33,6 +33,7 @@ use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use static_cell::StaticCell;
+mod fan;
 
 // No global mutex in MVP
 
@@ -114,7 +115,8 @@ const PIN_PSTOP4: u8 = 40;
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 
 // Qualification thresholds (docs/software_design.md)
-const VIN_MIN_V: f32 = 9.0;
+// Accept 5.0V lab supply for fan test (was 9.0V)
+const VIN_MIN_V: f32 = 4.5;
 const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 
@@ -616,13 +618,18 @@ async fn main(spawner: Spawner) {
         .spawn(power_in_log_task(power_in::status_receiver()))
         .expect("spawn power_in_log_task");
 
+    // Spawn fan control + tach task early: calibrate max RPM then 10/50/100% loop
+    // Spawns regardless of VIN_ON to allow bench 5V fan tests.
+    fan::spawn(&spawner, p.LEDC, p.PCNT, p.GPIO1, p.GPIO2, p.GPIO6).expect("spawn fan task");
+
     // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
     let vin_on = power_in::vin_on_signal().wait().await;
     if !vin_on {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
         let sc_addr = sc8815_const::DEFAULT_ADDRESS;
         ack_scan_vin_off(sc_addr).await;
-        return;
+        // Keep executor alive so background tasks (power_in, fan) run
+        core::future::pending::<()>().await;
     }
 
     // After VIN ON, scan SC8815 and conditionally init SW2303 per channel

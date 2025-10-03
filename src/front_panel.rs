@@ -4,7 +4,7 @@ use embassy_executor::{task, SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_hal::digital::InputPin as _;
+// not using InputPin trait directly; rely on esp-hal Input::is_high()
 use embedded_hal_async::i2c::I2c;
 use esp_hal::gpio::Input;
 
@@ -31,45 +31,27 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, mut int_pin:
     };
     info!("front.gpio: tca6408a baseline=0x{:02X}", last_inputs);
 
-    // Track last INT level to detect falling edges even if we poll.
+    // Track last INT level（若该引脚未接线，后续轮询亦可识别按键变化）。
     let mut last_int_high = int_pin.is_high();
 
     loop {
         let now_high = int_pin.is_high();
-        // Detect falling edge on INT (high -> low)
+        let mut handled = false;
+
+        // 快速路径：检测到 INT 下降沿优先读取
         if last_int_high && !now_high {
-            // On INT assertion, read inputs to clear the interrupt latch, then compare.
-            match tca_read_inputs(&mut i2c).await {
-                Ok(now) => {
-                    let prev = last_inputs;
-                    last_inputs = now;
-                    // Interested only in P0..P4 falling edges: 1 -> 0
-                    let mask_5 = 0x1F;
-                    let falling = (prev & mask_5) & !(now & mask_5);
-                    if falling != 0 {
-                        info!(
-                            "front.key: fall mask=0x{:02X} prev=0x{:02X} now=0x{:02X}",
-                            falling, prev, now
-                        );
-                        for bit in 0..=4u8 {
-                            if (falling & (1u8 << bit)) != 0 {
-                                info!("front.key: fall=P{}", bit);
-                            }
-                        }
-                    } else {
-                        // Change occurred but no falling edges on P0..P4
-                        info!("front.key: change prev=0x{:02X} now=0x{:02X}", prev, now);
-                    }
-                }
-                Err(_) => {
-                    warn!("front.gpio: tca6408a read fail on INT addr=0x21");
-                }
-            }
+            handled = true;
+            handle_read_and_log(&mut i2c, &mut last_inputs).await;
         }
         last_int_high = now_high;
 
-        // Debounce/polling interval
-        Timer::after(Duration::from_millis(2)).await;
+        // 保障路径：定期轮询，避免 INT 未接线时漏报
+        if !handled {
+            handle_read_and_log(&mut i2c, &mut last_inputs).await;
+        }
+
+        // 轻微去抖/限流
+        Timer::after(Duration::from_millis(5)).await;
     }
 }
 
@@ -78,4 +60,29 @@ async fn tca_read_inputs<I2C: I2c>(i2c: &mut I2C) -> Result<u8, I2C::Error> {
     let mut b = [0u8; 1];
     i2c.write_read(TCA6408_ADDR, &[0x00], &mut b).await?;
     Ok(b[0])
+}
+
+async fn handle_read_and_log<I2C: I2c>(i2c: &mut I2C, last_inputs: &mut u8) {
+    match tca_read_inputs(i2c).await {
+        Ok(now) => {
+            let prev = *last_inputs;
+            *last_inputs = now;
+            let mask_5 = 0x1F; // P0..P4
+            let falling = (prev & mask_5) & !(now & mask_5); // 1->0
+            if falling != 0 {
+                info!(
+                    "front.key: fall mask=0x{:02X} prev=0x{:02X} now=0x{:02X}",
+                    falling, prev, now
+                );
+                for bit in 0..=4u8 {
+                    if (falling & (1u8 << bit)) != 0 {
+                        info!("front.key: fall=P{}", bit);
+                    }
+                }
+            }
+        }
+        Err(_) => {
+            warn!("front.gpio: tca6408a read fail addr=0x21");
+        }
+    }
 }

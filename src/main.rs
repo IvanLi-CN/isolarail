@@ -3,7 +3,7 @@
 //! Implements the MVP per docs/software_design.md:
 //! - Boot init: time, GPIO, I2C, basic presence scans
 //! - I2C mux PCA9545A (0x70) split + per-channel device ACK checks (SC8815/SW2303)
-//! - Front-panel TCA6408A (0x20) presence check
+//! - Front-panel TCA6408A (0x21) presence check
 //! - Power input subsystem MVP: INA226-based input qualification and 10s status log
 
 #![no_std]
@@ -142,7 +142,7 @@ const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
 // TCA6408A 地址仅用于存在性检测日志
-const TCA6408_ADDR: u8 = 0x20;
+const TCA6408_ADDR: u8 = 0x21;
 
 fn sc8815_default_device_config() -> DeviceConfiguration {
     let mut config = DeviceConfiguration::default();
@@ -440,7 +440,7 @@ async fn main(spawner: Spawner) {
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
-    // Upstream TCA6408A presence check (0x20) using async I2C — runs immediately after publishing intent
+    // Upstream TCA6408A presence check (0x21) using async I2C — runs immediately after publishing intent
     // Initialize I2C0 once and share via Mutex + I2cDevice
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()

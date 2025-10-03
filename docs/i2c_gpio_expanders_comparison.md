@@ -1,7 +1,6 @@
 # I2C GPIO 扩展器对比（直接横向，不分等级）
 
 > 作者：白羽（Augment Agent）
-> 更新时间：2025-08-19
 > 适用：USB Hub 与通用 MCU 项目器件选型
 
 ## 一、快速要点（先看这里）
@@ -89,6 +88,7 @@
   - ESD/Latch‑up：HBM ±2 kV、CDM ±1 kV；JESD78 100 mA
 - I²C 地址
   - ADDR=0：7‑bit 地址 0x20；ADDR=1：7‑bit 地址 0x21（TI DS：表 8‑3）
+
 - 寄存器映射（命令字）
   - 0x00 Input Port（只读）
   - 0x01 Output Port（读写，输出锁存）

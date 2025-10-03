@@ -33,6 +33,7 @@ use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use static_cell::StaticCell;
+mod front_panel;
 
 // No global mutex in MVP
 
@@ -408,6 +409,12 @@ async fn main(spawner: Spawner) {
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
 
+    // Front-panel TCA6408A INT input (open-drain, pull-up)
+    let int_pin = Input::new(
+        p.GPIO16,
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    );
+
     // PSTOP lines default disabled (active-low -> drive high)
     let mut pstop1 = Output::new(
         p.GPIO17,
@@ -575,6 +582,9 @@ async fn main(spawner: Spawner) {
     unsafe {
         I2C_BUS_REF = Some(bus);
     }
+
+    // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
+    front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(

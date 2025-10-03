@@ -19,7 +19,7 @@ pub fn spawn(
 }
 
 #[task]
-async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, mut int_pin: Input<'static>) {
+async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, int_pin: Input<'static>) {
     // Establish baseline: read input register once.
     let mut i2c = I2cDevice::new(bus);
     let mut last_inputs: u8 = match tca_read_inputs(&mut i2c).await {

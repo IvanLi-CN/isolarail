@@ -38,10 +38,13 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, mut int_pin:
         let now_high = int_pin.is_high();
         let mut handled = false;
 
-        // 快速路径：检测到 INT 下降沿优先读取
+        // 快速路径：检测到 INT 变化时打印电平，并在下降沿优先读取
         if last_int_high && !now_high {
             handled = true;
             handle_read_and_log(&mut i2c, &mut last_inputs).await;
+            info!("front.gpio: int=low");
+        } else if !last_int_high && now_high {
+            info!("front.gpio: int=high");
         }
         last_int_high = now_high;
 
@@ -69,14 +72,19 @@ async fn handle_read_and_log<I2C: I2c>(i2c: &mut I2C, last_inputs: &mut u8) {
             *last_inputs = now;
             let mask_5 = 0x1F; // P0..P4
             let falling = (prev & mask_5) & !(now & mask_5); // 1->0
-            if falling != 0 {
+            let rising = !(prev & mask_5) & (now & mask_5); // 0->1
+            if falling != 0 || rising != 0 {
                 info!(
-                    "front.key: fall mask=0x{:02X} prev=0x{:02X} now=0x{:02X}",
-                    falling, prev, now
+                    "front.key: change prev=0x{:02X} now=0x{:02X} fall=0x{:02X} rise=0x{:02X}",
+                    prev, now, falling, rising
                 );
                 for bit in 0..=4u8 {
-                    if (falling & (1u8 << bit)) != 0 {
+                    let m = 1u8 << bit;
+                    if (falling & m) != 0 {
                         info!("front.key: fall=P{}", bit);
+                    }
+                    if (rising & m) != 0 {
+                        info!("front.key: rise=P{}", bit);
                     }
                 }
             }

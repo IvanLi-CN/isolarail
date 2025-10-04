@@ -3,7 +3,7 @@
 //! Implements the MVP per docs/software_design.md:
 //! - Boot init: time, GPIO, I2C, basic presence scans
 //! - I2C mux PCA9545A (0x70) split + per-channel device ACK checks (SC8815/SW2303)
-//! - Front-panel TCA6408A (0x20) presence check
+//! - Front-panel TCA6408A (0x21) presence check
 //! - Power input subsystem MVP: INA226-based input qualification and 10s status log
 
 #![no_std]
@@ -31,8 +31,9 @@ use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
-use embassy_sync::signal::Signal;
+// use embassy_sync::signal::Signal; // not used on this branch
 use static_cell::StaticCell;
+mod front_panel;
 
 // No global mutex in MVP
 
@@ -48,7 +49,7 @@ use xca9545a_async as pca9545;
 use embedded_graphics::{
     pixelcolor::Rgb565, prelude::*, primitives::PrimitiveStyle, primitives::Rectangle,
 };
-use embedded_hal::digital::OutputPin as _; // bring methods into scope
+// esp-hal Output has inherent set_low/set_high; no trait import needed
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
 use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
 
@@ -142,7 +143,7 @@ const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
 // TCA6408A 地址仅用于存在性检测日志
-const TCA6408_ADDR: u8 = 0x20;
+const TCA6408_ADDR: u8 = 0x21;
 
 fn sc8815_default_device_config() -> DeviceConfiguration {
     let mut config = DeviceConfiguration::default();
@@ -305,7 +306,7 @@ where
 {
     async fn transaction(&mut self, ops: &mut [SpiOp<'_, u8>]) -> Result<(), Self::Error> {
         if let Some(cs) = self.cs.as_mut() {
-            let _ = cs.set_low();
+            cs.set_low();
         }
         for op in ops.iter_mut() {
             match op {
@@ -323,7 +324,7 @@ where
             }
         }
         if let Some(cs) = self.cs.as_mut() {
-            let _ = cs.set_high();
+            cs.set_high();
         }
         Ok(())
     }
@@ -408,6 +409,12 @@ async fn main(spawner: Spawner) {
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
 
+    // Front-panel TCA6408A INT input (open-drain, pull-up)
+    let int_pin = Input::new(
+        p.GPIO16,
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    );
+
     // PSTOP lines default disabled (active-low -> drive high)
     let mut pstop1 = Output::new(
         p.GPIO17,
@@ -440,7 +447,7 @@ async fn main(spawner: Spawner) {
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
-    // Upstream TCA6408A presence check (0x20) using async I2C — runs immediately after publishing intent
+    // Upstream TCA6408A presence check (0x21) using async I2C — runs immediately after publishing intent
     // Initialize I2C0 once and share via Mutex + I2cDevice
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
@@ -482,13 +489,8 @@ async fn main(spawner: Spawner) {
 
     const LOGICAL_W: usize = 160;
     const LOGICAL_H: usize = 50;
-    static mut FB: Option<[Rgb565; LOGICAL_W * LOGICAL_H]> = None;
-    unsafe {
-        if FB.is_none() {
-            FB = Some([Rgb565::BLACK; LOGICAL_W * LOGICAL_H]);
-        }
-    }
-    let fb: &mut [Rgb565] = unsafe { FB.as_mut().unwrap() };
+    let mut fb_buf: [Rgb565; LOGICAL_W * LOGICAL_H] = [Rgb565::BLACK; LOGICAL_W * LOGICAL_H];
+    let fb: &mut [Rgb565] = &mut fb_buf;
 
     // 用 MCU CS 脚包一层 SpiDevice，事务内拉低/释放
     let cs = match PIN_LCD_CS_GPIO {
@@ -537,8 +539,8 @@ async fn main(spawner: Spawner) {
         let _ = disp.clear(Rgb565::BLACK);
         let bw = 10u16;
         let bh = 10u16;
-        let nx = (LOGICAL_W as u16 + bw - 1) / bw;
-        let ny = (LOGICAL_H as u16 + bh - 1) / bh;
+        let nx = (LOGICAL_W as u16).div_ceil(bw);
+        let ny = (LOGICAL_H as u16).div_ceil(bh);
         for r in 0..ny {
             for c in 0..nx {
                 let color = if (r + c) % 2 == 0 {
@@ -575,6 +577,9 @@ async fn main(spawner: Spawner) {
     unsafe {
         I2C_BUS_REF = Some(bus);
     }
+
+    // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
+    front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(

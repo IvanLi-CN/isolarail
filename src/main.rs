@@ -620,7 +620,8 @@ async fn main(spawner: Spawner) {
 
     // Spawn fan control + tach task early: calibrate max RPM then 10/50/100% loop
     // Spawns regardless of VIN_ON to allow bench 5V fan tests.
-    fan::spawn(&spawner, p.LEDC, p.PCNT, p.GPIO1, p.GPIO2, p.GPIO6).expect("spawn fan task");
+    fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6)
+        .expect("spawn fan task");
 
     // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
     let vin_on = power_in::vin_on_signal().wait().await;

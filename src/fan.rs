@@ -452,7 +452,7 @@ async fn measure_max_rpm_diag(
         0
     };
     let _proof_best_rpm = ((best_win_pulses as u64).saturating_mul(60_000)
-        / (RPM_WIN_MS_CAL as u64)
+        / RPM_WIN_MS_CAL
         / (TACH_PULSES_PER_REV as u64)) as u32;
     // 最小改动：移除额外自证日志
 

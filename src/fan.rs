@@ -417,6 +417,7 @@ async fn measure_max_rpm_diag(
     let mut jitter_pct: u32 = 100;
     let mut reason_timeout = true;
     let mut win_ms_total: u64 = 0; // 用于数学自证（脉冲/总采样窗时间）
+    let mut best_win_pulses: u32 = 0; // 记录单窗最大脉冲数
 
     while elapsed_ms < observe_max_ms {
         // 采集一组样本并取中位数（过滤离群）。仅以“总观测超时”作为结束条件。
@@ -428,6 +429,9 @@ async fn measure_max_rpm_diag(
             got += 1;
             total_pulses = total_pulses.saturating_add(pulses);
             win_ms_total = win_ms_total.saturating_add(win_ms);
+            if pulses > best_win_pulses {
+                best_win_pulses = pulses;
+            }
         }
         elapsed_ms = (esp_hal::time::Instant::now() - t0).as_millis();
         if got == 0 {
@@ -465,18 +469,25 @@ async fn measure_max_rpm_diag(
     }
 
     // 计算总窗时间上的等效 RPM（用于日志自证；不改变返回值）
-    let proof_rpm = if win_ms_total > 0 {
+    // 自证：平均RPM与最佳单窗RPM（便于人工复核）
+    let proof_avg_rpm = if win_ms_total > 0 {
         ((total_pulses as u64).saturating_mul(60_000) / win_ms_total / (TACH_PULSES_PER_REV as u64))
             as u32
     } else {
         0
     };
-    if VERBOSE_LOG {
-        info!(
-            "fan.calib.proof: win_ms_tot={} pulses={} ppr={} calc_rpm={}",
-            win_ms_total as u32, total_pulses, TACH_PULSES_PER_REV as u32, proof_rpm
-        );
-    }
+    let proof_best_rpm = ((best_win_pulses as u64).saturating_mul(60_000)
+        / (RPM_WIN_MS_CAL as u64)
+        / (TACH_PULSES_PER_REV as u64)) as u32;
+    info!(
+        "fan.calib.proof: win_ms_tot={} pulses={} best_pulses={} ppr={} avg_rpm={} best_win_rpm={}",
+        win_ms_total as u32,
+        total_pulses,
+        best_win_pulses,
+        TACH_PULSES_PER_REV as u32,
+        proof_avg_rpm,
+        proof_best_rpm
+    );
 
     CalibDiag {
         rpm: max_rpm,

@@ -22,6 +22,8 @@ extern "C" {
 // - GPIO6:  FAN_TACH (PCNT测速)
 
 const TACH_PULSES_PER_REV: u32 = 2; // common PC fan default
+                                    // Logging verbosity: keep only key summaries by default
+const VERBOSE_LOG: bool = false;
 
 // 轮询 PCNT 的最小等待粒度（非固定窗，仅用于避免忙等）
 const RPM_POLL_MS: u64 = 5;
@@ -244,8 +246,8 @@ async fn task(
         // Temperature read & smooth
         let (raw, t_c) = read_temp_c_raw_conv().await;
         ts_seq = ts_seq.wrapping_add(1);
-        // 仅在 raw 变化或 stuck 时打印，减少日志噪声
-        if raw != last_raw {
+        // 仅在 VERBOSE 下打印温度原始变化与卡滞
+        if VERBOSE_LOG && raw != last_raw {
             let ent = unsafe { (esp_rom_regi2c_read(0x69, 1, 0x07) >> 2) & 1 };
             info!(
                 "tsens.raw_change: seq={} raw={} ent_tsens={}",
@@ -254,7 +256,7 @@ async fn task(
         }
         if raw == last_raw {
             same_count = same_count.saturating_add(1);
-            if same_count % 10 == 0 {
+            if VERBOSE_LOG && same_count % 10 == 0 {
                 info!(
                     "tsens.stuck: raw_unmoved_ms={} last={}",
                     same_count * (CTRL_TICK_MS as u32),
@@ -289,7 +291,7 @@ async fn task(
             set_speed_pct(&ch0, 0);
             let _ = fan_en.set_low();
             off_log_ms += CTRL_TICK_MS as u32;
-            if off_log_ms >= 1000 {
+            if VERBOSE_LOG && off_log_ms >= 1000 {
                 off_log_ms = 0;
                 info!(
                     "fan.temp: T={}.1C raw={} tgt_pct=0 state=off",
@@ -318,10 +320,12 @@ async fn task(
             } else {
                 0
             };
-            info!(
-                "fan.fail_tach: force_max duty={} rpm={} (tach_valid={})",
-                applied_duty, rpm, tach_valid as u8
-            );
+            if VERBOSE_LOG {
+                info!(
+                    "fan.fail_tach: force_max duty={} rpm={} (tach_valid={})",
+                    applied_duty, rpm, tach_valid as u8
+                );
+            }
         } else {
             // Closed-loop PI to reach target RPM
             let _ = fan_en.set_high();

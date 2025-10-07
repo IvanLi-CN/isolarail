@@ -41,7 +41,7 @@ const CTRL_TICK_MS: u64 = 500;
 // 校准观测策略：不假设转速生效时间，直接连续取样并检测稳定
 const CALIB_SPINUP_MS: u64 = 0; // 不预设加速时间；稳定性判据自行收敛
                                 // 校准“观测预算”上限（非固定采样窗；达到平台可提前结束）
-const CALIB_OBSERVE_MAX_MS: u64 = 8000; // 兜底超时
+const CALIB_OBSERVE_MAX_MS: u64 = 20_000; // 兜底超时(≥ CALIB_MIN_OBS_MS)
 
 // Temperature control policy
 const TEMP_TARGET_C: f32 = 50.0; // keep below this

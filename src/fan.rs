@@ -28,12 +28,12 @@ const VERBOSE_LOG: bool = false;
 // 运行期/校准期固定窗法均使用，K 取 1（最小化延迟与日志）
 const RPM_MEDIAN_K_FAST: usize = 1;
 const RPM_MEDIAN_K_CAL: usize = 1;
-// 稳定判据：相邻两次满足阈值即可（最小改动）
-const CALIB_STABLE_REQUIRED: usize = 1;
+// 稳定判据：近 K 个窗口无“显著新高”（相对/绝对阈值内）
+const CALIB_NO_IMPROVE_K: usize = 5;
 // 固定时间窗参数
 const RPM_WIN_MS_CAL: u64 = 200; // 校准阶段 200ms 窗口
 const RPM_WIN_MS_FAST: u64 = 100; // 运行期 100ms 窗口
-const CALIB_MIN_OBS_MS: u64 = 4000; // 至少观察 4s 后允许判稳
+const CALIB_MIN_OBS_MS: u64 = 10_000; // 至少观察 10s 才允许判稳
 const CALIB_STABLE_EPS_PCT: u32 = 2; // 允许变化占比
 const CALIB_STABLE_EPS_ABS: u32 = 50; // 或绝对值
                                       // Control loop tick
@@ -412,8 +412,7 @@ async fn measure_max_rpm_diag(
     let mut total_pulses: u32 = 0;
     let mut samples: u32 = 0;
     let mut max_rpm: u32 = 0;
-    let mut med_prev: Option<u32> = None;
-    let mut stable_streak: usize = 0;
+    let mut no_improve_streak: usize = 0;
     let mut jitter_pct: u32 = 100;
     let mut reason_timeout = true;
     let mut win_ms_total: u64 = 0; // 用于数学自证（脉冲/总采样窗时间）
@@ -439,6 +438,15 @@ async fn measure_max_rpm_diag(
         }
         let med = median_in_place(&mut buf[..got]);
         samples = samples.saturating_add(1);
+
+        // 判定是否出现“显著新高”：与当前全局 max_rpm 比较（在更新 max 之前比较）
+        let eps = (max_rpm * CALIB_STABLE_EPS_PCT) / 100 + CALIB_STABLE_EPS_ABS;
+        let has_new_peak = med > max_rpm.saturating_add(eps);
+        if has_new_peak {
+            no_improve_streak = 0;
+        } else {
+            no_improve_streak = no_improve_streak.saturating_add(1);
+        }
         if med > max_rpm {
             max_rpm = med;
         }
@@ -452,17 +460,8 @@ async fn measure_max_rpm_diag(
             100
         };
 
-        // 稳定性：连续 CALIB_STABLE_REQUIRED 次中位数未显著上升即可判稳
-        if let Some(prev) = med_prev {
-            let eps = (prev * CALIB_STABLE_EPS_PCT) / 100 + CALIB_STABLE_EPS_ABS;
-            if med <= prev + eps {
-                stable_streak = stable_streak.saturating_add(1);
-            } else {
-                stable_streak = 0;
-            }
-        }
-        med_prev = Some(med);
-        if stable_streak >= CALIB_STABLE_REQUIRED && elapsed_ms >= CALIB_MIN_OBS_MS {
+        // 稳定性：至少观测满时长，且近 K 个窗口无“显著新高”
+        if elapsed_ms >= CALIB_MIN_OBS_MS && no_improve_streak >= CALIB_NO_IMPROVE_K {
             reason_timeout = false;
             break;
         }

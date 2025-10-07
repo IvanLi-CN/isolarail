@@ -89,11 +89,14 @@ async fn task(
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
     let mut lst = ledc.timer::<LowSpeed>(timer::Number::Timer0);
     // 25 kHz @ 13-bit requires divisor < 1 (invalid). Use 10-bit for 25 kHz.
-    if let Err(_) = lst.configure(timer::config::Config {
-        duty: timer::config::Duty::Duty10Bit,
-        clock_source: timer::LSClockSource::APBClk,
-        frequency: Rate::from_khz(25),
-    }) {
+    if lst
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty10Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_khz(25),
+        })
+        .is_err()
+    {
         // Fallback: 10 kHz @ 13-bit (always valid)
         let _ = lst.configure(timer::config::Config {
             duty: timer::config::Duty::Duty13Bit,
@@ -202,14 +205,13 @@ async fn task(
 
     // Temperature EMA & sampling heartbeats
     let mut ema_temp: Option<f32> = None;
-    let mut last_raw: u8 = 0xFF;
 
     // ----- 上电满速校准（仅依据“转起来后的”连续采样中位数与稳定性）-----
-    let _ = fan_en.set_high();
+    fan_en.set_high();
     set_speed_pct(&ch0, 100);
     let calib = measure_max_rpm_diag(u0, CALIB_SPINUP_MS, CALIB_OBSERVE_MAX_MS).await;
     let tach_valid = calib.valid;
-    let mut max_rpm = calib.rpm;
+    let max_rpm = calib.rpm;
     info!(
         "fan.calib: max_rpm={} valid={} reason={} elapsed={}ms pulses={} jitter={}pct samples={}",
         calib.rpm,
@@ -239,7 +241,6 @@ async fn task(
     loop {
         // Temperature read & smooth（移除冗余原始变化日志）
         let (raw, t_c) = read_temp_c_raw_conv().await;
-        last_raw = raw;
         ema_temp = Some(match ema_temp {
             None => t_c,
             Some(prev) => 0.3 * t_c + 0.7 * prev,
@@ -262,7 +263,7 @@ async fn task(
             duty_pi = 0;
             applied_duty = 0;
             set_speed_pct(&ch0, 0);
-            let _ = fan_en.set_low();
+            fan_en.set_low();
             off_log_ms += CTRL_TICK_MS as u32;
             if off_log_ms >= 1000 {
                 off_log_ms = 0;
@@ -273,15 +274,15 @@ async fn task(
             }
         } else if !tach_valid || max_rpm == 0 {
             // 无（或不可信）转速信号：保持满速
-            let _ = fan_en.set_high();
+            fan_en.set_high();
             applied_duty = 100; // 立即满速，不做缓升
             set_speed_pct(&ch0, applied_duty);
             // 运行期取固定窗样本的中位数，过滤异常
             let mut buf: [u32; RPM_MEDIAN_K_FAST] = [0; RPM_MEDIAN_K_FAST];
             let mut got = 0usize;
-            for i in 0..RPM_MEDIAN_K_FAST {
+            for slot in buf.iter_mut().take(RPM_MEDIAN_K_FAST) {
                 let (_ms, rpm, _p) = rpm_sample_fixed(u0, RPM_WIN_MS_FAST).await;
-                buf[i] = rpm;
+                *slot = rpm;
                 got += 1;
             }
             let rpm = if got > 0 {
@@ -296,12 +297,12 @@ async fn task(
             );
         } else {
             // Closed-loop PI to reach target RPM
-            let _ = fan_en.set_high();
+            fan_en.set_high();
             let mut buf2: [u32; RPM_MEDIAN_K_FAST] = [0; RPM_MEDIAN_K_FAST];
             let mut got2 = 0usize;
-            for i in 0..RPM_MEDIAN_K_FAST {
+            for slot in buf2.iter_mut().take(RPM_MEDIAN_K_FAST) {
                 let (_ms, rpm, _p) = rpm_sample_fixed(u0, RPM_WIN_MS_FAST).await;
-                buf2[i] = rpm;
+                *slot = rpm;
                 got2 += 1;
             }
             let rpm = if got2 > 0 {
@@ -397,9 +398,9 @@ async fn measure_max_rpm_diag(
         // 采集一组样本并取中位数（过滤离群）。仅以“总观测超时”作为结束条件。
         let mut buf: [u32; RPM_MEDIAN_K_CAL] = [0; RPM_MEDIAN_K_CAL];
         let mut got = 0usize;
-        for _i in 0..RPM_MEDIAN_K_CAL {
+        for slot in buf.iter_mut().take(RPM_MEDIAN_K_CAL) {
             let (win_ms, rpm, pulses) = rpm_sample_fixed(u0, RPM_WIN_MS_CAL).await;
-            buf[_i] = rpm;
+            *slot = rpm;
             got += 1;
             total_pulses = total_pulses.saturating_add(pulses);
             win_ms_total = win_ms_total.saturating_add(win_ms);
@@ -486,7 +487,7 @@ async fn read_temp_c_raw_conv() -> (u8, f32) {
     // 给一次触发-采样-转储一点准备时间
     Timer::after(Duration::from_micros(100)).await;
 
-    let mut raw: u8 = 0;
+    let raw: u8;
     let mut tries = 0;
     loop {
         let r = regs.sar_tsens_ctrl().read();

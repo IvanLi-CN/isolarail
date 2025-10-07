@@ -115,8 +115,8 @@ const PIN_PSTOP4: u8 = 40;
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 
 // Qualification thresholds (docs/software_design.md)
-// Accept 5.0V lab supply for fan test (was 9.0V)
-const VIN_MIN_V: f32 = 4.5;
+// 保持量产下限：9.0V（避免在 5–8V 区间误判上电）
+const VIN_MIN_V: f32 = 9.0;
 const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 

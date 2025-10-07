@@ -1,7 +1,6 @@
 # 基于 TPS82130SILR PG 信号的电源管理与 MCU 启动控制方案
 
 > 作者：白羽（Augment Agent）  
-> 更新时间：2025-08-26  
 > 适用：ESP32-S3FH4R2 + TPS82130SILR + TCA6408ARGTR + PCA9545APW 系统
 
 ## 🎯 设计目标
@@ -172,7 +171,7 @@ ESP32-S3 GPIO38 ──┬── 10kΩ ── 3.3V
 
 1. **电源时序**：用示波器测量 PG 信号和 CHIP_PU 的时序关系
 2. **复位脉宽**：确认 GPIO38 的复位脉宽 ≥4μs
-3. **I2C 通信**：验证 TCA6408ARGTR (0x20) 和 PCA9545APW 的 I2C 应答
+3. **I2C 通信**：验证 TCA6408ARGTR (0x21) 和 PCA9545APW 的 I2C 应答
 
 ### 软件验证
 

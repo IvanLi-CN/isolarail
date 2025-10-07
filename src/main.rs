@@ -114,9 +114,10 @@ const PIN_PSTOP4: u8 = 40;
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 
-// Qualification thresholds (docs/software_design.md)
-// 保持量产下限：9.0V（避免在 5–8V 区间误判上电）
-const VIN_MIN_V: f32 = 9.0;
+// Qualification thresholds (see docs/software_design.md §2)
+// 开发阶段临时放宽：将 VIN 下限改为 4.5V 以便在 5V 供电/风扇台架下进行功能验证；
+// 量产应恢复到 9.0V 以避免 5–8V 区间误判上电（请在合入前复位该值）。
+const VIN_MIN_V: f32 = 4.5;
 const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 

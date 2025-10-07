@@ -193,3 +193,7 @@ This repository's GitHub Actions use the official `esp-rs/xtensa-toolchain` acti
 ## License
 
 This project is licensed under the MIT License.
+
+## Development Notes
+
+- Power input qualification (VIN): during active development the firmware relaxes the undervoltage floor to `VIN_MIN_V = 4.5 V` to allow 5 V bench/USB supplies for fan testing and bring-up. This intentionally bypasses the production undervoltage guardrail. Restore the 9.0 V minimum before release and re-verify input sequencing. See `docs/software_design.md` §2 for details.

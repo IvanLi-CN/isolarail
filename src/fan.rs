@@ -25,16 +25,15 @@ const TACH_PULSES_PER_REV: u32 = 2; // common PC fan default
                                     // Logging verbosity: keep only key summaries by default
 const VERBOSE_LOG: bool = false;
 
-// 轮询 PCNT 的最小等待粒度（非固定窗，仅用于避免忙等）
-const RPM_POLL_MS: u64 = 5;
-// 单次样本的最长等待（避免风扇/测速线异常时阻塞）：
-const RPM_SAMPLE_TIMEOUT_MS_FAST: u64 = 250; // 运行期
-const RPM_SAMPLE_TIMEOUT_MS_CAL: u64 = 300; // 校准期
-                                            // 连续样本的中位数窗口
-const RPM_MEDIAN_K_FAST: usize = 3;
-const RPM_MEDIAN_K_CAL: usize = 7;
-// 平台稳定判据：连续 N 次中位数无显著上升（仅校准使用）
-const CALIB_STABLE_REQUIRED: usize = 12; // 连续若干次稳定（无需最小采集次数）
+// 运行期/校准期固定窗法均使用，K 取 1（最小化延迟与日志）
+const RPM_MEDIAN_K_FAST: usize = 1;
+const RPM_MEDIAN_K_CAL: usize = 1;
+// 稳定判据：相邻两次满足阈值即可（最小改动）
+const CALIB_STABLE_REQUIRED: usize = 1;
+// 固定时间窗参数
+const RPM_WIN_MS_CAL: u64 = 200; // 校准阶段 200ms 窗口
+const RPM_WIN_MS_FAST: u64 = 100; // 运行期 100ms 窗口
+const CALIB_MIN_OBS_MS: u64 = 4000; // 至少观察 4s 后允许判稳
 const CALIB_STABLE_EPS_PCT: u32 = 2; // 允许变化占比
 const CALIB_STABLE_EPS_ABS: u32 = 50; // 或绝对值
                                       // Control loop tick
@@ -42,7 +41,7 @@ const CTRL_TICK_MS: u64 = 500;
 // 校准观测策略：不假设转速生效时间，直接连续取样并检测稳定
 const CALIB_SPINUP_MS: u64 = 0; // 不预设加速时间；稳定性判据自行收敛
                                 // 校准“观测预算”上限（非固定采样窗；达到平台可提前结束）
-const CALIB_OBSERVE_MAX_MS: u64 = 6000; // 仅兜底超时，避免卡住固件
+const CALIB_OBSERVE_MAX_MS: u64 = 8000; // 兜底超时
 
 // Temperature control policy
 const TEMP_TARGET_C: f32 = 50.0; // keep below this
@@ -127,11 +126,8 @@ async fn task(
     let u0 = &pcnt.unit0;
     u0.set_low_limit(Some(-32_000)).ok();
     u0.set_high_limit(Some(32_000)).ok();
-    // Enable digital filter to deglitch tach pulses (~10us at APB 80MHz)
-    // 强化数字滤波以抑制供电/EMI耦合导致的毛刺计数：
-    // 约 5,000 个 APB 周期（APB 80MHz 时 ~62.5µs）。
-    // 标准 PC 风扇转速信号频率远低于此阈值。
-    u0.set_filter(Some(5000)).ok();
+    // 启用数字滤波去抖：约 800 个 APB 周期（APB 80MHz 时 ~10µs）。
+    u0.set_filter(Some(800)).ok();
     u0.clear();
     let ch = &u0.channel0;
     ch.set_ctrl_mode(pcnt_channel::CtrlMode::Keep, pcnt_channel::CtrlMode::Keep);
@@ -141,6 +137,7 @@ async fn task(
     );
     ch.set_edge_signal(tach_in);
     u0.resume();
+    info!("fan.tach: pcnt_filter=800cyc (~10us@80MHz) units=pcnt0 ch=0");
 
     // Power up the on-chip temperature sensor (SENS block) and basic config
     // Enable TSENS clocks via SYSTEM and SENS blocks, and ensure SAR ADC timer runs
@@ -303,17 +300,13 @@ async fn task(
             let _ = fan_en.set_high();
             applied_duty = 100; // 立即满速，不做缓升
             set_speed_pct(&ch0, applied_duty);
-            // 运行期取连续小样本的中位数，过滤异常
+            // 运行期取固定窗样本的中位数，过滤异常
             let mut buf: [u32; RPM_MEDIAN_K_FAST] = [0; RPM_MEDIAN_K_FAST];
             let mut got = 0usize;
             for i in 0..RPM_MEDIAN_K_FAST {
-                if let Some((_ms, rpm, _p)) = rpm_sample_once(u0, RPM_SAMPLE_TIMEOUT_MS_FAST).await
-                {
-                    buf[i] = rpm;
-                    got += 1;
-                } else {
-                    break;
-                }
+                let (_ms, rpm, _p) = rpm_sample_fixed(u0, RPM_WIN_MS_FAST).await;
+                buf[i] = rpm;
+                got += 1;
             }
             let rpm = if got > 0 {
                 median_in_place(&mut buf[..got]) as i32
@@ -332,13 +325,9 @@ async fn task(
             let mut buf2: [u32; RPM_MEDIAN_K_FAST] = [0; RPM_MEDIAN_K_FAST];
             let mut got2 = 0usize;
             for i in 0..RPM_MEDIAN_K_FAST {
-                if let Some((_ms, rpm, _p)) = rpm_sample_once(u0, RPM_SAMPLE_TIMEOUT_MS_FAST).await
-                {
-                    buf2[i] = rpm;
-                    got2 += 1;
-                } else {
-                    break;
-                }
+                let (_ms, rpm, _p) = rpm_sample_fixed(u0, RPM_WIN_MS_FAST).await;
+                buf2[i] = rpm;
+                got2 += 1;
             }
             let rpm = if got2 > 0 {
                 median_in_place(&mut buf2[..got2]) as i32
@@ -384,27 +373,13 @@ async fn task(
 // 返回 (实际测量时长ms, RPM)
 // 一次“无窗”样本：清零 → 等待到至少一脉冲或超时 → 计算 Δpulses/Δt。
 // 返回 Some((elapsed_ms, rpm, pulses))；若超时且无脉冲则返回 None。
-async fn rpm_sample_once(
-    u0: &unit::Unit<'_, 0>,
-    sample_timeout_ms: u64,
-) -> Option<(u64, u32, u32)> {
+// 固定时间窗脉冲计数：清零→等待窗口→读脉冲→换算RPM
+async fn rpm_sample_fixed(u0: &unit::Unit<'_, 0>, win_ms: u64) -> (u64, u32, u32) {
     u0.clear();
-    let mut elapsed_ms: u64 = 0;
-    loop {
-        Timer::after(Duration::from_millis(RPM_POLL_MS)).await;
-        elapsed_ms += RPM_POLL_MS;
-        let pulses = u0.value() as i32;
-        let pulses = pulses.max(0) as u32;
-        if pulses > 0 {
-            let rpm = (pulses as u64).saturating_mul(60_000)
-                / (elapsed_ms as u64).max(1)
-                / (TACH_PULSES_PER_REV as u64);
-            return Some((elapsed_ms, (rpm as u32).min(12_000), pulses));
-        }
-        if elapsed_ms >= sample_timeout_ms {
-            return None;
-        }
-    }
+    Timer::after(Duration::from_millis(win_ms)).await;
+    let pulses = (u0.value() as i32).max(0) as u32;
+    let rpm = (pulses as u64).saturating_mul(60_000) / win_ms.max(1) / (TACH_PULSES_PER_REV as u64);
+    (win_ms, (rpm as u32).min(12_000), pulses)
 }
 
 fn median_in_place(v: &mut [u32]) -> u32 {
@@ -441,19 +416,18 @@ async fn measure_max_rpm_diag(
     let mut stable_streak: usize = 0;
     let mut jitter_pct: u32 = 100;
     let mut reason_timeout = true;
+    let mut win_ms_total: u64 = 0; // 用于数学自证（脉冲/总采样窗时间）
 
     while elapsed_ms < observe_max_ms {
         // 采集一组样本并取中位数（过滤离群）。仅以“总观测超时”作为结束条件。
         let mut buf: [u32; RPM_MEDIAN_K_CAL] = [0; RPM_MEDIAN_K_CAL];
         let mut got = 0usize;
-        for i in 0..RPM_MEDIAN_K_CAL {
-            if let Some((_ms, rpm, pulses)) = rpm_sample_once(u0, RPM_SAMPLE_TIMEOUT_MS_CAL).await {
-                buf[i] = rpm;
-                got += 1;
-                total_pulses = total_pulses.saturating_add(pulses);
-            } else {
-                break; // 无脉冲：可能无测速线或未达有效边沿
-            }
+        for _i in 0..RPM_MEDIAN_K_CAL {
+            let (win_ms, rpm, pulses) = rpm_sample_fixed(u0, RPM_WIN_MS_CAL).await;
+            buf[_i] = rpm;
+            got += 1;
+            total_pulses = total_pulses.saturating_add(pulses);
+            win_ms_total = win_ms_total.saturating_add(win_ms);
         }
         elapsed_ms = (esp_hal::time::Instant::now() - t0).as_millis();
         if got == 0 {
@@ -484,10 +458,24 @@ async fn measure_max_rpm_diag(
             }
         }
         med_prev = Some(med);
-        if stable_streak >= CALIB_STABLE_REQUIRED {
+        if stable_streak >= CALIB_STABLE_REQUIRED && elapsed_ms >= CALIB_MIN_OBS_MS {
             reason_timeout = false;
             break;
         }
+    }
+
+    // 计算总窗时间上的等效 RPM（用于日志自证；不改变返回值）
+    let proof_rpm = if win_ms_total > 0 {
+        ((total_pulses as u64).saturating_mul(60_000) / win_ms_total / (TACH_PULSES_PER_REV as u64))
+            as u32
+    } else {
+        0
+    };
+    if VERBOSE_LOG {
+        info!(
+            "fan.calib.proof: win_ms_tot={} pulses={} ppr={} calc_rpm={}",
+            win_ms_total as u32, total_pulses, TACH_PULSES_PER_REV as u32, proof_rpm
+        );
     }
 
     CalibDiag {

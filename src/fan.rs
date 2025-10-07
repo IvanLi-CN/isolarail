@@ -1,4 +1,4 @@
-use defmt::{info, warn};
+use defmt::info;
 use embassy_executor::{task, SpawnError, Spawner};
 use embassy_time::{Duration, Timer};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, Pull};
@@ -6,9 +6,7 @@ use esp_hal::ledc::channel::ChannelIFace;
 use esp_hal::ledc::timer::TimerIFace;
 use esp_hal::ledc::{channel, timer, LSGlobalClkSource, Ledc, LowSpeed};
 use esp_hal::pcnt::{channel as pcnt_channel, unit, Pcnt};
-use esp_hal::peripherals::APB_SARADC as _;
-use esp_hal::peripherals::SENS as _; // for SENS::regs()
-use esp_hal::peripherals::SYSTEM as _; // for SYSTEM::regs()
+// 使用全限定路径访问寄存器，无需引入未使用的别名
 use esp_hal::time::Rate; // for APB_SARADC::regs()
 #[allow(improper_ctypes)]
 extern "C" {
@@ -23,7 +21,7 @@ extern "C" {
 
 const TACH_PULSES_PER_REV: u32 = 2; // common PC fan default
                                     // Logging verbosity: keep only key summaries by default
-const VERBOSE_LOG: bool = false;
+                                    // 仅保留必要常量，移除无用开关
 
 // 运行期/校准期固定窗法均使用，K 取 1（最小化延迟与日志）
 const RPM_MEDIAN_K_FAST: usize = 1;
@@ -42,24 +40,22 @@ const CTRL_TICK_MS: u64 = 500;
 const CALIB_SPINUP_MS: u64 = 0; // 不预设加速时间；稳定性判据自行收敛
                                 // 校准“观测预算”上限（非固定采样窗；达到平台可提前结束）
 const CALIB_OBSERVE_MAX_MS: u64 = 20_000; // 兜底超时(≥ CALIB_MIN_OBS_MS)
-                                          // 校准结束后继续满速短暂采样，捕获可能的后沿峰值
-const CALIB_POST_HOLD_MS: u64 = 2000; // 2s (10 个 200ms 窗)
+                                          // 校准结束后是否继续满速短暂采样（最小改动：默认关闭）
+                                          // 取消校准后附加抓峰流程，最小改动
 
 // Temperature control policy
-const TEMP_TARGET_C: f32 = 50.0; // keep below this
 const TEMP_FAN_START_C: f32 = 40.0; // begin ramp here
                                     // 满速温度改为 50°C：要求“将温度控制在 50 度以内”。
 const TEMP_FAN_FULL_C: f32 = 50.0; // full speed here
 const TEMP_FORCE_FULL_C: f32 = 80.0; // safety: 强制满速阈值
-const TEMP_OFF_HYST_C: f32 = 1.5; // hysteresis when turning off (currently unused)
-const MIN_DUTY_PCT: u8 = 0; // per requirement: allow 0%
-                            // TSENS conversion constants (ESP32-S3):
-                            // General linear model from Espressif docs:
-                            //   T(°C) = 0.4386 * raw - 27.88 * dac_offset - 20.52
-                            // 其中 dac_offset 由硬件寄存器 I2C_SARADC_TSENS_DAC(3:0) 决定。
-                            // 我们不做“校准”，而是：
-                            //   1) 上电将 TSENS_DAC 设为 1（常用量程，对应 dac_offset = -1）
-                            //   2) 计算时从寄存器读回 TSENS_DAC，并按 dac_offset = - (reg & 0x0F) 使用。
+                                     // 移除未使用的温度/占空比常量，避免无用代码
+                                     // TSENS conversion constants (ESP32-S3):
+                                     // General linear model from Espressif docs:
+                                     //   T(°C) = 0.4386 * raw - 27.88 * dac_offset - 20.52
+                                     // 其中 dac_offset 由硬件寄存器 I2C_SARADC_TSENS_DAC(3:0) 决定。
+                                     // 我们不做“校准”，而是：
+                                     //   1) 上电将 TSENS_DAC 设为 1（常用量程，对应 dac_offset = -1）
+                                     //   2) 计算时从寄存器读回 TSENS_DAC，并按 dac_offset = - (reg & 0x0F) 使用。
 const TSENS_ADC_FACTOR: f32 = 0.4386;
 const TSENS_DAC_FACTOR: f32 = 27.88;
 const TSENS_SYS_OFFSET: f32 = 20.52;
@@ -206,9 +202,7 @@ async fn task(
 
     // Temperature EMA & sampling heartbeats
     let mut ema_temp: Option<f32> = None;
-    let mut ts_seq: u32 = 0;
     let mut last_raw: u8 = 0xFF;
-    let mut same_count: u32 = 0;
 
     // ----- 上电满速校准（仅依据“转起来后的”连续采样中位数与稳定性）-----
     let _ = fan_en.set_high();
@@ -231,37 +225,7 @@ async fn task(
         calib.samples
     );
     // No forced stop after calibration; control loop will decide.
-    // 追加：校准后保持满速，固定窗继续采样 CALIB_POST_HOLD_MS，用以捕获更高峰值
-    if tach_valid && CALIB_POST_HOLD_MS > 0 {
-        let mut post_pulses: u32 = 0;
-        let mut post_best: u32 = 0;
-        let mut post_ms: u64 = 0;
-        let rounds = (CALIB_POST_HOLD_MS / RPM_WIN_MS_CAL).max(1) as usize;
-        for _ in 0..rounds {
-            let (win_ms, rpm, pulses) = rpm_sample_fixed(u0, RPM_WIN_MS_CAL).await;
-            post_pulses = post_pulses.saturating_add(pulses);
-            post_ms = post_ms.saturating_add(win_ms);
-            if pulses > post_best {
-                post_best = pulses;
-            }
-            if rpm > max_rpm {
-                max_rpm = rpm;
-            }
-        }
-        let post_avg = if post_ms > 0 {
-            ((post_pulses as u64).saturating_mul(60_000) / post_ms / (TACH_PULSES_PER_REV as u64))
-                as u32
-        } else {
-            0
-        };
-        let post_best_rpm = ((post_best as u64).saturating_mul(60_000)
-            / (RPM_WIN_MS_CAL as u64)
-            / (TACH_PULSES_PER_REV as u64)) as u32;
-        info!(
-            "fan.calib.post: hold_ms={} pulses={} best_pulses={} avg_rpm={} best_win_rpm={} max_rpm={}",
-            post_ms as u32, post_pulses, post_best, post_avg, post_best_rpm, max_rpm
-        );
-    }
+    // 追加流程移除：保持最小改动
 
     // Control state for PI
     let mut duty_pi: i32 = 0;
@@ -273,30 +237,9 @@ async fn task(
 
     let mut off_log_ms: u32 = 0;
     loop {
-        // Temperature read & smooth
+        // Temperature read & smooth（移除冗余原始变化日志）
         let (raw, t_c) = read_temp_c_raw_conv().await;
-        ts_seq = ts_seq.wrapping_add(1);
-        // 仅在 VERBOSE 下打印温度原始变化与卡滞
-        if VERBOSE_LOG && raw != last_raw {
-            let ent = unsafe { (esp_rom_regi2c_read(0x69, 1, 0x07) >> 2) & 1 };
-            info!(
-                "tsens.raw_change: seq={} raw={} ent_tsens={}",
-                ts_seq, raw, ent
-            );
-        }
-        if raw == last_raw {
-            same_count = same_count.saturating_add(1);
-            if VERBOSE_LOG && same_count % 10 == 0 {
-                info!(
-                    "tsens.stuck: raw_unmoved_ms={} last={}",
-                    same_count * (CTRL_TICK_MS as u32),
-                    raw
-                );
-            }
-        } else {
-            same_count = 0;
-            last_raw = raw;
-        }
+        last_raw = raw;
         ema_temp = Some(match ema_temp {
             None => t_c,
             Some(prev) => 0.3 * t_c + 0.7 * prev,
@@ -321,7 +264,7 @@ async fn task(
             set_speed_pct(&ch0, 0);
             let _ = fan_en.set_low();
             off_log_ms += CTRL_TICK_MS as u32;
-            if VERBOSE_LOG && off_log_ms >= 1000 {
+            if off_log_ms >= 1000 {
                 off_log_ms = 0;
                 info!(
                     "fan.temp: T={}.1C raw={} tgt_pct=0 state=off",
@@ -346,12 +289,11 @@ async fn task(
             } else {
                 0
             };
-            if VERBOSE_LOG {
-                info!(
-                    "fan.fail_tach: force_max duty={} rpm={} (tach_valid={})",
-                    applied_duty, rpm, tach_valid as u8
-                );
-            }
+            // 最小化日志：保留核心 fail-safe 摘要
+            info!(
+                "fan.fail_tach: force_max duty={} rpm={} (tach_valid={})",
+                applied_duty, rpm, tach_valid as u8
+            );
         } else {
             // Closed-loop PI to reach target RPM
             let _ = fan_en.set_high();
@@ -502,24 +444,16 @@ async fn measure_max_rpm_diag(
 
     // 计算总窗时间上的等效 RPM（用于日志自证；不改变返回值）
     // 自证：平均RPM与最佳单窗RPM（便于人工复核）
-    let proof_avg_rpm = if win_ms_total > 0 {
+    let _proof_avg_rpm = if win_ms_total > 0 {
         ((total_pulses as u64).saturating_mul(60_000) / win_ms_total / (TACH_PULSES_PER_REV as u64))
             as u32
     } else {
         0
     };
-    let proof_best_rpm = ((best_win_pulses as u64).saturating_mul(60_000)
+    let _proof_best_rpm = ((best_win_pulses as u64).saturating_mul(60_000)
         / (RPM_WIN_MS_CAL as u64)
         / (TACH_PULSES_PER_REV as u64)) as u32;
-    info!(
-        "fan.calib.proof: win_ms_tot={} pulses={} best_pulses={} ppr={} avg_rpm={} best_win_rpm={}",
-        win_ms_total as u32,
-        total_pulses,
-        best_win_pulses,
-        TACH_PULSES_PER_REV as u32,
-        proof_avg_rpm,
-        proof_best_rpm
-    );
+    // 最小改动：移除额外自证日志
 
     CalibDiag {
         rpm: max_rpm,

@@ -42,6 +42,8 @@ const CTRL_TICK_MS: u64 = 500;
 const CALIB_SPINUP_MS: u64 = 0; // 不预设加速时间；稳定性判据自行收敛
                                 // 校准“观测预算”上限（非固定采样窗；达到平台可提前结束）
 const CALIB_OBSERVE_MAX_MS: u64 = 20_000; // 兜底超时(≥ CALIB_MIN_OBS_MS)
+                                          // 校准结束后继续满速短暂采样，捕获可能的后沿峰值
+const CALIB_POST_HOLD_MS: u64 = 2000; // 2s (10 个 200ms 窗)
 
 // Temperature control policy
 const TEMP_TARGET_C: f32 = 50.0; // keep below this
@@ -213,7 +215,7 @@ async fn task(
     set_speed_pct(&ch0, 100);
     let calib = measure_max_rpm_diag(u0, CALIB_SPINUP_MS, CALIB_OBSERVE_MAX_MS).await;
     let tach_valid = calib.valid;
-    let max_rpm = calib.rpm;
+    let mut max_rpm = calib.rpm;
     info!(
         "fan.calib: max_rpm={} valid={} reason={} elapsed={}ms pulses={} jitter={}pct samples={}",
         calib.rpm,
@@ -229,6 +231,37 @@ async fn task(
         calib.samples
     );
     // No forced stop after calibration; control loop will decide.
+    // 追加：校准后保持满速，固定窗继续采样 CALIB_POST_HOLD_MS，用以捕获更高峰值
+    if tach_valid && CALIB_POST_HOLD_MS > 0 {
+        let mut post_pulses: u32 = 0;
+        let mut post_best: u32 = 0;
+        let mut post_ms: u64 = 0;
+        let rounds = (CALIB_POST_HOLD_MS / RPM_WIN_MS_CAL).max(1) as usize;
+        for _ in 0..rounds {
+            let (win_ms, rpm, pulses) = rpm_sample_fixed(u0, RPM_WIN_MS_CAL).await;
+            post_pulses = post_pulses.saturating_add(pulses);
+            post_ms = post_ms.saturating_add(win_ms);
+            if pulses > post_best {
+                post_best = pulses;
+            }
+            if rpm > max_rpm {
+                max_rpm = rpm;
+            }
+        }
+        let post_avg = if post_ms > 0 {
+            ((post_pulses as u64).saturating_mul(60_000) / post_ms / (TACH_PULSES_PER_REV as u64))
+                as u32
+        } else {
+            0
+        };
+        let post_best_rpm = ((post_best as u64).saturating_mul(60_000)
+            / (RPM_WIN_MS_CAL as u64)
+            / (TACH_PULSES_PER_REV as u64)) as u32;
+        info!(
+            "fan.calib.post: hold_ms={} pulses={} best_pulses={} avg_rpm={} best_win_rpm={} max_rpm={}",
+            post_ms as u32, post_pulses, post_best, post_avg, post_best_rpm, max_rpm
+        );
+    }
 
     // Control state for PI
     let mut duty_pi: i32 = 0;

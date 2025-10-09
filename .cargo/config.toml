@@ -20,6 +20,10 @@ rustflags = [
 
 [env]
 DEFMT_LOG = "info"
+# Increase Embassy executor task arena to avoid runtime panics when spawning
+# multiple async tasks. See https://docs.rs/embassy-executor/latest/embassy_executor/ (Task arena).
+# Default is 4096 bytes which is insufficient for our task set.
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "65536"
 
 [unstable]
 build-std = ["core"]

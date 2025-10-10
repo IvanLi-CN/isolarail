@@ -412,11 +412,7 @@ async fn main(spawner: Spawner) {
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
 
-    // Front-panel TCA6408A INT input (open-drain, pull-up)
-    let int_pin = Input::new(
-        p.GPIO16,
-        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
-    );
+    // Front-panel INT pin will be initialized only if panel is present.
 
     // PSTOP lines default disabled (active-low -> drive high)
     let mut pstop1 = Output::new(
@@ -581,8 +577,21 @@ async fn main(spawner: Spawner) {
         I2C_BUS_REF = Some(bus);
     }
 
-    // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
-    front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+    // Probe front-panel presence and conditionally enable related features
+    if front_panel::is_present(bus).await {
+        info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+        let int_pin = Input::new(
+            p.GPIO16,
+            esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+        );
+        // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
+        front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+    } else {
+        warn!(
+            "i2c.front: tca6408a=offline addr=0x{:02X}; disable related features",
+            TCA6408_ADDR
+        );
+    }
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(

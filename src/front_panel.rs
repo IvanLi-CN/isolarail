@@ -10,6 +10,16 @@ use esp_hal::gpio::Input;
 
 use crate::{I2cBus, TCA6408_ADDR};
 
+/// Probe TCA6408A presence by reading its input register once.
+/// Returns true when device ACKs and read succeeds.
+pub async fn is_present(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    let mut b = [0u8; 1];
+    embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[0x00], &mut b)
+        .await
+        .is_ok()
+}
+
 pub fn spawn(
     spawner: &Spawner,
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,

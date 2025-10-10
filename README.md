@@ -182,6 +182,26 @@ If you encounter build errors, try:
 2. Update dependencies: `cargo update`
 3. Check that the ESP toolchain is properly installed
 
+### Panic: `embassy-executor: task arena is full`
+
+If serial logs show a panic like:
+
+```
+embassy-executor: task arena is full. You must increase the arena size
+```
+
+Your async tasks collectively require more storage than the default 4 KiB task arena.
+This project sets a larger arena via `.cargo/config.toml`:
+
+```
+[env]
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "65536"
+```
+
+You can tune this value (in bytes) to match your workload. Alternatively, you may enable
+`embassy-executor` feature flags like `task-arena-size-32768` in `Cargo.toml` if you prefer
+feature-based configuration.
+
 ## CI
 
 This repository's GitHub Actions use the official `esp-rs/xtensa-toolchain` action to install the ESP Xtensa Rust toolchain.

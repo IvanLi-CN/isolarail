@@ -102,15 +102,16 @@ const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
-// SC8815 PSTOP control lines (active-low enable)
+// SC8815 PSTOP control lines via MCU-side PSTOP_CTL (board-inverted to module PSTOP)
+// MCU: PSTOP_CTL high -> module PSTOP low (enable)
 #[allow(dead_code)]
-const PIN_PSTOP1: u8 = 17;
+const PIN_PSTOP_CTL1: u8 = 17;
 #[allow(dead_code)]
-const PIN_PSTOP2: u8 = 18;
+const PIN_PSTOP_CTL2: u8 = 18;
 #[allow(dead_code)]
-const PIN_PSTOP3: u8 = 39;
+const PIN_PSTOP_CTL3: u8 = 39;
 #[allow(dead_code)]
-const PIN_PSTOP4: u8 = 40;
+const PIN_PSTOP_CTL4: u8 = 40;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
@@ -412,38 +413,18 @@ async fn main(spawner: Spawner) {
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
 
-    // Front-panel TCA6408A INT input (open-drain, pull-up)
-    let int_pin = Input::new(
-        p.GPIO16,
-        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
-    );
+    // Front-panel INT pin will be initialized only if panel is present.
 
-    // PSTOP lines default disabled (active-low -> drive high)
-    let mut pstop1 = Output::new(
-        p.GPIO17,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    let mut pstop2 = Output::new(
-        p.GPIO18,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    let mut pstop3 = Output::new(
-        p.GPIO39,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    let mut pstop4 = Output::new(
-        p.GPIO40,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
+    // PSTOP_CTL lines default disabled (drive low => board-inverted PSTOP=high -> module disabled)
+    let mut pstop_ctl1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut pstop_ctl2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut pstop_ctl3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut pstop_ctl4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
     // Keep variables used
-    pstop1.set_high();
-    pstop2.set_high();
-    pstop3.set_high();
-    pstop4.set_high();
+    pstop_ctl1.set_low();
+    pstop_ctl2.set_low();
+    pstop_ctl3.set_low();
+    pstop_ctl4.set_low();
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
@@ -581,8 +562,21 @@ async fn main(spawner: Spawner) {
         I2C_BUS_REF = Some(bus);
     }
 
-    // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
-    front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+    // Probe front-panel presence and conditionally enable related features
+    if front_panel::is_present(bus).await {
+        info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+        let int_pin = Input::new(
+            p.GPIO16,
+            esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+        );
+        // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
+        front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+    } else {
+        warn!(
+            "i2c.front: tca6408a=offline addr=0x{:02X}; disable related features",
+            TCA6408_ADDR
+        );
+    }
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(
@@ -710,7 +704,7 @@ async fn main(spawner: Spawner) {
                 );
             }
         } else {
-            // Initialize SC8815 per design (keep PSTOP high until init succeeds)
+            // Initialize SC8815 per design (keep PSTOP_CTL low until init succeeds)
             match sc_drv.init().await {
                 Ok(()) => {
                     sc_init_ok = true;
@@ -815,10 +809,10 @@ async fn main(spawner: Spawner) {
                 }
                 if sc_startup_ok {
                     match ch {
-                        0 => pstop1.set_low(),
-                        1 => pstop2.set_low(),
-                        2 => pstop3.set_low(),
-                        3 => pstop4.set_low(),
+                        0 => pstop_ctl1.set_high(),
+                        1 => pstop_ctl2.set_high(),
+                        2 => pstop_ctl3.set_high(),
+                        3 => pstop_ctl4.set_high(),
                         _ => {}
                     }
                     Timer::after(Duration::from_millis(5)).await;
@@ -967,10 +961,10 @@ async fn main(spawner: Spawner) {
 
         if !(sc_ok && sw_ok) {
             match ch {
-                0 => pstop1.set_high(),
-                1 => pstop2.set_high(),
-                2 => pstop3.set_high(),
-                3 => pstop4.set_high(),
+                0 => pstop_ctl1.set_low(),
+                1 => pstop_ctl2.set_low(),
+                2 => pstop_ctl3.set_low(),
+                3 => pstop_ctl4.set_low(),
                 _ => {}
             }
         }

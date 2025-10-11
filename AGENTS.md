@@ -45,6 +45,8 @@
   - 硬件连接：`docs/hardware_connection_overview.md`（涵盖电源输入、PCA9545A 下行通道与四路 USB 供电模块、TCA6408A 五向开关、INA226/TPS2490 监测与保护等）。若地址/连线变更，需同步更新本文件与 `README.md` 索引。
   - 软件设计总文档：`docs/software_design.md`（统一日志风格、全局目标状态、调度建议；收录“基础电源输入子系统”等模块的软件规范）。
 
+永不修改 vbus_ratio（禁写 RATIO 0x08 bit0）。
+
 ## 提交与分支
 
 - 提交信息：必须遵循 Conventional Commits，例如：

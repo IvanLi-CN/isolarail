@@ -22,15 +22,14 @@ use esp_hal::spi::Mode as SpiMode;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use sc8815::registers::Register as ScReg;
-use sc8815::{
-    CellCount, DeadTime, DeviceConfiguration, OperatingMode, SwitchingFrequency, VoltagePerCell,
-};
+use sc8815::{CellCount, DeadTime, DeviceConfiguration, OperatingMode, SwitchingFrequency};
 // Shared I2C bus infrastructure
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
 use embassy_sync::mutex::Mutex;
+use embassy_sync::signal::Signal;
 // use embassy_sync::signal::Signal; // not used on this branch
 use static_cell::StaticCell;
 mod fan;
@@ -45,6 +44,7 @@ mod front_panel;
 // Use SC8815/SW2303 crates only for their default I2C addresses
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
+use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
@@ -69,6 +69,12 @@ type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
 static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // No per-channel statics; channels are lightweight views over the shared bus
+
+// 各通道初始化完成标志：SC8815 已完成配置、PSTOP 已拉高且 SW2303 在线
+static CH_READY0: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static CH_READY1: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static CH_READY2: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static CH_READY3: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
 // （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
 
@@ -127,9 +133,13 @@ const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 const SC8815_VBUS_READY_MV: u16 = 4000;
 const SC8815_VBUS_READY_CONSECUTIVE: u8 = 2;
 const SC8815_VBUS_READY_INTERVAL_MS: u64 = 50;
-
-const SC8815_OUTPUT_VOLTAGE_MV: u16 = 5000;
-const SC8815_VBUS_RATIO: u8 = 1; // 5x ratio per esp32c3 demo reference
+// SW2303 探测退避与重试（VBUS 就绪后再等待其上电）
+const SW2303_DETECT_BACKOFF_MS: u64 = 150; // 每次间隔 150ms
+const SW2303_DETECT_RETRIES: u8 = 20; // 最多重试 20 次（总计 ~3.0s）
+                                      // Policy update: SW2303 必须在线，否则判定通道异常并关闭功率级
+const ALLOW_SC8815_WITHOUT_SW2303: bool = false;
+// Periodic monitor
+const SC8815_MONITOR_INTERVAL_MS: u64 = 1000;
 const SC8815_IBUS_LIMIT_MA: u16 = 5000;
 const SC8815_IBAT_LIMIT_MA: u16 = 6000;
 const SC8815_RS1_MOHM: u16 = 5;
@@ -151,9 +161,9 @@ const TCA6408_ADDR: u8 = 0x21;
 
 fn sc8815_default_device_config() -> DeviceConfiguration {
     let mut config = DeviceConfiguration::default();
+    // Project uses 4S pack on SC8815 daughter board; ensure VBAT monitor ratio is 12.5x
+    // so that VBAT up to ~36V is within ADC range and calculations are correct.
     config.battery.cell_count = CellCount::Cells4S;
-    config.battery.voltage_per_cell = VoltagePerCell::Mv4200;
-    config.battery.use_internal_setting = true;
     config.current_limits.rs1_mohm = SC8815_RS1_MOHM;
     config.current_limits.rs2_mohm = SC8815_RS2_MOHM;
     config.current_limits.ibus_limit_ma = SC8815_IBUS_LIMIT_MA;
@@ -161,10 +171,7 @@ fn sc8815_default_device_config() -> DeviceConfiguration {
     config.power.operating_mode = OperatingMode::OTG;
     config.power.switching_frequency = SwitchingFrequency::Freq450kHz;
     config.power.dead_time = DeadTime::Ns80;
-    config.power.vinreg_voltage_mv = SC8815_OUTPUT_VOLTAGE_MV;
-    config.trickle_charging = false;
-    config.charging_termination = false;
-    config.use_ibus_for_charging = false;
+    // Do not set VINREG or VBUS_RATIO in firmware per project policy.
     config
 }
 
@@ -578,6 +585,192 @@ async fn main(spawner: Spawner) {
         );
     }
 
+    // Spawn SW2303 CH0 telemetry task (prints once per second)
+    #[embassy_executor::task]
+    async fn sw2303_ch0_telemetry_task() {
+        info!("sw2303.ch0: task_start");
+        // 延后到 VIN_ON 再开始以避免上电早期 I2C read_err 噪声
+        let _ = power_in::vin_on_signal().wait().await;
+        info!("sw2303.ch0: vin_on=true; waiting ch0_ready");
+        // 再等待通道0完成一次 SC8815+SW2303 初始化，避免在配置之前频繁探测
+        let _ = CH_READY0.wait().await;
+        info!("sw2303.ch0: ch0_ready=true; start telemetry");
+        let sw_addr = swc::DEFAULT_ADDRESS;
+        let mut diag_left: u8 = 10;
+        let mut prev_online: bool = false;
+        loop {
+            // 若 SC8815 的 VBUS 尚未就绪，则暂缓 SW2303 轮询，避免无谓的 I2C 错误
+            {
+                use sc8815::registers::constants as sc_c;
+                use sc8815::registers::Register as ScReg;
+                let mut i2c_sc = mux_channel(0);
+                let mut sc = sc8815::SC8815::new(&mut i2c_sc, sc_c::DEFAULT_ADDRESS);
+                if let Ok((vh, vl)) = sc.read_consecutive_registers(ScReg::VbusFbValue).await {
+                    if let Some(v) =
+                        sc8815::driver::AdcCalculations::calculate_voltage_mv(vh, vl, 0)
+                    {
+                        if v < SC8815_VBUS_READY_MV {
+                            if diag_left > 0 {
+                                warn!("sw2303.ch0: wait vbus={}mV<{}mV", v, SC8815_VBUS_READY_MV);
+                                diag_left = diag_left.saturating_sub(1);
+                            }
+                            Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS))
+                                .await;
+                            continue;
+                        }
+                    }
+                }
+            }
+            let mut i2c_ch0 = mux_channel(0);
+            let mut sw = sw2303::SW2303::new(&mut i2c_ch0, sw_addr);
+
+            // Read 8-bit ADC VBUS (datasheet: 7.5*16 mV/bit)
+            let vbus_mv = async {
+                match sw.read_register(SwReg::AdcVbus).await {
+                    Ok(v8) => {
+                        let mv_per_lsb = swc::adc::VBUS_FACTOR_MV * 16.0; // 7.5*16 mV
+                        if diag_left > 0 {
+                            info!("sw2303.ch0: adc.vbus8 raw=0x{:02X}", v8);
+                        }
+                        Some((v8 as f32) * mv_per_lsb)
+                    }
+                    Err(_) => {
+                        if diag_left > 0 {
+                            warn!("sw2303.ch0: adc.vbus8 read_err");
+                            diag_left = diag_left.saturating_sub(1);
+                        }
+                        None
+                    }
+                }
+            }
+            .await;
+
+            // Read SW2303 ICH from 8-bit register (0x33), 50 mA/LSB
+            let ich_ma: Option<f32> = match sw.read_register(SwReg::AdcIch).await {
+                Ok(v8) => {
+                    if diag_left > 0 {
+                        info!("sw2303.ch0: adc.ich8 raw=0x{:02X}", v8);
+                    }
+                    Some(v8 as f32 * swc::adc::ICH_FACTOR_MA)
+                }
+                Err(_) => {
+                    if diag_left > 0 {
+                        warn!("sw2303.ch0: adc.ich8 read_err");
+                        diag_left = diag_left.saturating_sub(1);
+                    }
+                    None
+                }
+            };
+
+            let online = match sw.is_sink_device_connected().await {
+                Ok(b) => b,
+                Err(_) => {
+                    if diag_left > 0 {
+                        warn!("sw2303.ch0: status3 read_err");
+                        diag_left = diag_left.saturating_sub(1);
+                    }
+                    false
+                }
+            };
+
+            match (vbus_mv, ich_ma) {
+                (Some(v), Some(i)) => {
+                    let v_mv: u32 = v as u32;
+                    let i_ma: u32 = i as u32;
+
+                    // Read SC8815 IBUS on CH0 for cross-check (ratio=3x, RS1=5mΩ)
+                    let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+                    let i2c_sc = mux_channel(0);
+                    let mut sc = sc8815::SC8815::new(i2c_sc, sc_addr);
+                    let sc_ibus = sc.read_ibus_current(2, SC8815_RS1_MOHM).await.ok();
+
+                    // Derive a simple source-active flag from VBUS level (use 4.5V threshold)
+                    let src_active = v_mv >= 4500;
+                    match sc_ibus {
+                        Some(ibus_sc) => {
+                            let delta = ibus_sc as i32 - i_ma as i32;
+                            info!(
+                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw={}mA ibus_sc={}mA delta={}mA",
+                                if online { "true" } else { "false" },
+                                if src_active { "true" } else { "false" },
+                                v_mv,
+                                i_ma,
+                                ibus_sc,
+                                delta
+                            );
+                        }
+                        None => {
+                            info!(
+                                "sw2303.ch0: sink_online={} src_active={} vbus={}mV ich_sw={}mA ibus_sc=na",
+                                if online { "true" } else { "false" },
+                                if src_active { "true" } else { "false" },
+                                v_mv,
+                                i_ma
+                            );
+                        }
+                    }
+
+                    if diag_left > 0 {
+                        // Dump key SW2303 status/ctrl registers for validation
+                        if let Ok(s0) = sw.get_system_status0().await {
+                            info!("sw2303.ch0: sys0=0b{:08b}", s0.bits());
+                        }
+                        if let Ok(s3) = sw.get_system_status3().await {
+                            info!("sw2303.ch0: sys3=0b{:08b}", s3.bits());
+                        }
+                        if let Ok(fc) = sw.get_fast_charging_status().await {
+                            info!("sw2303.ch0: fastchg=0b{:08b}", fc.bits());
+                        }
+                        if let Ok(cc) = sw.read_register(SwReg::ConnectionControl).await {
+                            info!("sw2303.ch0: reg14(conn)=0x{:02X}", cc);
+                        }
+                        diag_left = diag_left.saturating_sub(1);
+                    }
+                }
+                _ => {
+                    // 使用驱动包装的读以避免借用冲突
+                    match sw.read_register(SwReg::SystemStatus3).await {
+                        Ok(v) => info!("sw2303.ch0: probe 0x0D ok raw=0x{:02X}", v),
+                        Err(_) => {
+                            warn!(
+                                "sw2303.ch0: read_failed online={} probe_err",
+                                if online { "true" } else { "false" }
+                            );
+                            diag_left = diag_left.saturating_sub(1);
+                        }
+                    }
+                }
+            }
+
+            // 一次性上线摘要：检测到 online 从 false->true 时打印全面状态
+            if online && !prev_online {
+                if let Ok(s0) = sw.get_system_status0().await {
+                    info!("sw2303.ch0: online.sys0=0b{:08b}", s0.bits());
+                }
+                if let Ok(s3) = sw.get_system_status3().await {
+                    info!("sw2303.ch0: online.sys3=0b{:08b}", s3.bits());
+                }
+                if let Ok(fc) = sw.get_fast_charging_status().await {
+                    info!("sw2303.ch0: online.fastchg=0b{:08b}", fc.bits());
+                }
+                if let Ok(cc) = sw.read_register(SwReg::ConnectionControl).await {
+                    info!("sw2303.ch0: online.conn=0x{:02X}", cc);
+                }
+                // 兼容当前 sw2303 crate 版本：使用 8-bit ADC 并换算
+                if let Ok(v8) = sw.read_register(SwReg::AdcVbus).await {
+                    let v_mv = (v8 as f32 * swc::adc::VBUS_FACTOR_MV * 16.0) as u32;
+                    info!("sw2303.ch0: online.vbus8={}mV (raw=0x{:02X})", v_mv, v8);
+                }
+                if let Ok(i8) = sw.read_register(SwReg::AdcIch).await {
+                    let i_ma = (i8 as f32 * swc::adc::ICH_FACTOR_MA) as u32;
+                    info!("sw2303.ch0: online.ich8={}mA (raw=0x{:02X})", i_ma, i8);
+                }
+            }
+            prev_online = online;
+
+            Timer::after(Duration::from_secs(1)).await;
+        }
+    }
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(
         &spawner,
@@ -678,20 +871,41 @@ async fn main(spawner: Spawner) {
         let mut sc_init_ok = false;
         let mut sc_status_err = None;
         let mut sc_init_err = None;
-        let mut sc_vbus_last = 0u16;
-        let mut sc_status_val: Option<u8> = None;
+        let _sc_vbus_last = 0u16;
         // SC8815 driver owns I2C; temporarily move and release back after use
         let mut sc_drv = sc8815::SC8815::new(i2c_scan, sc_addr);
         if sc_ack {
             match sc_drv.read_register(ScReg::Status).await {
                 Ok(v) => {
                     sc_present = true;
-                    sc_status_val = Some(v);
                     info!("pwr.sc8815: ch={} status=0x{:02X}", ch, v);
                 }
                 Err(e) => {
                     sc_status_err = Some(sc_err_tag(&e));
                 }
+            }
+            // Quick SW2303 diagnostics on same channel (once per scan)
+            let mut i2c_sw = mux_channel(ch);
+            let mut sw_dbg = sw2303::SW2303::new(&mut i2c_sw, sw_addr);
+            if let Ok(s3) = sw_dbg.get_system_status3().await {
+                info!("sw2303.ch{}: sys3=0b{:08b}", ch, s3.bits());
+            }
+            if let Ok(s0) = sw_dbg.get_system_status0().await {
+                info!("sw2303.ch{}: sys0=0b{:08b}", ch, s0.bits());
+            }
+            if let Ok(fc) = sw_dbg.get_fast_charging_status().await {
+                info!("sw2303.ch{}: fastchg=0b{:08b}", ch, fc.bits());
+            }
+            if let Ok(cc) = sw_dbg.read_register(SwReg::ConnectionControl).await {
+                info!("sw2303.ch{}: reg14(conn)=0x{:02X}", ch, cc);
+            }
+            match sw_dbg.is_sink_device_connected().await {
+                Ok(b) => info!(
+                    "sw2303.ch{}: sink_online={}",
+                    ch,
+                    if b { "true" } else { "false" }
+                ),
+                Err(_) => warn!("sw2303.ch{}: sink_online=err", ch),
             }
         }
         if !sc_present {
@@ -718,31 +932,7 @@ async fn main(spawner: Spawner) {
                     warn!("pwr.sc8815: ch={} init_err={}", ch, tag);
                 }
             } else {
-                info!(
-                    "pwr.sc8815: ch={} init_ok status=0x{:02X}",
-                    ch,
-                    sc_status_val.unwrap_or(0x00)
-                );
-                match sc_drv.read_register(ScReg::Ctrl0Set).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} ctrl0=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} ctrl0_err={}", ch, sc_err_tag(&e)),
-                }
-                match sc_drv.read_register(ScReg::Ctrl1Set).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} ctrl1=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} ctrl1_err={}", ch, sc_err_tag(&e)),
-                }
-                match sc_drv.read_register(ScReg::Ctrl2Set).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} ctrl2=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} ctrl2_err={}", ch, sc_err_tag(&e)),
-                }
-                match sc_drv.read_register(ScReg::Mask).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} mask=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} mask_err={}", ch, sc_err_tag(&e)),
-                }
-                match sc_drv.read_register(ScReg::Ctrl3Set).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} ctrl3=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} ctrl3_err={}", ch, sc_err_tag(&e)),
-                }
+                // Do not print init-time readbacks; proceed to one-shot configuration
                 let sc_config = sc8815_default_device_config();
                 let mut sc_startup_ok = true;
 
@@ -758,55 +948,13 @@ async fn main(spawner: Spawner) {
                 if let Err(e) = config_res {
                     warn!("pwr.sc8815: ch={} config_err={}", ch, sc_err_tag(&e));
                     sc_startup_ok = false;
-                } else {
-                    info!(
-                        "pwr.sc8815: ch={} config_applied otg={}mV ibus={}mA ibat={}mA",
-                        ch, SC8815_OUTPUT_VOLTAGE_MV, SC8815_IBUS_LIMIT_MA, SC8815_IBAT_LIMIT_MA
-                    );
                 }
 
-                let otg_res = sc_drv.set_otg_mode(true).await;
-                if let Err(e) = otg_res {
-                    warn!("pwr.sc8815: ch={} otg_mode_err={}", ch, sc_err_tag(&e));
-                    sc_startup_ok = false;
-                } else {
-                    info!("pwr.sc8815: ch={} otg_mode=enabled", ch);
-                }
+                // OTG mode, switching frequency, dead time, etc. are applied via configure_device()
 
-                let vbus_res = sc_drv
-                    .set_vbus_internal_voltage(SC8815_OUTPUT_VOLTAGE_MV, SC8815_VBUS_RATIO)
-                    .await;
-                if let Err(e) = vbus_res {
-                    warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
-                    sc_startup_ok = false;
-                } else {
-                    let ratio_label: &str = if SC8815_VBUS_RATIO == 0 { "12.5" } else { "5" };
-                    info!(
-                        "pwr.sc8815: ch={} vbus_set={}mV ratio={}x",
-                        ch, SC8815_OUTPUT_VOLTAGE_MV, ratio_label
-                    );
-                }
+                // Skip ratio readback during init
 
-                match sc_drv.read_register(ScReg::Ratio).await {
-                    Ok(v) => info!("pwr.sc8815: ch={} ratio_reg=0x{:02X}", ch, v),
-                    Err(e) => warn!("pwr.sc8815: ch={} ratio_read_err={}", ch, sc_err_tag(&e)),
-                }
-
-                let adc_res = sc_drv.set_adc_conversion(true).await;
-                if let Err(e) = adc_res {
-                    warn!("pwr.sc8815: ch={} adc_start_err={}", ch, sc_err_tag(&e));
-                    sc_startup_ok = false;
-                } else {
-                    info!("pwr.sc8815: ch={} adc=start", ch);
-                }
-
-                let pgate_res = sc_drv.set_pgate_control(true).await;
-                if let Err(e) = pgate_res {
-                    warn!("pwr.sc8815: ch={} pgate_err={}", ch, sc_err_tag(&e));
-                    sc_startup_ok = false;
-                } else {
-                    info!("pwr.sc8815: ch={} pgate=enabled", ch);
-                }
+                // no-op
                 if sc_startup_ok {
                     match ch {
                         0 => pstop_ctl1.set_high(),
@@ -816,89 +964,90 @@ async fn main(spawner: Spawner) {
                         _ => {}
                     }
                     Timer::after(Duration::from_millis(5)).await;
-                    match sc_drv.read_register(ScReg::Ctrl3Set).await {
-                        Ok(v) => info!("pwr.sc8815: ch={} ctrl3_after=0x{:02X}", ch, v),
-                        Err(e) => warn!("pwr.sc8815: ch={} ctrl3_after_err={}", ch, sc_err_tag(&e)),
+                    // After PSTOP is HIGH per datasheet: set FB/refs in internal mode, then start ADC
+                    if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
+                        warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
+                        sc_startup_ok = false;
                     }
-                    // Require consecutive VBUS readings above threshold
-                    let mut consecutive = 0u8;
-                    let mut sample_index = 0u8;
-                    let mut vbus_min = u16::MAX;
-                    let mut vbus_max = 0u16;
-                    let mut ibus_last = 0u16;
-                    let mut any_sample = false;
-                    for _ in 0..40 {
-                        // ~2s with 50ms intervals
-                        match sc_drv.get_adc_measurements().await {
-                            Ok(meas) => {
-                                any_sample = true;
-                                sc_vbus_last = meas.vbus_mv;
-                                ibus_last = meas.ibus_ma;
-                                if meas.vbus_mv < vbus_min {
-                                    vbus_min = meas.vbus_mv;
-                                }
-                                if meas.vbus_mv > vbus_max {
-                                    vbus_max = meas.vbus_mv;
-                                }
-                                info!(
-                                    "pwr.sc8815: ch={} adc_sample={} vbus={}mV ibus={}mA",
-                                    ch, sample_index, meas.vbus_mv, meas.ibus_ma
-                                );
-                                sample_index = sample_index.wrapping_add(1);
-                                if meas.vbus_mv >= SC8815_VBUS_READY_MV {
-                                    consecutive += 1;
-                                    if consecutive >= SC8815_VBUS_READY_CONSECUTIVE {
-                                        info!(
-                                            "pwr.sc8815: ch={} vbus_ready=true vbus={}mV",
-                                            ch, meas.vbus_mv
-                                        );
-                                        sc_ok = true;
-                                        break;
-                                    }
-                                } else {
-                                    consecutive = 0;
-                                }
-                            }
-                            Err(e) => {
-                                warn!("pwr.sc8815: ch={} adc_err={}", ch, sc_err_tag(&e));
-                                break;
-                            }
-                        }
-                        Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
+                    if let Err(e) = sc_drv.set_adc_conversion(true).await {
+                        warn!("pwr.sc8815: ch={} adc_start_err={}", ch, sc_err_tag(&e));
+                        sc_startup_ok = false;
                     }
-                    if !sc_ok {
-                        let min_report = if any_sample { vbus_min } else { 0 };
-                        let max_report = if any_sample { vbus_max } else { 0 };
-                        let mut raw_vbus_lsb: Option<u32> = None;
-                        let mut raw_ratio_reg: Option<u8> = None;
-                        if let Ok(vh) = sc_drv.read_register(ScReg::VbusFbValue).await {
-                            if let Ok(vl) = sc_drv.read_register(ScReg::VbusFbValue2).await {
-                                let lsb = (4 * (vh as u32)) + (((vl >> 6) & 0x03) as u32) + 1;
-                                raw_vbus_lsb = Some(lsb);
-                            }
-                        }
-                        if let Ok(ratio) = sc_drv.read_register(ScReg::Ratio).await {
-                            raw_ratio_reg = Some(ratio);
-                        }
-                        warn!(
-                            "pwr.sc8815: ch={} vbus_ready=false last={}mV min={}mV max={}mV ibus={}mA raw_lsb={:?} ratio_reg={:?}",
+                    if let Err(e) = sc_drv.set_otg_mode(true).await {
+                        warn!("pwr.sc8815: ch={} otg_err={}", ch, sc_err_tag(&e));
+                        sc_startup_ok = false;
+                    }
+                    {
+                        use sc8815::registers::Register as ScReg;
+                        // Post-PSTOP, read-only verification of key registers and ADC raw
+                        let ctrl1 = sc_drv.read_register(ScReg::Ctrl1Set).await.ok();
+                        let ctrl0 = sc_drv.read_register(ScReg::Ctrl0Set).await.ok();
+                        let ctrl3 = sc_drv.read_register(ScReg::Ctrl3Set).await.ok();
+                        let status = sc_drv.read_register(ScReg::Status).await.ok();
+                        let ratio = sc_drv.read_register(ScReg::Ratio).await.ok();
+                        let vi_hi = sc_drv.read_register(ScReg::VbusrefISet).await.ok();
+                        let vi_lo = sc_drv.read_register(ScReg::VbusrefISet2).await.ok();
+                        let ve_hi = sc_drv.read_register(ScReg::VbusrefESet).await.ok();
+                        let ve_lo = sc_drv.read_register(ScReg::VbusrefESet2).await.ok();
+                        let (vbus_h, vbus_l) = sc_drv
+                            .read_consecutive_registers(ScReg::VbusFbValue)
+                            .await
+                            .unwrap_or((0, 0));
+
+                        let vref_i_mv = vi_hi.zip(vi_lo).map(|(hi, lo)| {
+                            let lsb: u16 = ((hi as u16) << 2) | ((lo as u16) >> 6);
+                            (lsb + 1) * 2
+                        });
+                        let vref_e_mv = ve_hi.zip(ve_lo).map(|(hi, lo)| {
+                            let lsb: u16 = ((hi as u16) << 2) | ((lo as u16) >> 6);
+                            (lsb + 1) * 2
+                        });
+
+                        let vbus_12 = sc8815::driver::AdcCalculations::calculate_voltage_mv(
+                            vbus_h, vbus_l, 0,
+                        )
+                        .unwrap_or(0);
+                        let vbus_5 = sc8815::driver::AdcCalculations::calculate_voltage_mv(
+                            vbus_h, vbus_l, 1,
+                        )
+                        .unwrap_or(0);
+
+                        let fb_sel_is_ext = ctrl1.map(|c| (c & 0x10) != 0).unwrap_or(false);
+                        let vbus_ratio_is_5x = ratio.map(|r| (r & 0x01) != 0).unwrap_or(false);
+                        let vbat_ratio_is_5x = ratio.map(|r| (r & 0x02) != 0).unwrap_or(false);
+                        let en_otg = ctrl0.map(|c| (c & 0x80) != 0).unwrap_or(false);
+                        let ad_start = ctrl3.map(|c| (c & 0x20) != 0).unwrap_or(false);
+                        let dis_short_fb = ctrl3.map(|c| (c & 0x04) != 0).unwrap_or(false);
+                        let vbus_short = status.map(|s| (s & 0x08) != 0).unwrap_or(false);
+
+                        // For debugging: also print raw register bytes for VBUSREF_I/EB (hi/lo)
+                        let vi_hi_b: u8 = vi_hi.unwrap_or(0);
+                        let vi_lo_b: u8 = vi_lo.unwrap_or(0);
+                        let ve_hi_b: u8 = ve_hi.unwrap_or(0);
+                        let ve_lo_b: u8 = ve_lo.unwrap_or(0);
+
+                        info!(
+                            "pwr.sc8815: ch={} verify fb_sel={} ratio={} vbat_ratio={} en_otg={} ad_start={} dis_sfb={} stat.vbus_short={} vref_i={}mV vref_e={}mV reg.vref_i=0x{:02X}/0x{:02X} reg.vref_e=0x{:02X}/0x{:02X} adc.vbus(12.5x/5x)={}/{}mV",
                             ch,
-                            sc_vbus_last,
-                            min_report,
-                            max_report,
-                            ibus_last,
-                            raw_vbus_lsb,
-                            raw_ratio_reg
+                            if fb_sel_is_ext { "external" } else { "internal" },
+                            if vbus_ratio_is_5x { "5x" } else { "12.5x" },
+                            if vbat_ratio_is_5x { "5x" } else { "12.5x" },
+                            if en_otg { "on" } else { "off" },
+                            if ad_start { "on" } else { "off" },
+                            if dis_short_fb { "on" } else { "off" },
+                            if vbus_short { "yes" } else { "no" },
+                            vref_i_mv.unwrap_or(0),
+                            vref_e_mv.unwrap_or(0),
+                            vi_hi_b,
+                            vi_lo_b,
+                            ve_hi_b,
+                            ve_lo_b,
+                            vbus_12,
+                            vbus_5
                         );
-                        if let Some(lsb) = raw_vbus_lsb {
-                            let mv_ratio5 = lsb * 10; // 2mV * 5x ratio
-                            let mv_ratio12 = lsb * 25; // 2mV * 12.5x ratio
-                            info!(
-                                "pwr.sc8815: ch={} raw_estimate ratio5={}mV ratio12={}mV",
-                                ch, mv_ratio5, mv_ratio12
-                            );
-                        }
                     }
+                    // No init-time sampling; treat startup OK when prior steps succeeded
+                    sc_ok = sc_startup_ok;
                 } else {
                     warn!("pwr.sc8815: ch={} startup_aborted", ch);
                 }
@@ -907,24 +1056,166 @@ async fn main(spawner: Spawner) {
         // release I2C back from driver
         i2c_scan = sc_drv.release();
 
-        // Probe/init SW2303 if SC8815 VBUS ready
+        // Spawn periodic VBUS monitor and optional auto-calibration for ch0 only
+        if ch == 0 && sc_ok {
+            #[embassy_executor::task]
+            async fn sc8815_ch0_monitor_task() {
+                let mut i2c = mux_channel(0);
+                let mut prev_vbus_short: Option<bool> = None;
+                loop {
+                    let mut sc = sc8815::SC8815::new(&mut i2c, sc8815_const::DEFAULT_ADDRESS);
+                    let meas = sc.get_adc_measurements().await.ok();
+                    // Also poll status for fault visibility
+                    let vbus_short = sc.is_vbus_short_fault().await.ok();
+                    // SW2303 quick read on the same bus/cadence
+                    let (sw_vbus_mv, sw_ich_ma, sw_sink) = {
+                        let mut sw = sw2303::SW2303::new(&mut i2c, swc::DEFAULT_ADDRESS);
+                        let v8 = sw.read_register(SwReg::AdcVbus).await.ok();
+                        let i8 = sw.read_register(SwReg::AdcIch).await.ok();
+                        let sink = sw.is_sink_device_connected().await.ok();
+                        let v_mv = v8.map(|v| (v as f32 * swc::adc::VBUS_FACTOR_MV) as u32);
+                        let i_ma = i8.map(|i| (i as f32 * swc::adc::ICH_FACTOR_MA) as u32);
+                        (v_mv, i_ma, sink)
+                    };
+                    if let Some(m) = meas {
+                        match (sw_vbus_mv, sw_ich_ma) {
+                            (Some(sv), Some(si)) => info!(
+                                "pwr.sc8815: ch=0 stat vbus={}mV ibus={}mA vbat={}mV ibat={}mA sw.vbus={}mV sw.ich={}mA sink={}",
+                                m.vbus_mv,
+                                m.ibus_ma,
+                                m.vbat_mv,
+                                m.ibat_ma,
+                                sv,
+                                si,
+                                if sw_sink.unwrap_or(false) { "true" } else { "false" }
+                            ),
+                            _ => info!(
+                                "pwr.sc8815: ch=0 stat vbus={}mV ibus={}mA vbat={}mV ibat={}mA sw=na sink={}",
+                                m.vbus_mv,
+                                m.ibus_ma,
+                                m.vbat_mv,
+                                m.ibat_ma,
+                                if sw_sink.unwrap_or(false) { "true" } else { "false" }
+                            ),
+                        }
+                        // no auto-calibration in application layer
+                    }
+                    if let Some(short) = vbus_short {
+                        match prev_vbus_short {
+                            None => {
+                                if short {
+                                    warn!("pwr.sc8815: ch=0 fault vbus_short=1 (sticky)");
+                                }
+                            }
+                            Some(prev) if prev != short => {
+                                if short {
+                                    warn!("pwr.sc8815: ch=0 fault vbus_short=1 (sticky)");
+                                } else {
+                                    info!("pwr.sc8815: ch=0 fault cleared vbus_short=0");
+                                }
+                            }
+                            _ => {}
+                        }
+                        prev_vbus_short = Some(short);
+                    }
+                    Timer::after(Duration::from_millis(SC8815_MONITOR_INTERVAL_MS)).await;
+                }
+            }
+            spawner
+                .spawn(sc8815_ch0_monitor_task())
+                .expect("spawn sc8815_ch0_monitor_task");
+        }
+
+        // Wait for SC8815 VBUS ready, then probe/init SW2303
         let mut sw_ok = false;
         if sc_ok {
-            // Read SW2303 device ID register (0x00) for online detection
-            let mut id_buf = [0u8; 1];
-            let online = embedded_hal_async::i2c::I2c::write_read(
-                &mut i2c_scan,
-                sw_addr,
-                &[0x00],
-                &mut id_buf,
-            )
-            .await
-            .is_ok();
-            if online {
-                let mut sw = sw2303::SW2303::new(&mut i2c_scan, sw_addr);
-                if sw.init().await.is_ok() {
-                    sw_ok = true;
+            // Gate on VBUS >= SC8815_VBUS_READY_MV for SC8815_VBUS_READY_CONSECUTIVE samples
+            let mut consec_ok: u8 = 0;
+            let mut attempts: u16 = 0;
+            // upper bound ~ (25 * 50ms) = 1250ms
+            while consec_ok < SC8815_VBUS_READY_CONSECUTIVE && attempts < 25 {
+                attempts += 1;
+                // Reborrow I2C for SC8815 one-shot read
+                {
+                    use sc8815::registers::Register as ScReg;
+                    let mut sc_chk = sc8815::SC8815::new(i2c_scan, sc_addr);
+                    let (vbus_h, vbus_l) = sc_chk
+                        .read_consecutive_registers(ScReg::VbusFbValue)
+                        .await
+                        .unwrap_or((0, 0));
+                    let vbus_mv =
+                        sc8815::driver::AdcCalculations::calculate_voltage_mv(vbus_h, vbus_l, 0)
+                            .unwrap_or(0);
+                    i2c_scan = sc_chk.release();
+                    if vbus_mv >= SC8815_VBUS_READY_MV {
+                        consec_ok = consec_ok.saturating_add(1);
+                    } else {
+                        consec_ok = 0;
+                    }
+                    if consec_ok < SC8815_VBUS_READY_CONSECUTIVE {
+                        Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
+                    } else {
+                        info!("pwr.sc8815: ch={} vbus_ready=true vbus={}mV", ch, vbus_mv);
+                    }
                 }
+            }
+            if consec_ok < SC8815_VBUS_READY_CONSECUTIVE {
+                warn!(
+                    "pwr.sc8815: ch={} vbus_ready=timeout th={}mV",
+                    ch, SC8815_VBUS_READY_MV
+                );
+            }
+            // Detect SW2303 by reading SystemStatus3 (0x0D).
+            // 给予更长的就绪宽限：每 150ms 重试，最多 12 次（~1.8s）。
+            let mut tried: u8 = 0;
+            let mut detected = false;
+            let mut detect_reg: u8 = 0x00;
+            loop {
+                let mut sw_detect = sw2303::SW2303::new(&mut i2c_scan, sw_addr);
+                // 优先 SystemStatus3(0x0D)
+                if sw_detect.get_system_status3().await.is_ok() {
+                    if sw_detect.init().await.is_ok() {
+                        detected = true;
+                        detect_reg = 0x0D;
+                    }
+                } else if sw_detect.read_register(SwReg::AdcVbus).await.is_ok() {
+                    // 次选 AdcVbus(0x31)
+                    if sw_detect.init().await.is_ok() {
+                        detected = true;
+                        detect_reg = 0x31;
+                    }
+                } else if sw_detect
+                    .read_register(SwReg::ConnectionControl)
+                    .await
+                    .is_ok()
+                {
+                    // 兜底 ConnectionControl(0x14)
+                    if sw_detect.init().await.is_ok() {
+                        detected = true;
+                        detect_reg = 0x14;
+                    }
+                }
+                if detected || tried >= SW2303_DETECT_RETRIES {
+                    break;
+                }
+                tried = tried.saturating_add(1);
+                if tried == 1 {
+                    info!("pwr.sc8815: ch={} wait sw2303_ready ...", ch);
+                }
+                Timer::after(Duration::from_millis(SW2303_DETECT_BACKOFF_MS)).await;
+            }
+            sw_ok = detected;
+            if sw_ok {
+                info!(
+                    "pwr.sc8815: ch={} sw2303_ready via reg=0x{:02X}",
+                    ch, detect_reg
+                );
+            } else {
+                warn!(
+                    "pwr.sc8815: ch={} sw2303_ready=timeout total={}ms",
+                    ch,
+                    (SW2303_DETECT_RETRIES as u64) * SW2303_DETECT_BACKOFF_MS
+                );
             }
         }
 
@@ -942,6 +1233,13 @@ async fn main(spawner: Spawner) {
 
         if sc_ok && sw_ok {
             info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
+            match ch {
+                0 => CH_READY0.signal(true),
+                1 => CH_READY1.signal(true),
+                2 => CH_READY2.signal(true),
+                3 => CH_READY3.signal(true),
+                _ => {}
+            }
         } else {
             info!(
                 "i2c.scan: ch={} sc8815={} sw2303={}",
@@ -954,12 +1252,14 @@ async fn main(spawner: Spawner) {
                     "i2c.scan: ch={} anomaly=true reason=\"module-incomplete\"",
                     ch
                 );
+                // Address is fixed per hardware; no address scan.
             } else if sc_ok ^ sw_ok {
                 error!("i2c.scan: ch={} anomaly=true reason=\"pair-mismatch\"", ch);
             }
         }
 
-        if !(sc_ok && sw_ok) {
+        // 按新策略：只要 SW2303 不在线也要关闭该通道功率级
+        if !sc_ok || (!sw_ok && !ALLOW_SC8815_WITHOUT_SW2303) {
             match ch {
                 0 => pstop_ctl1.set_low(),
                 1 => pstop_ctl2.set_low(),
@@ -969,4 +1269,128 @@ async fn main(spawner: Spawner) {
             }
         }
     }
+
+    // 仅在扫描完成后再启动 SW2303 遥测，避免早期干扰
+    info!("sw2303.ch0: spawn");
+    spawner
+        .spawn(sw2303_ch0_telemetry_task())
+        .expect("spawn sw2303_ch0_telemetry_task");
+
+    // 其他通道的 SW2303 遥测（同样在各自 ready 后启动）
+    #[embassy_executor::task]
+    async fn sw2303_ch1_telemetry_task() {
+        info!("sw2303.ch1: task_start");
+        let _ = power_in::vin_on_signal().wait().await;
+        info!("sw2303.ch1: vin_on=true; waiting ch1_ready");
+        let _ = CH_READY1.wait().await;
+        info!("sw2303.ch1: ch1_ready=true; start telemetry");
+        let sw_addr = swc::DEFAULT_ADDRESS;
+        let mut diag_left: u8 = 5;
+        let mut prev_online = false;
+        loop {
+            let mut i2c = mux_channel(1);
+            let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
+            let vbus_mv = async {
+                match sw.read_register(SwReg::AdcVbus).await {
+                    Ok(v8) => {
+                        if diag_left > 0 {
+                            info!("sw2303.ch1: adc.vbus8 raw=0x{:02X}", v8);
+                        }
+                        Some((v8 as f32) * swc::adc::VBUS_FACTOR_MV * 16.0)
+                    }
+                    Err(_) => None,
+                }
+            }
+            .await;
+            let ich_ma: Option<f32> = match sw.read_register(SwReg::AdcIch).await {
+                Ok(v8) => {
+                    if diag_left > 0 {
+                        info!("sw2303.ch1: adc.ich8 raw=0x{:02X}", v8);
+                    }
+                    Some(v8 as f32 * swc::adc::ICH_FACTOR_MA)
+                }
+                Err(_) => None,
+            };
+            let online = sw.is_sink_device_connected().await.unwrap_or(false);
+            if let (Some(v), Some(i)) = (vbus_mv, ich_ma) {
+                info!(
+                    "sw2303.ch1: sink_online={} vbus={}mV ich_sw={}mA",
+                    if online { "true" } else { "false" },
+                    v as u32,
+                    i as u32
+                );
+                if diag_left > 0 {
+                    if let Ok(s3) = sw.get_system_status3().await {
+                        info!("sw2303.ch1: sys3=0b{:08b}", s3.bits());
+                    }
+                    if let Ok(s0) = sw.get_system_status0().await {
+                        info!("sw2303.ch1: sys0=0b{:08b}", s0.bits());
+                    }
+                    diag_left = diag_left.saturating_sub(1);
+                }
+            }
+            if online && !prev_online {
+                info!("sw2303.ch1: online");
+            }
+            prev_online = online;
+            Timer::after(Duration::from_secs(1)).await;
+        }
+    }
+    spawner
+        .spawn(sw2303_ch1_telemetry_task())
+        .expect("spawn sw2303_ch1_telemetry_task");
+
+    #[embassy_executor::task]
+    async fn sw2303_ch2_telemetry_task() {
+        info!("sw2303.ch2: task_start");
+        let _ = power_in::vin_on_signal().wait().await;
+        info!("sw2303.ch2: vin_on=true; waiting ch2_ready");
+        let _ = CH_READY2.wait().await;
+        info!("sw2303.ch2: ch2_ready=true; start telemetry");
+        let sw_addr = swc::DEFAULT_ADDRESS;
+        let mut i2c = mux_channel(2);
+        let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
+        loop {
+            let online = sw.is_sink_device_connected().await.unwrap_or(false);
+            if let Ok(v8) = sw.read_register(SwReg::AdcVbus).await {
+                let v = (v8 as f32 * swc::adc::VBUS_FACTOR_MV * 16.0) as u32;
+                info!(
+                    "sw2303.ch2: sink_online={} vbus={}mV",
+                    if online { "true" } else { "false" },
+                    v
+                );
+            }
+            Timer::after(Duration::from_secs(1)).await;
+        }
+    }
+    spawner
+        .spawn(sw2303_ch2_telemetry_task())
+        .expect("spawn sw2303_ch2_telemetry_task");
+
+    #[embassy_executor::task]
+    async fn sw2303_ch3_telemetry_task() {
+        info!("sw2303.ch3: task_start");
+        let _ = power_in::vin_on_signal().wait().await;
+        info!("sw2303.ch3: vin_on=true; waiting ch3_ready");
+        let _ = CH_READY3.wait().await;
+        info!("sw2303.ch3: ch3_ready=true; start telemetry");
+        let sw_addr = swc::DEFAULT_ADDRESS;
+        let mut i2c = mux_channel(3);
+        let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
+        loop {
+            let online = sw.is_sink_device_connected().await.unwrap_or(false);
+            if let Ok(v8) = sw.read_register(SwReg::AdcVbus).await {
+                let v = (v8 as f32 * swc::adc::VBUS_FACTOR_MV * 16.0) as u32;
+                info!(
+                    "sw2303.ch3: sink_online={} vbus={}mV",
+                    if online { "true" } else { "false" },
+                    v
+                );
+            }
+            Timer::after(Duration::from_secs(1)).await;
+        }
+    }
+    spawner
+        .spawn(sw2303_ch3_telemetry_task())
+        .expect("spawn sw2303_ch3_telemetry_task");
 }

@@ -19,7 +19,7 @@ embassy-embedded-hal = "0.3.2"
 embassy-futures = "0.1.2"
 xca9545a-async = { git = "https://github.com/IvanLi-CN/xca9545a-async-rs", rev = "7bcc109c70d202ce7d3554e3a7755d5f3eb24330", default-features = false, features = ["async"] }
 port-expander = "0.6"
-sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", rev = "8d9eccc3661ce909094a7e988f85a55c3431f994", default-features = false, features = ["async"] }
+sc8815 = { git = "https://github.com/IvanLi-CN/sc8815-rs", branch = "main", default-features = false, features = ["async"] }
 sw2303 = { git = "https://github.com/IvanLi-CN/sw2303-rs", rev = "ba44c0c7eb0ff6256333b708925babc1f6a06a9c", default-features = false, features = ["async"] }
 ina226-tp = { version = "0.4", default-features = false, features = ["async"] }
 defmt = "1"
@@ -48,3 +48,7 @@ incremental = false
 lto = "fat"
 opt-level = "s"
 overflow-checks = false
+
+[features]
+# One-shot, post-PSTOP, read-only SC8815 register verification logs.
+sc_verify = []

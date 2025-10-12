@@ -1,5 +1,5 @@
 [package]
-name = "esp32s3-hello-world"
+name = "iso-usb-hub"
 version = "0.1.0"
 authors = ["Ivan Li<ivanli2048@gmail.com>"]
 edition = "2021"

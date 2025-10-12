@@ -72,20 +72,20 @@ jobs:
           ⚠️ This is an automatically generated development version for testing purposes only.
 
           ## File Description
-          - `esp32s3-hello-world` - Main firmware (ELF format)
+          - `iso-usb-hub` - Main firmware (ELF format)
           - `examples/` - Example programs
 
           ## How to Flash Firmware
           ```bash
           # Using espflash to flash ELF directly
           cargo install espflash
-          espflash flash --monitor target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+          espflash flash --monitor target/xtensa-esp32s3-none-elf/release/iso-usb-hub
 
           # Or using cargo run with esp toolchain (requires local setup via espup)
           cargo +esp run --release
           ```
         files: |
-          target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+          target/xtensa-esp32s3-none-elf/release/iso-usb-hub
           target/xtensa-esp32s3-none-elf/release/examples/*
         prerelease: true
         draft: false

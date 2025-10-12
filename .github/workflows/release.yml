@@ -140,7 +140,7 @@ jobs:
           - **Target Architecture:** xtensa-esp32s3-none-elf (ESP32‑S3)
 
           ## Files
-          - `esp32s3-hello-world` - Main firmware (ELF with debug info)
+          - `iso-usb-hub` - Main firmware (ELF with debug info)
           - `examples/` - Example ELF binaries
 
           ## Flashing and Usage
@@ -150,7 +150,7 @@ jobs:
           cargo install espflash
 
           # Flash and monitor (replace PORT if needed)
-          espflash flash --monitor target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+          espflash flash --monitor target/xtensa-esp32s3-none-elf/release/iso-usb-hub
           ```
 
           - Development (requires esp toolchain locally):
@@ -161,9 +161,9 @@ jobs:
           ## Hardware
           - ESP32‑S3 development board
       files: |
-        target/xtensa-esp32s3-none-elf/release/esp32s3-hello-world
+        target/xtensa-esp32s3-none-elf/release/iso-usb-hub
         target/xtensa-esp32s3-none-elf/release/examples/*
-        prerelease: ${{ github.event.inputs.prerelease }}
-        draft: false
+      prerelease: ${{ github.event.inputs.prerelease }}
+      draft: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,7 +9,7 @@
 # -------- Configuration (override via environment) --------
 TARGET  ?= xtensa-esp32s3-none-elf
 # Binary name from Cargo.toml [package].name
-BIN     ?= esp32s3-hello-world
+BIN     ?= iso-usb-hub
 # Profile: release or debug
 PROFILE ?= release
 # Serial port (optional). Example on macOS: /dev/tty.usbmodem1101 or /dev/tty.usbserial-xxxx

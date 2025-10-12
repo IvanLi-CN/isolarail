@@ -38,7 +38,7 @@ jobs:
       with:
         default: false
         buildtargets: esp32s3
-        export: true
+        override: true
         ldproxy: false
 
     - name: Ensure clippy/rustfmt for esp toolchain

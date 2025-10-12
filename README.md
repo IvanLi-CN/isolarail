@@ -124,7 +124,7 @@ make ports
 
 Notes:
 - If you run `espflash monitor` directly and see garbled output, it is because the app logs with `defmt`.
-- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/esp32s3-hello-world` so logs are decoded.
+- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/iso-usb-hub` so logs are decoded.
 - Default baud is `115200`; override with `BAUD=...` if needed.
 
 ## Expected Output

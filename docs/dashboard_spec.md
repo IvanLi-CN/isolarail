@@ -1,22 +1,25 @@
 # Dashboard (160×50) — Four-Column Layout
 
-This document specifies a four-column dashboard for a 160×50 px
-monochrome (1‑bit) display, aligned with the four horizontally placed
-USB‑C ports. It defines pixel grid, fonts, string budgets, formatting,
-and a minimalist power bar per column.
+This document specifies a four-column dashboard for a 160×50 px panel
+aligned with the four horizontally placed USB‑C ports. The target panel
+is RGB565; a color palette is provided to ensure legibility. A monochrome
+per‑pixel PBM asset remains the canonical pixel placement reference.
+The spec covers pixel grid, fonts, string budgets, formatting, and a
+minimal power bar per column.
 
-Preview (pixel-accurate): ![Dashboard 160×50](assets/dashboard_wireframe_160x50.svg)
-Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm`（1‑bit；与硬件 1:1 像素映射）。
+Preview (pixel‑accurate): ![Dashboard 160×50](assets/dashboard_wireframe_160x50.svg)
+Color preview (RGB565‑friendly): ![Dashboard 160×50 (Color)](assets/dashboard_wireframe_160x50_color.svg)
+Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm` (1‑bit; 1:1 pixel mapping to hardware).
 
 ---
 
 ## 1. Screen & Fonts
 
-- Resolution: 160×50 px, 1‑bit (black/white).
+- Logical resolution: 160×50 px.
+- Panel format: RGB565 (color).
 - Font: monospace bitmap.
-  - Recommended: 5×9 glyphs in 6×10 cells（宽度不变，高度提升）。
-  - Fallback: 5×7.
-- Line height: 10 px per文本行（使用 5×9 字形，单元格 6×10）。
+  - Recommended: 5×9 glyphs placed in 6×10 cells (same width, taller height).
+- Line height: 10 px per text line (5×9 glyphs, 6×10 cells).
 
 ## 2. Column Grid (x‑axis)
 
@@ -31,13 +34,13 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm`（1‑bit；与硬件 
 
 ## 3. Row Grid (y‑axis)
 
-- Header: 0–9 px（标签 C1–C4，5×9 字形）。
-- Voltage row: 顶部 y ≈ 11（占用 11–19）。
-- Current row: 顶部 y ≈ 22（占用 22–30）。
-- Power row: 顶部 y ≈ 33（占用 33–41）。
-- 过渡留白：y=42–43。
-- Power bar area: 44–48 px（4 px 高）。
-- Bottom border at 49 px。
+- Header: 0–9 px (labels C1–C4, 5×9 glyphs).
+- Voltage row: top y ≈ 11 (covers 11–19).
+- Current row: top y ≈ 22 (covers 22–30).
+- Power row: top y ≈ 33 (covers 33–41).
+- Spacer: y = 42–43.
+- Power bar area: 44–48 px (4 px tall).
+- Bottom border at 49 px.
 
 ```text
 0  ─ header (labels)
@@ -51,7 +54,7 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm`（1‑bit；与硬件 
 49 ─ bottom border
 ```
 
-参见 `docs/assets/dashboard_wireframe_160x50.pbm` 获取按像素刻画的线框图（5×9 字形）。
+See `docs/assets/dashboard_wireframe_160x50.pbm` for the per‑pixel wireframe (5×9 glyphs).
 
 ## 4. String Budgets (per cell)
 
@@ -117,25 +120,32 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm`（1‑bit；与硬件 
 
 ## 11. Asset
 
-- Wireframe（per‑pixel, 1‑bit）
-  - SVG 预览：`docs/assets/dashboard_wireframe_160x50.svg`
-  - PBM 源：`docs/assets/dashboard_wireframe_160x50.pbm`
-  - 格式：PBM P1（1=黑，0=白），尺寸 160×50，像素 1:1 对映。
-  - 内容：四列、x=40/80/120 分隔线、3 行读数（5×9 字形，6×10 单元）、4 px 高功率条。
+- Wireframe (per‑pixel, 1‑bit)
+  - SVG preview: `docs/assets/dashboard_wireframe_160x50.svg`
+  - PBM source: `docs/assets/dashboard_wireframe_160x50.pbm`
+  - Format: PBM P1 (1 = black, 0 = white), size 160×50, 1:1 pixel mapping.
+  - Content: four columns, x = 40/80/120 separators, three value rows (5×9 glyphs in 6×10 cells), 4 px‑tall power bar.
 
-## 12. Disconnected Example
+## 12. Color Scheme (RGB565)
 
-当 USB 模块未插装/未连接时：
+- Background: `#F7F7F7` (near‑white, slightly gray; RGB565 ≈ `0xEF7D`).
+- Text/separators/border (default): `#000000` (RGB565 = `0x0000`).
+- Voltage (V) text: `#FFCC00` (deep yellow; RGB565 ≈ `0xFF20`).
+- Current (A) text: `#D32F2F` (red; RGB565 ≈ `0xB0E9`).
+- Power (W) text & bars: `#2E7D32` (green; RGB565 ≈ `0x23E6`).
+- Contrast: on a light background, use a deeper yellow to keep thin strokes readable (aim to approximate a 4.5:1 text contrast).
 
-- 列表头右侧显示 `DIS` 标记；
-- V/I/W 行显示 `--`；
-- 功率条为空（仅显示轮廓）。
+Note: Color assets are for aesthetics and contrast guidance; the 1‑bit PBM remains the canonical pixel layout (1:1 with hardware).
 
-像素示意：![Disconnected Example](assets/dashboard_wireframe_160x50_disconnected.svg)
+## 13. Disconnected Example
 
-## 12. Next Steps
+When a USB port module is not present or not connected:
 
-- Confirm font (6×8 vs 5×7) and renderer.
-- Prototype renderer with the above grid and formatting rules.
-- Bind five‑way input and selection highlight.
-- Map data service to measurement backend.
+- Show a `DIS` tag near the column label.
+- Show `--` for V/I/W rows.
+- Leave the power bar empty (outline only).
+
+Pixel preview: ![Disconnected Example](assets/dashboard_wireframe_160x50_disconnected.svg)
+Color preview (RGB565): ![Disconnected Example (Color)](assets/dashboard_wireframe_160x50_disconnected_color.svg)
+
+<!-- End of finalized spec -->

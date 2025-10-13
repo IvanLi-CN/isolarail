@@ -107,29 +107,34 @@ fn draw_dashboard(samples: &[(bool, &str, &str, &str); 4], svg_path: &str, ppm_p
     let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,45,0));
     let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,0,0));
     let w_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,42,0));
-    // rows: y=2, 17, 32 (2 px interline spacing; no header)
+    // rows: y=2, 16, 30 (1 px interline spacing; no header)
     for (col, cx) in centers.iter().enumerate() {
         let (conn, v, i, w) = samples[col];
         if conn {
             // outline pass
             for (dx,dy) in [(-1,0),(1,0),(0,-1),(0,1)] {
                 draw_centered_text(&mut c, *cx+dx, 2+dy,  v, MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
-                draw_centered_text(&mut c, *cx+dx, 17+dy, i, MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
-                draw_centered_text(&mut c, *cx+dx, 32+dy, w, MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
+                draw_centered_text(&mut c, *cx+dx, 16+dy, i, MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
+                draw_centered_text(&mut c, *cx+dx, 30+dy, w, MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
             }
             draw_centered_text(&mut c, *cx, 2,  v, v_style, 7);
-            draw_centered_text(&mut c, *cx, 17, i, i_style, 7);
-            draw_centered_text(&mut c, *cx, 32, w, w_style, 7);
+            draw_centered_text(&mut c, *cx, 16, i, i_style, 7);
+            draw_centered_text(&mut c, *cx, 30, w, w_style, 7);
         } else {
-            let header_style = MonoTextStyle::new(&FONT_4X6, Rgb565::new(0,0,0));
-            draw_centered_text(&mut c, *cx, 2,  "--", header_style, 4);
-            draw_centered_text(&mut c, *cx, 17, "--", header_style, 4);
-            draw_centered_text(&mut c, *cx, 32, "--", header_style, 4);
+            // No data: show three lines of "--" at the standard rows (y=2,16,30),
+            // centered horizontally, with simple 1px outline for clarity.
+            let style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0));
+            for &yy in &[2i32, 16, 30] {
+                for (dx,dy) in [(-1,0),(1,0),(0,-1),(0,1)] {
+                    draw_centered_text(&mut c, *cx+dx, yy+dy, "--", MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,0,0)), 7);
+                }
+                draw_centered_text(&mut c, *cx, yy, "--", style, 7);
+            }
         }
-        // power bar 2px high at y=48..49
-        Rectangle::new(Point::new([3,43,83,123][col], 48), Size::new(34,2)).into_styled(border).draw(&mut c).ok();
+        // power bar 4px high at y=45..48（清晰可见）
+        Rectangle::new(Point::new([3,43,83,123][col], 45), Size::new(34,4)).into_styled(border).draw(&mut c).ok();
         if conn && col<3 {
-            Rectangle::new(Point::new([4,44,84,124][col], 49), Size::new([20,30,15,0][col] as u32,1))
+            Rectangle::new(Point::new([4,44,84,124][col], 46), Size::new([20,30,15,0][col] as u32,2))
                 .into_styled(PrimitiveStyle::with_fill(Rgb565::new(0,63,0))).draw(&mut c).ok();
         }
     }

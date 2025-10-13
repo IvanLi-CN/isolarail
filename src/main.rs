@@ -48,7 +48,11 @@ use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
-    pixelcolor::Rgb565, prelude::*, primitives::PrimitiveStyle, primitives::Rectangle,
+    mono_font::{ascii::FONT_6X10, MonoTextStyle},
+    pixelcolor::Rgb565,
+    prelude::*,
+    primitives::{PrimitiveStyle, Rectangle},
+    text::{Baseline, Text},
 };
 // esp-hal Output has inherent set_low/set_high; no trait import needed
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
@@ -357,6 +361,192 @@ impl embedded_hal::digital::OutputPin for NoopPin {
     }
 }
 
+// ===== UI: Dashboard renderer (160x50) =====
+
+#[derive(Copy, Clone, Debug, Default)]
+struct PortSample {
+    connected: bool,
+    // millivolts and milliamps for convenience
+    vbus_mv: u32,
+    ich_ma: u32,
+}
+
+impl PortSample {
+    fn power_mw(&self) -> u32 {
+        ((self.vbus_mv as u64 * self.ich_ma as u64) / 1000) as u32
+    }
+}
+
+const UI_BG_GRAY: Rgb565 = Rgb565::new(29, 61, 29); // approx #F7F7F7 (~0xEF7D)
+const UI_BORDER: Rgb565 = Rgb565::new(0, 0, 0);
+const UI_V_YELLOW: Rgb565 = Rgb565::new(31, 50, 0); // #FFCC00 -> (31,50,0)
+const UI_I_RED: Rgb565 = Rgb565::new(26, 12, 6); // #D32F2F -> (~26,12,6)
+const UI_W_GREEN: Rgb565 = Rgb565::new(6, 31, 6); // #2E7D32 -> (~6,31,6)
+
+fn fmt_v(buf: &mut heapless::String<8>, mv: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    let v = mv as f32 / 1000.0;
+    if v < 10.0 {
+        let _ = write!(buf, "{:.2}V", v);
+    } else {
+        let _ = write!(buf, "{:.1}V", v);
+    }
+}
+
+fn fmt_i(buf: &mut heapless::String<8>, ma: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    if ma >= 1000 {
+        let a = ma as f32 / 1000.0;
+        let _ = write!(buf, "{:.2}A", a);
+    } else {
+        let _ = write!(buf, "{}mA", ma);
+    }
+}
+
+fn fmt_w(buf: &mut heapless::String<8>, mw: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    if mw >= 1000 {
+        let w = mw as f32 / 1000.0;
+        let _ = write!(buf, "{:.1}W", w);
+    } else {
+        let _ = write!(buf, "{}mW", mw);
+    }
+}
+
+fn draw_centered_text<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+    col_cx: i32,
+    y: i32,
+    text: &str,
+    color: Rgb565,
+) {
+    // FONT_6X10 advance per glyph is 6 px; center within ~36 px area
+    let w = (text.len() as i32) * 6;
+    let x = col_cx - (w / 2);
+    let style = MonoTextStyle::new(&FONT_6X10, color);
+    let _ = Text::with_baseline(text, Point::new(x, y), style, Baseline::Top).draw(disp);
+}
+
+fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+    samples: &[PortSample; 4],
+) {
+    // Background
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_fill(UI_BG_GRAY))
+        .draw(disp);
+
+    // Outer border
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
+        .draw(disp);
+
+    // Column separators
+    for x in [40i32, 80, 120] {
+        let _ = Rectangle::new(Point::new(x, 0), Size::new(1, 50))
+            .into_styled(PrimitiveStyle::with_fill(UI_BORDER))
+            .draw(disp);
+    }
+
+    // Column centers
+    let centers = [20i32, 60, 100, 140];
+
+    // Header labels + optional DIS tag
+    for (i, cx) in centers.iter().enumerate() {
+        let lbl = match i {
+            0 => "C1",
+            1 => "C2",
+            2 => "C3",
+            _ => "C4",
+        };
+        draw_centered_text(disp, *cx, 1, lbl, UI_BORDER);
+        if !samples[i].connected {
+            // Put DIS to the right side of the column header area
+            let style = MonoTextStyle::new(&FONT_6X10, UI_BORDER);
+            let _ = Text::new("DIS", Point::new(cx + 8, 1), style).draw(disp);
+        }
+    }
+
+    // Rows: V at y=11, I at y=22, W at y=33
+    let rows_y = [11i32, 22, 33];
+    for (col, cx) in centers.iter().enumerate() {
+        let s = samples[col];
+        if s.connected {
+            let mut buf: heapless::String<8> = heapless::String::new();
+            fmt_v(&mut buf, s.vbus_mv);
+            draw_centered_text(disp, *cx, rows_y[0], &buf, UI_V_YELLOW);
+            fmt_i(&mut buf, s.ich_ma);
+            draw_centered_text(disp, *cx, rows_y[1], &buf, UI_I_RED);
+            fmt_w(&mut buf, s.power_mw());
+            draw_centered_text(disp, *cx, rows_y[2], &buf, UI_W_GREEN);
+        } else {
+            draw_centered_text(disp, *cx, rows_y[0], "--", UI_BORDER);
+            draw_centered_text(disp, *cx, rows_y[1], "--", UI_BORDER);
+            draw_centered_text(disp, *cx, rows_y[2], "--", UI_BORDER);
+        }
+    }
+
+    // Power bars: x inset=3, width=34, height=4; y=44..48
+    let bar_y = 44i32;
+    let bar_h = 4u32;
+    let bar_w = 34u32;
+    let bar_xs = [3i32, 43, 83, 123];
+    const MAX_WATT: f32 = 30.0; // fallback max when negotiation not available
+    for (i, bx) in bar_xs.iter().enumerate() {
+        // Outline
+        let _ = Rectangle::new(Point::new(*bx, bar_y), Size::new(bar_w, bar_h))
+            .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
+            .draw(disp);
+        // Fill if connected
+        if samples[i].connected {
+            let mw = samples[i].power_mw();
+            let w = (mw as f32) / 1000.0;
+            let frac = (w / MAX_WATT).clamp(0.0, 1.0);
+            let fwf = frac * (bar_w as f32 - 2.0);
+            let fill_w = if fwf <= 0.0 { 0 } else { (fwf + 0.5) as u32 }; // round to nearest
+            if fill_w > 0 {
+                let _ = Rectangle::new(
+                    Point::new(*bx + 1, bar_y + 1),
+                    Size::new(fill_w, bar_h.saturating_sub(2)),
+                )
+                .into_styled(PrimitiveStyle::with_fill(UI_W_GREEN))
+                .draw(disp);
+            }
+        }
+    }
+}
+
+fn draw_dashboard_mock<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+) {
+    let samples = [
+        PortSample {
+            connected: true,
+            vbus_mv: 5120,
+            ich_ma: 980,
+        },
+        PortSample {
+            connected: true,
+            vbus_mv: 9000,
+            ich_ma: 2500,
+        },
+        PortSample {
+            connected: true,
+            vbus_mv: 20000,
+            ich_ma: 1500,
+        },
+        PortSample {
+            connected: false,
+            vbus_mv: 0,
+            ich_ma: 0,
+        },
+    ];
+    draw_dashboard_frame(disp, &samples);
+}
+
 async fn ack_scan_vin_off(sc_addr: u8) {
     for ch in 0u8..4u8 {
         let mut i2c_scan = mux_channel(ch);
@@ -526,33 +716,10 @@ async fn main(spawner: Spawner) {
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {
-        // draw chessboard
-        let _ = disp.clear(Rgb565::BLACK);
-        let bw = 10u16;
-        let bh = 10u16;
-        let nx = (LOGICAL_W as u16).div_ceil(bw);
-        let ny = (LOGICAL_H as u16).div_ceil(bh);
-        for r in 0..ny {
-            for c in 0..nx {
-                let color = if (r + c) % 2 == 0 {
-                    Rgb565::WHITE
-                } else {
-                    Rgb565::BLACK
-                };
-                let x = c * bw;
-                let y = r * bh;
-                let w = core::cmp::min(bw, LOGICAL_W as u16 - x);
-                let h = core::cmp::min(bh, LOGICAL_H as u16 - y);
-                let _ = Rectangle::new(
-                    Point::new(x as i32, y as i32),
-                    Size::new(w as u32, h as u32),
-                )
-                .into_styled(PrimitiveStyle::with_fill(color))
-                .draw(&mut disp);
-            }
-        }
+        // draw dashboard first frame using mock data; update loop is left for next step
+        draw_dashboard_mock(&mut disp);
         let _ = disp.flush().await;
-        info!("lcd.draw: chessboard done (fallback)");
+        info!("lcd.draw: dashboard first frame ready");
     }
 
     // I2C mux PCA9545A presence check via async driver

@@ -5,7 +5,7 @@ monochrome (1‑bit) display, aligned with the four horizontally placed
 USB‑C ports. It defines pixel grid, fonts, string budgets, formatting,
 and a minimalist power bar per column.
 
-Related asset: `docs/ui/dashboard_wireframe_160x50.svg` (1‑bit wireframe).
+Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate PBM; each of the 160×50 pixels is represented explicitly, 1:1 with the panel).
 
 ---
 
@@ -50,7 +50,7 @@ Related asset: `docs/ui/dashboard_wireframe_160x50.svg` (1‑bit wireframe).
 49 ─ bottom border
 ```
 
-See `dashboard_wireframe_160x50.svg` for a scale-accurate wireframe.
+See `dashboard_wireframe_160x50.pbm` for a scale-accurate, per‑pixel wireframe.
 
 ## 4. String Budgets (per cell)
 
@@ -116,9 +116,10 @@ See `dashboard_wireframe_160x50.svg` for a scale-accurate wireframe.
 
 ## 11. Asset
 
-- Wireframe: `docs/ui/dashboard_wireframe_160x50.svg`.
-  - Black strokes, white background, crisp 1 px lines.
-  - Scaled 1:1 to match the 160×50 pixel grid.
+- Wireframe (per‑pixel, 1‑bit): `docs/ui/dashboard_wireframe_160x50.pbm`.
+  - Format: Netpbm PBM (P1, ASCII). Pixel value `1` = black, `0` = white.
+  - Dimensions: 160×50. Each pixel in the file maps to one physical pixel.
+  - Content matches this spec: four equal columns, separators at x=40/80/120, three text rows (V/A/W) rendered with a 5×7 bitmap font in 6×8 cells, and a 4‑px‑tall power bar region.
 
 ## 12. Next Steps
 

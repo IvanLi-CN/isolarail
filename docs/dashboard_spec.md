@@ -5,7 +5,8 @@ monochrome (1‑bit) display, aligned with the four horizontally placed
 USB‑C ports. It defines pixel grid, fonts, string budgets, formatting,
 and a minimalist power bar per column.
 
-Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate PBM; each of the 160×50 pixels is represented explicitly, 1:1 with the panel).
+Preview (pixel-accurate): ![Dashboard 160×50](assets/dashboard_wireframe_160x50.svg)
+Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm`（1‑bit；与硬件 1:1 像素映射）。
 
 ---
 
@@ -50,7 +51,7 @@ Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate
 49 ─ bottom border
 ```
 
-See `dashboard_wireframe_160x50.pbm` for a scale-accurate, per‑pixel wireframe（已使用 5×9 字形渲染）。
+参见 `docs/assets/dashboard_wireframe_160x50.pbm` 获取按像素刻画的线框图（5×9 字形）。
 
 ## 4. String Budgets (per cell)
 
@@ -116,10 +117,21 @@ See `dashboard_wireframe_160x50.pbm` for a scale-accurate, per‑pixel wireframe
 
 ## 11. Asset
 
-- Wireframe (per‑pixel, 1‑bit): `docs/ui/dashboard_wireframe_160x50.pbm`.
-  - Format: Netpbm PBM (P1, ASCII). Pixel value `1` = black, `0` = white.
-  - Dimensions: 160×50. Each pixel in the file maps to one physical pixel.
-  - Content matches this spec: four equal columns, separators at x=40/80/120, three text rows (V/A/W) rendered with a 5×7 bitmap font in 6×8 cells, and a 4‑px‑tall power bar region.
+- Wireframe（per‑pixel, 1‑bit）
+  - SVG 预览：`docs/assets/dashboard_wireframe_160x50.svg`
+  - PBM 源：`docs/assets/dashboard_wireframe_160x50.pbm`
+  - 格式：PBM P1（1=黑，0=白），尺寸 160×50，像素 1:1 对映。
+  - 内容：四列、x=40/80/120 分隔线、3 行读数（5×9 字形，6×10 单元）、4 px 高功率条。
+
+## 12. Disconnected Example
+
+当 USB 模块未插装/未连接时：
+
+- 列表头右侧显示 `DIS` 标记；
+- V/I/W 行显示 `--`；
+- 功率条为空（仅显示轮廓）。
+
+像素示意：![Disconnected Example](assets/dashboard_wireframe_160x50_disconnected.svg)
 
 ## 12. Next Steps
 

@@ -13,10 +13,9 @@ Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate
 
 - Resolution: 160×50 px, 1‑bit (black/white).
 - Font: monospace bitmap.
-  - Recommended: 6×8 (cell 6 px wide, 8 px tall).
+  - Recommended: 5×9 glyphs in 6×10 cells（宽度不变，高度提升）。
   - Fallback: 5×7.
-- Line height: 8–10 px per text row. Spec below assumes 6×8 with
-  1–2 px vertical breathing room.
+- Line height: 10 px per文本行（使用 5×9 字形，单元格 6×10）。
 
 ## 2. Column Grid (x‑axis)
 
@@ -31,12 +30,13 @@ Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate
 
 ## 3. Row Grid (y‑axis)
 
-- Header: 0–8 px (labels C1–C4).
-- Voltage row: baseline ≈ 15 px.
-- Current row: baseline ≈ 23 px.
-- Power row: baseline ≈ 31 px.
-- Power bar area: 44–48 px (4 px tall).
-- Bottom border at 49 px.
+- Header: 0–9 px（标签 C1–C4，5×9 字形）。
+- Voltage row: 顶部 y ≈ 11（占用 11–19）。
+- Current row: 顶部 y ≈ 22（占用 22–30）。
+- Power row: 顶部 y ≈ 33（占用 33–41）。
+- 过渡留白：y=42–43。
+- Power bar area: 44–48 px（4 px 高）。
+- Bottom border at 49 px。
 
 ```text
 0  ─ header (labels)
@@ -50,7 +50,7 @@ Related asset: `docs/ui/dashboard_wireframe_160x50.pbm` (1‑bit, pixel-accurate
 49 ─ bottom border
 ```
 
-See `dashboard_wireframe_160x50.pbm` for a scale-accurate, per‑pixel wireframe.
+See `dashboard_wireframe_160x50.pbm` for a scale-accurate, per‑pixel wireframe（已使用 5×9 字形渲染）。
 
 ## 4. String Budgets (per cell)
 

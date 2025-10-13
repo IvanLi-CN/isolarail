@@ -185,12 +185,26 @@ FONT_5x7 = {
     ],
 }
 
-ADV_X = 6  # 5px glyph + 1px spacing
+ADV_X = 6  # horizontal advance: keep width budget (<=6 glyphs per 36 px)
+
+# Scale 5x7 glyphs vertically to 5x9 (nearest-neighbor along Y) without changing width.
+ORIG_H = 7
+TARGET_H = 9
+
+def _scale_rows_5x7_to_5x9(rows):
+    out = []
+    for oy in range(TARGET_H):
+        iy = (oy * ORIG_H) // TARGET_H
+        iy = min(iy, ORIG_H - 1)
+        out.append(rows[iy])
+    return out
+
+def _glyph_5x9(ch):
+    base = FONT_5x7.get(ch, FONT_5x7[' '])
+    return _scale_rows_5x7_to_5x9(base)
 
 def draw_char(x, y, ch):
-    g = FONT_5x7.get(ch)
-    if not g:
-        g = FONT_5x7[' ']  # fallback as space
+    g = _glyph_5x9(ch)
     for dy, row in enumerate(g):
         for dx, c in enumerate(row):
             if c == '#':
@@ -215,13 +229,14 @@ rect(0, 0, W, H, 1)
 for x in (40, 80, 120):
     vline(x, 0, H-1, 1)
 
-# 3) header labels C1..C4
+# 3) header labels C1..C4 (use 5x9; place in 0..9 area)
 centers = [20, 60, 100, 140]
 for i, cx in enumerate(centers, start=1):
     draw_text_center(cx, 1, f"C{i}")
 
 # 4) sample values per column
-rows_y = [9, 17, 25]  # V, I, W text top positions
+# With 5x9 glyphs in 6x10 cells, place three rows at 11,22,33
+rows_y = [11, 22, 33]  # V, I, W text top positions
 samples = [
     ("5.12V", "0.98A", "4.9W"),
     ("9.00V", "2.50A", "22.5W"),

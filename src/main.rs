@@ -48,7 +48,10 @@ use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyle},
+    mono_font::{
+        ascii::FONT_4X6, ascii::FONT_7X13_BOLD, ascii::FONT_9X15, ascii::FONT_9X15_BOLD,
+        MonoTextStyle,
+    },
     pixelcolor::Rgb565,
     prelude::*,
     primitives::{PrimitiveStyle, Rectangle},
@@ -377,11 +380,11 @@ impl PortSample {
     }
 }
 
-const UI_BG_GRAY: Rgb565 = Rgb565::new(29, 61, 29); // approx #F7F7F7 (~0xEF7D)
+const UI_BG_GRAY: Rgb565 = Rgb565::new(31, 63, 31); // pure white background for max contrast
 const UI_BORDER: Rgb565 = Rgb565::new(0, 0, 0);
-const UI_V_YELLOW: Rgb565 = Rgb565::new(31, 50, 0); // #FFCC00 -> (31,50,0)
-const UI_I_RED: Rgb565 = Rgb565::new(26, 12, 6); // #D32F2F -> (~26,12,6)
-const UI_W_GREEN: Rgb565 = Rgb565::new(6, 31, 6); // #2E7D32 -> (~6,31,6)
+const UI_V_YELLOW: Rgb565 = Rgb565::new(31, 45, 0); // darker amber for better contrast on white
+const UI_I_RED: Rgb565 = Rgb565::new(31, 0, 0); // vivid red
+const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
 
 fn fmt_v(buf: &mut heapless::String<8>, mv: u32) {
     use core::fmt::Write as _;
@@ -421,13 +424,29 @@ fn draw_centered_text<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb5
     col_cx: i32,
     y: i32,
     text: &str,
-    color: Rgb565,
+    style: MonoTextStyle<'_, Rgb565>,
+    adv_x: i32,
 ) {
-    // FONT_6X10 advance per glyph is 6 px; center within ~36 px area
-    let w = (text.len() as i32) * 6;
+    let w = (text.len() as i32) * adv_x;
     let x = col_cx - (w / 2);
-    let style = MonoTextStyle::new(&FONT_6X10, color);
     let _ = Text::with_baseline(text, Point::new(x, y), style, Baseline::Top).draw(disp);
+}
+
+fn draw_centered_text_with_outline<
+    D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>,
+>(
+    disp: &mut D,
+    col_cx: i32,
+    y: i32,
+    text: &str,
+    style: MonoTextStyle<'_, Rgb565>,
+    adv_x: i32,
+) {
+    let outline = MonoTextStyle::new(style.font, UI_BORDER);
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        draw_centered_text(disp, col_cx + dx, y + dy, text, outline, adv_x);
+    }
+    draw_centered_text(disp, col_cx, y, text, style, adv_x);
 }
 
 fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
@@ -454,44 +473,32 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     // Column centers
     let centers = [20i32, 60, 100, 140];
 
-    // Header labels + optional DIS tag
-    for (i, cx) in centers.iter().enumerate() {
-        let lbl = match i {
-            0 => "C1",
-            1 => "C2",
-            2 => "C3",
-            _ => "C4",
-        };
-        draw_centered_text(disp, *cx, 1, lbl, UI_BORDER);
-        if !samples[i].connected {
-            // Put DIS to the right side of the column header area
-            let style = MonoTextStyle::new(&FONT_6X10, UI_BORDER);
-            let _ = Text::new("DIS", Point::new(cx + 8, 1), style).draw(disp);
-        }
-    }
-
-    // Rows: V at y=11, I at y=22, W at y=33
-    let rows_y = [11i32, 22, 33];
+    // Rows with larger bold font (no header): y = 2, 17, 32 (2 px interline spacing)
+    let rows_y = [2i32, 17, 32];
     for (col, cx) in centers.iter().enumerate() {
         let s = samples[col];
         if s.connected {
             let mut buf: heapless::String<8> = heapless::String::new();
+            let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_V_YELLOW);
+            let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_I_RED);
+            let w_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_W_GREEN);
             fmt_v(&mut buf, s.vbus_mv);
-            draw_centered_text(disp, *cx, rows_y[0], &buf, UI_V_YELLOW);
+            draw_centered_text_with_outline(disp, *cx, rows_y[0], &buf, v_style, 7);
             fmt_i(&mut buf, s.ich_ma);
-            draw_centered_text(disp, *cx, rows_y[1], &buf, UI_I_RED);
+            draw_centered_text_with_outline(disp, *cx, rows_y[1], &buf, i_style, 7);
             fmt_w(&mut buf, s.power_mw());
-            draw_centered_text(disp, *cx, rows_y[2], &buf, UI_W_GREEN);
+            draw_centered_text_with_outline(disp, *cx, rows_y[2], &buf, w_style, 7);
         } else {
-            draw_centered_text(disp, *cx, rows_y[0], "--", UI_BORDER);
-            draw_centered_text(disp, *cx, rows_y[1], "--", UI_BORDER);
-            draw_centered_text(disp, *cx, rows_y[2], "--", UI_BORDER);
+            let header_style = MonoTextStyle::new(&FONT_4X6, UI_BORDER);
+            draw_centered_text(disp, *cx, rows_y[0], "--", header_style, 4);
+            draw_centered_text(disp, *cx, rows_y[1], "--", header_style, 4);
+            draw_centered_text(disp, *cx, rows_y[2], "--", header_style, 4);
         }
     }
 
-    // Power bars: x inset=3, width=34, height=4; y=44..48
-    let bar_y = 44i32;
-    let bar_h = 4u32;
+    // Power bars: y=47..49 (3 px tall)
+    let bar_y = 47i32;
+    let bar_h = 3u32;
     let bar_w = 34u32;
     let bar_xs = [3i32, 43, 83, 123];
     const MAX_WATT: f32 = 30.0; // fallback max when negotiation not available

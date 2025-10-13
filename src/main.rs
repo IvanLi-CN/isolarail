@@ -48,10 +48,7 @@ use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
-    mono_font::{
-        ascii::FONT_4X6, ascii::FONT_7X13_BOLD, ascii::FONT_9X15, ascii::FONT_9X15_BOLD,
-        MonoTextStyle,
-    },
+    mono_font::{ascii::FONT_7X13_BOLD, MonoTextStyle},
     pixelcolor::Rgb565,
     prelude::*,
     primitives::{PrimitiveStyle, Rectangle},
@@ -473,8 +470,8 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     // Column centers
     let centers = [20i32, 60, 100, 140];
 
-    // Rows with larger bold font (no header): y = 2, 17, 32 (2 px interline spacing)
-    let rows_y = [2i32, 17, 32];
+    // Rows with larger bold font (no header): y = 2, 16, 30 (tight spacing)
+    let rows_y = [2i32, 16, 30];
     for (col, cx) in centers.iter().enumerate() {
         let s = samples[col];
         if s.connected {
@@ -489,16 +486,17 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
             fmt_w(&mut buf, s.power_mw());
             draw_centered_text_with_outline(disp, *cx, rows_y[2], &buf, w_style, 7);
         } else {
-            let header_style = MonoTextStyle::new(&FONT_4X6, UI_BORDER);
-            draw_centered_text(disp, *cx, rows_y[0], "--", header_style, 4);
-            draw_centered_text(disp, *cx, rows_y[1], "--", header_style, 4);
-            draw_centered_text(disp, *cx, rows_y[2], "--", header_style, 4);
+            // No data: show three lines of "--" at standard rows using bold font + outline
+            let dash_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+            draw_centered_text_with_outline(disp, *cx, rows_y[0], "--", dash_style, 7);
+            draw_centered_text_with_outline(disp, *cx, rows_y[1], "--", dash_style, 7);
+            draw_centered_text_with_outline(disp, *cx, rows_y[2], "--", dash_style, 7);
         }
     }
 
-    // Power bars: y=47..49 (3 px tall)
-    let bar_y = 47i32;
-    let bar_h = 3u32;
+    // Power bars: y=45..48 (4 px tall) for clearer visibility
+    let bar_y = 45i32;
+    let bar_h = 4u32;
     let bar_w = 34u32;
     let bar_xs = [3i32, 43, 83, 123];
     const MAX_WATT: f32 = 30.0; // fallback max when negotiation not available

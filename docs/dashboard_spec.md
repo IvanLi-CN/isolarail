@@ -2,14 +2,11 @@
 
 This document specifies a four-column dashboard for a 160×50 px panel
 aligned with the four horizontally placed USB‑C ports. The target panel
-is RGB565; a color palette is provided to ensure legibility. A monochrome
-per‑pixel PBM asset remains the canonical pixel placement reference.
-The spec covers pixel grid, fonts, string budgets, formatting, and a
-minimal power bar per column.
+is RGB565; color is used for clarity. The spec covers pixel grid, fonts,
+string budgets, formatting, and a minimal power bar per column.
 
-Preview (pixel‑accurate): ![Dashboard 160×50](assets/dashboard_wireframe_160x50.svg)
-Color preview (RGB565‑friendly): ![Dashboard 160×50 (Color)](assets/dashboard_wireframe_160x50_color.svg)
-Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm` (1‑bit; 1:1 pixel mapping to hardware).
+Preview (per‑pixel SVG): ![Dashboard 160×50 (Color)](assets/dashboard_wireframe_160x50_color_bold.svg)
+Note: the SVG is composed of exactly 160×50 1×1 rectangles, one for each pixel.
 
 ---
 
@@ -17,9 +14,9 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm` (1‑bit; 1:1 pixel ma
 
 - Logical resolution: 160×50 px.
 - Panel format: RGB565 (color).
-- Font: monospace bitmap.
-  - Recommended: 5×9 glyphs placed in 6×10 cells (same width, taller height).
-- Line height: 10 px per text line (5×9 glyphs, 6×10 cells).
+- Fonts (monospace):
+  - Values (V/I/W): 7×13 bold glyphs (advance 7 px), baseline Top.
+  - No header labels in production layout.
 
 ## 2. Column Grid (x‑axis)
 
@@ -34,12 +31,10 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm` (1‑bit; 1:1 pixel ma
 
 ## 3. Row Grid (y‑axis)
 
-- Header: 0–9 px (labels C1–C4, 5×9 glyphs).
-- Voltage row: top y ≈ 11 (covers 11–19).
-- Current row: top y ≈ 22 (covers 22–30).
-- Power row: top y ≈ 33 (covers 33–41).
-- Spacer: y = 42–43.
-- Power bar area: 44–48 px (4 px tall).
+- Voltage row: top y = 2 (covers ~2–14).
+- Current row: top y = 17 (covers ~17–29).
+- Power row: top y = 32 (covers ~32–44).
+- Power bar area: 48–49 px (2 px tall) in preview assets; firmware uses 47–49 (3 px) if needed.
 - Bottom border at 49 px.
 
 ```text
@@ -54,15 +49,15 @@ Related PBM: `docs/assets/dashboard_wireframe_160x50.pbm` (1‑bit; 1:1 pixel ma
 49 ─ bottom border
 ```
 
-See `docs/assets/dashboard_wireframe_160x50.pbm` for the per‑pixel wireframe (5×9 glyphs).
+The colored previews use 7×13 bold for improved readability while fitting into each 40 px column.
 
 ## 4. String Budgets (per cell)
 
-- Available width ≈ 36 px → up to 6 glyphs with 6 px advance.
-- Examples that fit (≤ 6 chars):
-  - Voltage: `5.12V` (5), `20.0V` (5), `9.00V` (5)
-  - Current: `0.98A` (5), `2.50A` (5), `650mA` (5)
-  - Power: `4.9W` (4), `13.0W` (5), `100.0W` (6)
+- Available width ≈ 36 px → up to 5 glyphs with 7 px advance (value rows).
+- Examples that fit (≤ 5 chars):
+  - Voltage: `5.12V`, `20.0V`, `9.00V`.
+  - Current: `0.98A`, `2.50A`, `650mA`.
+  - Power: `4.9W`, `22.5W`, `30.0W`.
 - Disconnected/unknown: `--` (2) or `0mA`/`0W`.
 
 ## 5. Number Formatting
@@ -80,7 +75,7 @@ See `docs/assets/dashboard_wireframe_160x50.pbm` for the per‑pixel wireframe (
 
 ## 6. Power Bar (per column)
 
-- Position: x inset = 3 px; y = 44–48 px; width = 34 px; height = 4 px.
+- Position: x inset = 3 px; y = 48–49 px; width = 34 px; height = 2 px (SVG preview). Firmware may use 3 px (47–49).
 - Outline: 1 px black rectangle.
 - Fill: black from left to right proportional to load.
 - Normalization:
@@ -118,24 +113,21 @@ See `docs/assets/dashboard_wireframe_160x50.pbm` for the per‑pixel wireframe (
   to port controllers (e.g., SW2303 negotiation info). For accuracy,
   prefer measured values for `I` and `V`; compute `W = V × I`.
 
-## 11. Asset
+## 11. Assets
 
-- Wireframe (per‑pixel, 1‑bit)
-  - SVG preview: `docs/assets/dashboard_wireframe_160x50.svg`
-  - PBM source: `docs/assets/dashboard_wireframe_160x50.pbm`
-  - Format: PBM P1 (1 = black, 0 = white), size 160×50, 1:1 pixel mapping.
-  - Content: four columns, x = 40/80/120 separators, three value rows (5×9 glyphs in 6×10 cells), 4 px‑tall power bar.
+- Color SVG (per‑pixel, 1×1 rects; normal): `docs/assets/dashboard_wireframe_160x50_color_bold.svg`
+- Color SVG (per‑pixel, 1×1 rects; disconnected): `docs/assets/dashboard_wireframe_160x50_disconnected_color_bold.svg`
 
 ## 12. Color Scheme (RGB565)
 
-- Background: `#F7F7F7` (near‑white, slightly gray; RGB565 ≈ `0xEF7D`).
+- Background: `#FFFFFF` (pure white; RGB565 ≈ `0xFFFF`).
 - Text/separators/border (default): `#000000` (RGB565 = `0x0000`).
 - Voltage (V) text: `#FFCC00` (deep yellow; RGB565 ≈ `0xFF20`).
 - Current (A) text: `#D32F2F` (red; RGB565 ≈ `0xB0E9`).
 - Power (W) text & bars: `#2E7D32` (green; RGB565 ≈ `0x23E6`).
 - Contrast: on a light background, use a deeper yellow to keep thin strokes readable (aim to approximate a 4.5:1 text contrast).
 
-Note: Color assets are for aesthetics and contrast guidance; the 1‑bit PBM remains the canonical pixel layout (1:1 with hardware).
+Note: the SVGs are per‑pixel and intended as canonical dashboard previews.
 
 ## 13. Disconnected Example
 
@@ -145,7 +137,6 @@ When a USB port module is not present or not connected:
 - Show `--` for V/I/W rows.
 - Leave the power bar empty (outline only).
 
-Pixel preview: ![Disconnected Example](assets/dashboard_wireframe_160x50_disconnected.svg)
-Color preview (RGB565): ![Disconnected Example (Color)](assets/dashboard_wireframe_160x50_disconnected_color.svg)
+SVG preview (per‑pixel): ![Disconnected Example (Color)](assets/dashboard_wireframe_160x50_disconnected_color_bold.svg)
 
 <!-- End of finalized spec -->

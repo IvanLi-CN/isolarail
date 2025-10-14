@@ -10,6 +10,7 @@
 - 打印与日志：使用 defmt + `esp-println`；默认 `DEFMT_LOG=info`，可通过该环境变量调整日志级别。
 - 提交规范：必须使用 Conventional Commits；不得绕过校验；不得擅自 push。
 - 钩子与工具：`lefthook.yml` 使用 `cargo +esp fmt/clippy` 与 `bunx` 的 commitlint/markdownlint。
+- 文档示意图：UI 效果图为像素级 160×50（W×H）资源（像素网格为 50×160，行×列），必须以每像素 1×1 矩形的彩色 SVG 表达（RGB565 颜色近似）。仅维护两张示意图（正常态与混合状态），统一存放于 `docs/assets`，并在 `docs/dashboard_spec.md` 中引用。
 
 ### 代理执行准则
 

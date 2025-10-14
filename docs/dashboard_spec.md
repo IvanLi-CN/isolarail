@@ -5,7 +5,7 @@ aligned with the four horizontally placed USB‑C ports. The target panel
 is RGB565; color is used for clarity. The spec covers pixel grid, fonts,
 string budgets, formatting, and a minimal power bar per column.
 
-Preview (per‑pixel SVG): ![Dashboard 160×50 (Color)](assets/dashboard_wireframe_160x50_color_bold.svg)
+Preview (per‑pixel SVG): ![Dashboard 160×50 (Normal)](assets/dashboard_wireframe_160x50_color_bold.svg)
 Note: the SVG is composed of exactly 160×50 1×1 rectangles, one for each pixel.
 
 ---
@@ -49,7 +49,7 @@ Note: the SVG is composed of exactly 160×50 1×1 rectangles, one for each pixel
 49 ─ bottom border
 ```
 
-The colored previews use 7×13 bold for improved readability while fitting into each 40 px column.
+The colored previews use 7×13 bold for improved readability while fitting into each 40 px column. Icons used for state indications are 32×32 px, centered per column.
 
 ## 4. String Budgets (per cell)
 
@@ -85,12 +85,15 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 
 ## 7. States & Indicators (compact)
 
-- Column label: `C1`..`C4`.
-- Optional 2–3 letter flags near the label when space permits:
-  - `PD`, `QC` (protocol), `OC` (overcurrent), `OT` (overtemp),
-    `UV/OV` (under/overvoltage), `DIS` (disconnected).
-- Error style: avoid blinking except for critical faults; prefer
-  inverse (white text on black background) for the selected column.
+- No headers/column labels are shown.
+- Per‑column states used in previews:
+  - Disconnected: 32×32 icon + `DISC` abbreviation below; no V/I/W values; no power bar (omit entirely).
+  - Over‑current: CC icon (24×24) on the power row（centered within W row area）; no numeric power value; no power bar.
+  - Closed (port disabled): 32×32 plug-disconnected icon + `OFF` abbreviation below; no power bar (omit entirely).
+  - Initializing / no data yet: all three rows show `--`; power bar may show outline only.
+  - Normal: V/I/W values in yellow/red/green; bar filled proportionally.
+  
+  Abbreviations: `DISC`, `OFF`, `INIT`, and `CC`.
 
 ## 8. Refresh & Smoothing
 
@@ -115,8 +118,14 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 
 ## 11. Assets
 
-- Color SVG (per‑pixel, 1×1 rects; normal): `docs/assets/dashboard_wireframe_160x50_color_bold.svg`
-- Color SVG (per‑pixel, 1×1 rects; disconnected): `docs/assets/dashboard_wireframe_160x50_disconnected_color_bold.svg`
+- Only two preview assets are maintained (per‑pixel, 1×1 rects):
+  - Normal: `docs/assets/dashboard_wireframe_160x50_color_bold.svg`
+  - Mixed states (DISC/CC/OFF/INIT per column): `docs/assets/dashboard_wireframe_160x50_states_color_bold.svg`
+  
+- Icon masks (32×32, ASCII .raw; canonical shapes used by previews):
+  - Disconnected icon: `assets/rivet-icons_close-circle-solid.raw`
+  - CC icon (over‑current): `assets/fa7-solid_closed-captioning.raw`
+  - Closed icon: `assets/fluent_plug-disconnected-16-filled.raw`
 
 ## 12. Color Scheme (RGB565)
 
@@ -129,14 +138,20 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 
 Note: the SVGs are per‑pixel and intended as canonical dashboard previews.
 
-## 13. Disconnected Example
+### 12. Rendering Notes
 
-When a USB port module is not present or not connected:
+- Black text has no black stroke/outline (e.g., `--`, `DISC`, `OFF`).
+- Colored values (V/I/W) may use a subtle outer stroke for contrast if needed.
 
-- Show a `DIS` tag near the column label.
-- Show `--` for V/I/W rows.
-- Leave the power bar empty (outline only).
+## 13. Mixed States Example
 
-SVG preview (per‑pixel): ![Disconnected Example (Color)](assets/dashboard_wireframe_160x50_disconnected_color_bold.svg)
+The following preview shows four states in the same frame (left→right):
+
+- Column 1: Disconnected (`DISC`) — icon + abbreviation, no values.
+- Column 2: Over‑current — CC icon (24×24) on power row, no power value.
+- Column 3: Closed (`OFF`) — plug-disconnected icon + abbreviation, no values.
+- Column 4: Initializing (`INIT`) — V/I/W all `--`.
+
+SVG preview (per‑pixel): ![Dashboard 160×50 (States)](assets/dashboard_wireframe_160x50_states_color_bold.svg)
 
 <!-- End of finalized spec -->

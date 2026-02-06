@@ -400,19 +400,14 @@ const UI_I_RED: Rgb565 = Rgb565::new(31, 0, 0); // vivid red
 const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
 
 // UI states per column
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 enum UiPortState {
+    #[default]
     Initializing,
     Disconnected, // DISC
     Closed,       // OFF
     Overcurrent,  // CC
     Normal,
-}
-
-impl Default for UiPortState {
-    fn default() -> Self {
-        UiPortState::Initializing
-    }
 }
 
 // Embed icon masks (ASCII '0'/'1' bitmaps), authoritative assets per spec
@@ -522,8 +517,8 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     let draw_mask_32 = |disp: &mut D, left: i32, top: i32, mask: &str, color: Rgb565| {
         for (yy, line) in mask.lines().enumerate() {
             let bytes = line.as_bytes();
-            for xx in 0..bytes.len() {
-                if bytes[xx] == b'1' {
+            for (xx, &b) in bytes.iter().enumerate() {
+                if b == b'1' {
                     let _ = Rectangle::new(
                         Point::new(left + xx as i32, top + yy as i32),
                         Size::new(1, 1),

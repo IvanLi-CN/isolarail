@@ -9,7 +9,7 @@
 #![no_std]
 #![no_main]
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -48,7 +48,11 @@ use sw2303::registers::{constants as swc, Register as SwReg};
 use xca9545a_async as pca9545;
 // Display driver
 use embedded_graphics::{
-    pixelcolor::Rgb565, prelude::*, primitives::PrimitiveStyle, primitives::Rectangle,
+    mono_font::{ascii::FONT_7X13_BOLD, MonoTextStyle},
+    pixelcolor::Rgb565,
+    prelude::*,
+    primitives::{PrimitiveStyle, Rectangle},
+    text::{Baseline, Text},
 };
 // esp-hal Output has inherent set_low/set_high; no trait import needed
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
@@ -75,6 +79,21 @@ static CH_READY0: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY1: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY2: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY3: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+
+// Latch channel readiness for UI without blocking on Signal::wait
+static CH_RDY: [AtomicBool; 4] = [
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+];
+// Scan completion flag per channel (true once initial scan concludes, even if offline)
+static CH_SCAN_DONE: [AtomicBool; 4] = [
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+];
 
 // （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
 
@@ -357,6 +376,310 @@ impl embedded_hal::digital::OutputPin for NoopPin {
     }
 }
 
+// ===== UI: Dashboard renderer (160x50) =====
+
+#[derive(Copy, Clone, Debug, Default)]
+struct PortSample {
+    connected: bool,
+    // millivolts and milliamps for convenience
+    vbus_mv: u32,
+    ich_ma: u32,
+    ui_state: UiPortState,
+}
+
+impl PortSample {
+    fn power_mw(&self) -> u32 {
+        ((self.vbus_mv as u64 * self.ich_ma as u64) / 1000) as u32
+    }
+}
+
+const UI_BG_GRAY: Rgb565 = Rgb565::new(31, 63, 31); // pure white background for max contrast
+const UI_BORDER: Rgb565 = Rgb565::new(0, 0, 0);
+const UI_V_YELLOW: Rgb565 = Rgb565::new(31, 45, 0); // darker amber for better contrast on white
+const UI_I_RED: Rgb565 = Rgb565::new(31, 0, 0); // vivid red
+const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
+
+// UI states per column
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+enum UiPortState {
+    #[default]
+    Initializing,
+    Disconnected, // DISC
+    Closed,       // OFF
+    Overcurrent,  // CC
+    Normal,
+}
+
+// Embed icon masks (ASCII '0'/'1' bitmaps), authoritative assets per spec
+static ICON_DISC_32: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/rivet-icons_close-circle-solid.raw"
+));
+static ICON_OFF_32: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/fluent_plug-disconnected-16-filled.raw"
+));
+static ICON_CC_32: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/fa7-solid_closed-captioning.raw"
+));
+
+fn fmt_v(buf: &mut heapless::String<8>, mv: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    let v = mv as f32 / 1000.0;
+    if v < 10.0 {
+        let _ = write!(buf, "{:.2}V", v);
+    } else {
+        let _ = write!(buf, "{:.1}V", v);
+    }
+}
+
+fn fmt_i(buf: &mut heapless::String<8>, ma: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    if ma >= 1000 {
+        let a = ma as f32 / 1000.0;
+        let _ = write!(buf, "{:.2}A", a);
+    } else {
+        let _ = write!(buf, "{}mA", ma);
+    }
+}
+
+fn fmt_w(buf: &mut heapless::String<8>, mw: u32) {
+    use core::fmt::Write as _;
+    buf.clear();
+    if mw >= 1000 {
+        let w = mw as f32 / 1000.0;
+        let _ = write!(buf, "{:.1}W", w);
+    } else {
+        let _ = write!(buf, "{}mW", mw);
+    }
+}
+
+fn draw_centered_text<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+    col_cx: i32,
+    y: i32,
+    text: &str,
+    style: MonoTextStyle<'_, Rgb565>,
+    adv_x: i32,
+) {
+    let w = (text.len() as i32) * adv_x;
+    let x = col_cx - (w / 2);
+    let _ = Text::with_baseline(text, Point::new(x, y), style, Baseline::Top).draw(disp);
+}
+
+fn draw_centered_text_with_outline<
+    D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>,
+>(
+    disp: &mut D,
+    col_cx: i32,
+    y: i32,
+    text: &str,
+    style: MonoTextStyle<'_, Rgb565>,
+    adv_x: i32,
+) {
+    let outline = MonoTextStyle::new(style.font, UI_BORDER);
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        draw_centered_text(disp, col_cx + dx, y + dy, text, outline, adv_x);
+    }
+    draw_centered_text(disp, col_cx, y, text, style, adv_x);
+}
+
+fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+    samples: &[PortSample; 4],
+) {
+    // Background
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_fill(UI_BG_GRAY))
+        .draw(disp);
+
+    // Outer border
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
+        .draw(disp);
+
+    // Column separators
+    for x in [40i32, 80, 120] {
+        let _ = Rectangle::new(Point::new(x, 0), Size::new(1, 50))
+            .into_styled(PrimitiveStyle::with_fill(UI_BORDER))
+            .draw(disp);
+    }
+
+    // Column centers
+    let centers = [20i32, 60, 100, 140];
+
+    // Rows with larger bold font (no header): y = 2, 16, 30 (tight spacing)
+    let rows_y = [2i32, 16, 30];
+    // Helpers to draw 1-bit masks
+    let draw_mask_32 = |disp: &mut D, left: i32, top: i32, mask: &str, color: Rgb565| {
+        for (yy, line) in mask.lines().enumerate() {
+            let bytes = line.as_bytes();
+            for (xx, &b) in bytes.iter().enumerate() {
+                if b == b'1' {
+                    let _ = Rectangle::new(
+                        Point::new(left + xx as i32, top + yy as i32),
+                        Size::new(1, 1),
+                    )
+                    .into_styled(PrimitiveStyle::with_fill(color))
+                    .draw(disp);
+                }
+            }
+        }
+    };
+    let draw_mask_scaled =
+        |disp: &mut D, left: i32, top: i32, mask: &str, dw: usize, dh: usize, color: Rgb565| {
+            let lines: heapless::Vec<&str, 40> = mask.lines().collect();
+            for oy in 0..dh {
+                let sy = (oy * 32) / dh;
+                let line = *lines.get(sy).unwrap_or(&"");
+                let bytes = line.as_bytes();
+                for ox in 0..dw {
+                    let sx = (ox * 32) / dw;
+                    let b = *bytes.get(sx).unwrap_or(&b'0');
+                    if b == b'1' {
+                        let _ = Rectangle::new(
+                            Point::new(left + ox as i32, top + oy as i32),
+                            Size::new(1, 1),
+                        )
+                        .into_styled(PrimitiveStyle::with_fill(color))
+                        .draw(disp);
+                    }
+                }
+            }
+        };
+
+    for (col, cx) in centers.iter().enumerate() {
+        let s = samples[col];
+        match s.ui_state {
+            UiPortState::Disconnected => {
+                // 32x32 DISC icon + label; no values
+                draw_mask_32(disp, *cx - 16, 2, ICON_DISC_32, UI_BORDER);
+                draw_centered_text(
+                    disp,
+                    *cx,
+                    36,
+                    "DISC",
+                    MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER),
+                    7,
+                );
+            }
+            UiPortState::Closed => {
+                // 32x32 OFF icon + label
+                draw_mask_32(disp, *cx - 16, 2, ICON_OFF_32, UI_BORDER);
+                draw_centered_text(
+                    disp,
+                    *cx,
+                    36,
+                    "OFF",
+                    MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER),
+                    7,
+                );
+            }
+            UiPortState::Overcurrent => {
+                // Show V/I only; CC icon (24x24) centered on power row; hide W
+                let mut buf: heapless::String<8> = heapless::String::new();
+                let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_V_YELLOW);
+                let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_I_RED);
+                fmt_v(&mut buf, s.vbus_mv);
+                draw_centered_text_with_outline(disp, *cx, rows_y[0], &buf, v_style, 7);
+                fmt_i(&mut buf, s.ich_ma);
+                draw_centered_text_with_outline(disp, *cx, rows_y[1], &buf, i_style, 7);
+                // CC icon 24x24 at top=26 (26..49)
+                draw_mask_scaled(disp, *cx - 12, 26, ICON_CC_32, 24, 24, UI_BORDER);
+            }
+
+            UiPortState::Initializing => {
+                // Three lines of "--"
+                let dash = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+                draw_centered_text(disp, *cx, rows_y[0], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[1], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
+            }
+            UiPortState::Normal => {
+                let mut buf: heapless::String<8> = heapless::String::new();
+                let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_V_YELLOW);
+                let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_I_RED);
+                let w_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_W_GREEN);
+                fmt_v(&mut buf, s.vbus_mv);
+                draw_centered_text_with_outline(disp, *cx, rows_y[0], &buf, v_style, 7);
+                fmt_i(&mut buf, s.ich_ma);
+                draw_centered_text_with_outline(disp, *cx, rows_y[1], &buf, i_style, 7);
+                fmt_w(&mut buf, s.power_mw());
+                draw_centered_text_with_outline(disp, *cx, rows_y[2], &buf, w_style, 7);
+            }
+        }
+    }
+
+    // Power bars: y=45..48 (4 px tall) for clearer visibility
+    let bar_y = 45i32;
+    let bar_h = 4u32;
+    let bar_w = 34u32;
+    let bar_xs = [3i32, 43, 83, 123];
+    const MAX_WATT: f32 = 30.0; // fallback max when negotiation not available
+    for (i, bx) in bar_xs.iter().enumerate() {
+        // Outline (hidden for DISC/CLOSED/CC)
+        match samples[i].ui_state {
+            UiPortState::Disconnected | UiPortState::Closed | UiPortState::Overcurrent => {}
+            _ => {
+                let _ = Rectangle::new(Point::new(*bx, bar_y), Size::new(bar_w, bar_h))
+                    .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
+                    .draw(disp);
+            }
+        }
+        // Fill only in Normal
+        if matches!(samples[i].ui_state, UiPortState::Normal) {
+            let mw = samples[i].power_mw();
+            let w = (mw as f32) / 1000.0;
+            let frac = (w / MAX_WATT).clamp(0.0, 1.0);
+            let fwf = frac * (bar_w as f32 - 2.0);
+            let fill_w = if fwf <= 0.0 { 0 } else { (fwf + 0.5) as u32 }; // round to nearest
+            if fill_w > 0 {
+                let _ = Rectangle::new(
+                    Point::new(*bx + 1, bar_y + 1),
+                    Size::new(fill_w, bar_h.saturating_sub(2)),
+                )
+                .into_styled(PrimitiveStyle::with_fill(UI_W_GREEN))
+                .draw(disp);
+            }
+        }
+    }
+}
+
+fn draw_dashboard_mock<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+) {
+    let samples = [
+        PortSample {
+            connected: false,
+            vbus_mv: 0,
+            ich_ma: 0,
+            ui_state: UiPortState::Disconnected,
+        },
+        PortSample {
+            connected: true,
+            vbus_mv: 9000,
+            ich_ma: 2500,
+            ui_state: UiPortState::Overcurrent,
+        },
+        PortSample {
+            connected: false,
+            vbus_mv: 0,
+            ich_ma: 0,
+            ui_state: UiPortState::Closed,
+        },
+        PortSample {
+            connected: false,
+            vbus_mv: 0,
+            ich_ma: 0,
+            ui_state: UiPortState::Initializing,
+        },
+    ];
+    draw_dashboard_frame(disp, &samples);
+}
+
 async fn ack_scan_vin_off(sc_addr: u8) {
     for ch in 0u8..4u8 {
         let mut i2c_scan = mux_channel(ch);
@@ -526,33 +849,10 @@ async fn main(spawner: Spawner) {
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {
-        // draw chessboard
-        let _ = disp.clear(Rgb565::BLACK);
-        let bw = 10u16;
-        let bh = 10u16;
-        let nx = (LOGICAL_W as u16).div_ceil(bw);
-        let ny = (LOGICAL_H as u16).div_ceil(bh);
-        for r in 0..ny {
-            for c in 0..nx {
-                let color = if (r + c) % 2 == 0 {
-                    Rgb565::WHITE
-                } else {
-                    Rgb565::BLACK
-                };
-                let x = c * bw;
-                let y = r * bh;
-                let w = core::cmp::min(bw, LOGICAL_W as u16 - x);
-                let h = core::cmp::min(bh, LOGICAL_H as u16 - y);
-                let _ = Rectangle::new(
-                    Point::new(x as i32, y as i32),
-                    Size::new(w as u32, h as u32),
-                )
-                .into_styled(PrimitiveStyle::with_fill(color))
-                .draw(&mut disp);
-            }
-        }
+        // Initial frame using mock states, then UI will refresh below
+        draw_dashboard_mock(&mut disp);
         let _ = disp.flush().await;
-        info!("lcd.draw: chessboard done (fallback)");
+        info!("lcd.draw: dashboard first frame ready");
     }
 
     // I2C mux PCA9545A presence check via async driver
@@ -1234,12 +1534,25 @@ async fn main(spawner: Spawner) {
         if sc_ok && sw_ok {
             info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
             match ch {
-                0 => CH_READY0.signal(true),
-                1 => CH_READY1.signal(true),
-                2 => CH_READY2.signal(true),
-                3 => CH_READY3.signal(true),
+                0 => {
+                    CH_READY0.signal(true);
+                    CH_RDY[0].store(true, Ordering::Relaxed);
+                }
+                1 => {
+                    CH_READY1.signal(true);
+                    CH_RDY[1].store(true, Ordering::Relaxed);
+                }
+                2 => {
+                    CH_READY2.signal(true);
+                    CH_RDY[2].store(true, Ordering::Relaxed);
+                }
+                3 => {
+                    CH_READY3.signal(true);
+                    CH_RDY[3].store(true, Ordering::Relaxed);
+                }
                 _ => {}
             }
+            CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
         } else {
             info!(
                 "i2c.scan: ch={} sc8815={} sw2303={}",
@@ -1256,6 +1569,8 @@ async fn main(spawner: Spawner) {
             } else if sc_ok ^ sw_ok {
                 error!("i2c.scan: ch={} anomaly=true reason=\"pair-mismatch\"", ch);
             }
+            // Mark scan done to allow UI to switch from INIT to DISC
+            CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
         }
 
         // 按新策略：只要 SW2303 不在线也要关闭该通道功率级
@@ -1393,4 +1708,83 @@ async fn main(spawner: Spawner) {
     spawner
         .spawn(sw2303_ch3_telemetry_task())
         .expect("spawn sw2303_ch3_telemetry_task");
+    // === UI periodic refresh loop (2 Hz) ===
+    let sw_addr = swc::DEFAULT_ADDRESS;
+    loop {
+        // Derive per-port samples
+        let mut view: [PortSample; 4] = [
+            PortSample {
+                connected: false,
+                vbus_mv: 0,
+                ich_ma: 0,
+                ui_state: UiPortState::Initializing,
+            },
+            PortSample {
+                connected: false,
+                vbus_mv: 0,
+                ich_ma: 0,
+                ui_state: UiPortState::Initializing,
+            },
+            PortSample {
+                connected: false,
+                vbus_mv: 0,
+                ich_ma: 0,
+                ui_state: UiPortState::Initializing,
+            },
+            PortSample {
+                connected: false,
+                vbus_mv: 0,
+                ich_ma: 0,
+                ui_state: UiPortState::Initializing,
+            },
+        ];
+        let target = if PWR_SW_TARGET.load(Ordering::Relaxed) == (PowerSwitchTarget::Open as u8) {
+            PowerSwitchTarget::Open
+        } else {
+            PowerSwitchTarget::Closed
+        };
+        for ch in 0u8..4u8 {
+            let idx = ch as usize;
+            // OFF takes precedence (global intent in MVP)
+            if target == PowerSwitchTarget::Open {
+                view[idx].ui_state = UiPortState::Closed;
+                continue;
+            }
+            // Not yet ready -> INIT
+            if !CH_RDY[idx].load(Ordering::Relaxed) {
+                // If initial scan is done but channel not ready => treat as disconnected
+                if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {
+                    view[idx].ui_state = UiPortState::Disconnected;
+                } else {
+                    view[idx].ui_state = UiPortState::Initializing;
+                }
+                continue;
+            }
+            // Module online: sample SW2303 (best-effort)
+            let mut i2c = mux_channel(ch);
+            let mut sw = sw2303::SW2303::new(&mut i2c, sw_addr);
+            view[idx].connected = true;
+            // Read 8-bit ADCs
+            let v_mv = match sw.read_register(SwReg::AdcVbus).await {
+                Ok(v8) => (v8 as f32 * swc::adc::VBUS_FACTOR_MV * 16.0) as u32,
+                Err(_) => 0,
+            };
+            let i_ma = match sw.read_register(SwReg::AdcIch).await {
+                Ok(i8) => (i8 as f32 * swc::adc::ICH_FACTOR_MA) as u32,
+                Err(_) => 0,
+            };
+            view[idx].vbus_mv = v_mv;
+            view[idx].ich_ma = i_ma;
+            // Overcurrent heuristic；否则正常显示（包括空载 0mA/0W 情况）
+            if i_ma >= (SC8815_IBUS_LIMIT_MA as u32) {
+                view[idx].ui_state = UiPortState::Overcurrent;
+            } else {
+                view[idx].ui_state = UiPortState::Normal;
+            }
+        }
+        // Draw and flush
+        draw_dashboard_frame(&mut disp, &view);
+        let _ = disp.flush().await;
+        Timer::after(Duration::from_millis(500)).await;
+    }
 }

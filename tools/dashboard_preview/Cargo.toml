@@ -1,0 +1,8 @@
+[package]
+name = "dashboard_preview"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-graphics = "0.8"
+

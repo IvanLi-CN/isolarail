@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+**/target/
 debug/
 Cargo.lock
 
@@ -26,6 +27,9 @@ Thumbs.db
 *.hex
 *.elf
 *.map
+
+# Preview and tooling artifacts
+docs/assets/*.ppm
 
 # Exception for required binary files
 !startup_bitmap.bin

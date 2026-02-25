@@ -32,8 +32,8 @@
   - `DM/DP` → 连接至 CH335F（USB HUB 控制器的数据线侧）。
 - USB 通道切换（一路下游口）：
   - 使用 CH442E 在“外部接口”与“MCU 通道”之间切换该路 D+/D-。
-  - `UCM_DIN`（MCU 输出）→ CH442E `IN`（路由选择，低电平默认连接 MCU 通道，建议外部下拉）。
-  - `UCM_DCE`（MCU 输出）→ CH442E `EN#`（使能控制，低电平使能，建议外部下拉）。
+  - `UCM_DIN`（MCU `GPIO33` 输出）→ CH442E `IN`（路由选择，低电平默认连接 MCU 通道，建议外部下拉）。
+  - `UCM_DCE`（MCU `GPIO34` 输出）→ CH442E `EN#`（使能控制，低电平使能，建议外部下拉）。
 
 ## 用户交互
 
@@ -60,8 +60,8 @@ PCA9545A 下行各通道（与对应 USB 电源子板）包含：
 - `IN_EN`（MCU → TPS2490/NMOS）：高电平使能输入电源通道（闭合 NMOS）。
 - `INT`（PCA9545A → MCU）：开漏低有效；为四个下行 `INTx` 的逻辑与汇总信号。
 - `EN1..EN4`（MCU → 各 USB 电源模块）：控制各路子板的启动/停止状态（逻辑功能），高电平使能；主电源由 `IN_EN` 控制 VIN→VIN（见上）。
-- `UCM_DIN`（MCU → CH442E.IN）：一路 USB 通道路由选择；低电平选择 MCU 通道。
-- `UCM_DCE`（MCU → CH442E.EN#）：一路 USB 通道开关使能；低电平使能切换器。
+- `UCM_DIN`（MCU `GPIO33` → CH442E.IN）：一路 USB 通道路由选择；低电平选择 MCU 通道。
+- `UCM_DCE`（MCU `GPIO34` → CH442E.EN#）：一路 USB 通道开关使能；低电平使能切换器。
 - `DM/DP`（各 USB 电源模块 ↔ CH335F）：USB D‑/D+ 数据线连接。
 
 ## 简化连接示意

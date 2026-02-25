@@ -141,9 +141,9 @@ const PIN_EN4: u8 = 40;
 // UCM_DIN: route select, low => connect selected HUB downstream lane to MCU
 // UCM_DCE: CH442E EN#, low => enable mux
 #[allow(dead_code)]
-const PIN_UCM_DIN: u8 = 47;
+const PIN_UCM_DIN: u8 = 33;
 #[allow(dead_code)]
-const PIN_UCM_DCE: u8 = 48;
+const PIN_UCM_DCE: u8 = 34;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
@@ -766,8 +766,8 @@ async fn main(spawner: Spawner) {
     // CH442E mux default:
     // - DIN low: route to MCU channel (per hardware preference)
     // - DCE low: enable mux (EN# active low)
-    let mut ucm_din = Output::new(p.GPIO47, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut ucm_dce = Output::new(p.GPIO48, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut ucm_din = Output::new(p.GPIO33, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut ucm_dce = Output::new(p.GPIO34, Level::Low, esp_hal::gpio::OutputConfig::default());
     ucm_din.set_low();
     ucm_dce.set_low();
 

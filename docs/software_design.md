@@ -35,6 +35,10 @@
 
 - 时钟与外设：调用 `esp_hal::init(esp_hal::Config::default())` 初始化外设；用 `esp_hal_embassy::init()` 绑定 `embassy-time` 时间源。
 - 日志：沿用“0.2 日志风格（defmt）”；初始化时采用精简单行键值对输出，便于筛查启动问题。
+- USB 通道切换默认态（CH442E）：
+  - `UCM_DIN` 默认输出低电平（默认路由到 MCU 通道）；
+  - `UCM_DCE` 默认输出低电平（`EN#` 低有效，默认使能切换器）；
+  - 硬件需提供外部下拉，保证上电早期毛刺阶段仍保持“默认连 MCU + 开关使能”。
 - I²C（共享总线）：单实例 I²C 由 `esp-hal` 提供。参考示例（ESP32‑C3）`/Users/ivan/Projects/Ivan/esp32c3-sc8815-sw2303-demo/src/main.rs:61-69` 的做法，使用 `embassy_sync::Mutex` + `static_cell::StaticCell` 构建共享访问，再视具体驱动选择阻塞或异步封装：
   - 阶段一（初始化阶段）：优先使用“阻塞版 embedded-hal”驱动完成器件发现与一次性配置，避免 `async`/`blocking` 混用带来的 trait 兼容性问题。
   - 阶段二（运行阶段）：如需异步访问，再将 I²C 迁移为 `embedded-hal-async` 使用（丢弃初始化阶段的临时驱动实例，重新以 async 句柄构造运行期驱动）。

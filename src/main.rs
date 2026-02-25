@@ -137,6 +137,14 @@ const PIN_EN3: u8 = 39;
 #[allow(dead_code)]
 const PIN_EN4: u8 = 40;
 
+// USB channel mux control (CH442E)
+// UCM_DIN: route select, low => connect selected HUB downstream lane to MCU
+// UCM_DCE: CH442E EN#, low => enable mux
+#[allow(dead_code)]
+const PIN_UCM_DIN: u8 = 47;
+#[allow(dead_code)]
+const PIN_UCM_DCE: u8 = 48;
+
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 
@@ -754,6 +762,14 @@ async fn main(spawner: Spawner) {
     en2.set_low();
     en3.set_low();
     en4.set_low();
+
+    // CH442E mux default:
+    // - DIN low: route to MCU channel (per hardware preference)
+    // - DCE low: enable mux (EN# active low)
+    let mut ucm_din = Output::new(p.GPIO47, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut ucm_dce = Output::new(p.GPIO48, Level::Low, esp_hal::gpio::OutputConfig::default());
+    ucm_din.set_low();
+    ucm_dce.set_low();
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 

@@ -74,7 +74,7 @@ static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // No per-channel statics; channels are lightweight views over the shared bus
 
-// 各通道初始化完成标志：SC8815 已完成配置、PSTOP 已拉高且 SW2303 在线
+// 各通道初始化完成标志：SC8815 已完成配置、EN 已拉高且 SW2303 在线
 static CH_READY0: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY1: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY2: Signal<CriticalSectionRawMutex, bool> = Signal::new();
@@ -127,16 +127,15 @@ const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
-// SC8815 PSTOP control lines via MCU-side PSTOP_CTL (board-inverted to module PSTOP)
-// MCU: PSTOP_CTL high -> module PSTOP low (enable)
+// SC8815 channel enable lines (MCU direct drive, high = enable)
 #[allow(dead_code)]
-const PIN_PSTOP_CTL1: u8 = 17;
+const PIN_EN1: u8 = 17;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL2: u8 = 18;
+const PIN_EN2: u8 = 18;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL3: u8 = 39;
+const PIN_EN3: u8 = 39;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL4: u8 = 40;
+const PIN_EN4: u8 = 40;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
@@ -745,16 +744,16 @@ async fn main(spawner: Spawner) {
 
     // Front-panel INT pin will be initialized only if panel is present.
 
-    // PSTOP_CTL lines default disabled (drive low => board-inverted PSTOP=high -> module disabled)
-    let mut pstop_ctl1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
+    // EN1~EN4 default disabled (drive low)
+    let mut en1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
     // Keep variables used
-    pstop_ctl1.set_low();
-    pstop_ctl2.set_low();
-    pstop_ctl3.set_low();
-    pstop_ctl4.set_low();
+    en1.set_low();
+    en2.set_low();
+    en3.set_low();
+    en4.set_low();
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
@@ -1218,7 +1217,7 @@ async fn main(spawner: Spawner) {
                 );
             }
         } else {
-            // Initialize SC8815 per design (keep PSTOP_CTL low until init succeeds)
+            // Initialize SC8815 per design (keep EN low until init succeeds)
             match sc_drv.init().await {
                 Ok(()) => {
                     sc_init_ok = true;
@@ -1257,14 +1256,14 @@ async fn main(spawner: Spawner) {
                 // no-op
                 if sc_startup_ok {
                     match ch {
-                        0 => pstop_ctl1.set_high(),
-                        1 => pstop_ctl2.set_high(),
-                        2 => pstop_ctl3.set_high(),
-                        3 => pstop_ctl4.set_high(),
+                        0 => en1.set_high(),
+                        1 => en2.set_high(),
+                        2 => en3.set_high(),
+                        3 => en4.set_high(),
                         _ => {}
                     }
                     Timer::after(Duration::from_millis(5)).await;
-                    // After PSTOP is HIGH per datasheet: set FB/refs in internal mode, then start ADC
+                    // After EN is asserted: set FB/refs in internal mode, then start ADC
                     if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
                         warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
                         sc_startup_ok = false;
@@ -1279,7 +1278,7 @@ async fn main(spawner: Spawner) {
                     }
                     {
                         use sc8815::registers::Register as ScReg;
-                        // Post-PSTOP, read-only verification of key registers and ADC raw
+                        // Post-EN, read-only verification of key registers and ADC raw
                         let ctrl1 = sc_drv.read_register(ScReg::Ctrl1Set).await.ok();
                         let ctrl0 = sc_drv.read_register(ScReg::Ctrl0Set).await.ok();
                         let ctrl3 = sc_drv.read_register(ScReg::Ctrl3Set).await.ok();
@@ -1576,10 +1575,10 @@ async fn main(spawner: Spawner) {
         // 按新策略：只要 SW2303 不在线也要关闭该通道功率级
         if !sc_ok || (!sw_ok && !ALLOW_SC8815_WITHOUT_SW2303) {
             match ch {
-                0 => pstop_ctl1.set_low(),
-                1 => pstop_ctl2.set_low(),
-                2 => pstop_ctl3.set_low(),
-                3 => pstop_ctl4.set_low(),
+                0 => en1.set_low(),
+                1 => en2.set_low(),
+                2 => en3.set_low(),
+                3 => en4.set_low(),
                 _ => {}
             }
         }

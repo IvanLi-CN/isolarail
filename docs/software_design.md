@@ -109,7 +109,7 @@ for ch in mux.channels():               // VIN 确认后再扫描模块
   - `sw2303`（Git：IvanLi-CN/sw2303-rs，支持 blocking/async，默认地址参见 `sw2303::registers::constants::DEFAULT_ADDRESS`）。
 - 初始化/扫描策略（逐通道，串行）：
   1) 通过 `Xca9545a::split()` 获得的 `i2c[ch]` 访问该通道，仅对 SC8815 做存在性 ACK 判定；
-  2) 若 SC8815 在线：完成初始化（外部电阻 `RS1/RS2=5mΩ`，`IBUS=5A`、`IBAT=6A`，`OTG`，`450kHz`，目标 `VBUS=5V`，使能 `ADC`/`OTG`），随后 MCU 拉高该路 `PSTOP_CTL`，经板上反相使模块侧 `PSTOP` 为低电平以使能输出；
+  2) 若 SC8815 在线：完成初始化（外部电阻 `RS1/RS2=5mΩ`，`IBUS=5A`、`IBAT=6A`，`OTG`，`450kHz`，目标 `VBUS=5V`，使能 `ADC`/`OTG`），随后 MCU 拉高该路 `ENx`（`EN1..EN4`）以使能输出；
   3) 轮询 SC8815 的 ADC，要求 `VBUS ≥ 4.0V` 且“连续两次扫描均达标”（建议采样间隔 ≥ 50 ms）；
      - 连续达标后先确认 `SW2303` 在线（按驱动定义的在线检测方式），在线则执行初始化；
      - 若不在线：记录 `anomaly=module-incomplete`，该通道不再继续 SW2303 初始化；

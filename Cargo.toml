@@ -50,5 +50,5 @@ opt-level = "s"
 overflow-checks = false
 
 [features]
-# One-shot, post-PSTOP, read-only SC8815 register verification logs.
+# One-shot, post-EN, read-only SC8815 register verification logs.
 sc_verify = []

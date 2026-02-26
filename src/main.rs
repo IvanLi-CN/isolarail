@@ -127,7 +127,7 @@ const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
-// SC8815 channel enable lines (MCU direct drive, high = enable)
+// Output module channel enable lines (MCU direct drive, high = enable)
 #[allow(dead_code)]
 const PIN_EN1: u8 = 17;
 #[allow(dead_code)]

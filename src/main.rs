@@ -120,7 +120,7 @@ const PIN_I2C_SCL: u8 = 9;
 #[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
 #[allow(dead_code)]
-const PIN_I2C_RESET: u8 = 38; // open-drain, low to reset I2C peripherals
+const PIN_I2C_RESET: u8 = 35; // open-drain, low to reset I2C peripherals
 
 #[allow(dead_code)]
 const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
@@ -731,7 +731,7 @@ async fn main(spawner: Spawner) {
     // GPIO prepare
     // I2C reset (use push-pull for MVP), default high (released)
     let mut i2c_reset = Output::new(
-        p.GPIO38,
+        p.GPIO35,
         Level::High,
         esp_hal::gpio::OutputConfig::default(),
     );

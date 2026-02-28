@@ -47,7 +47,7 @@
 
 | # | 模块/信号 | V2 现状（baseline） | V3 调整 | 影响（firmware/docs） | 确认来源（schematic/pcb/measure） | 状态 |
 | ---: | --- | --- | --- | --- | --- | --- |
-| 1 | PSTOP_CTL[1..4] / PSTOP* 网络 | 通过 `PSTOP_CTLx`（MCU）→ 反相 → 模块侧 `PSTOP`（低有效）控制 4 路子板功率级 | V3 不再使用 PSTOP* 网络；撤销 MCU 侧相关引脚分配（GPIO17/18/39/40 释放） | docs: `./hardware_v3_pin_assignment.md`；firmware: 后续实现阶段移除/替换对应控制逻辑（若有新方案需再分配） | Owner decision（本对话确认） | 已确认 |
+| 1 | 4 路输出模块使能网络 | V2 讨论口径曾使用 `PSTOP_CTLx`（MCU）→ 反相 → 模块侧 `PSTOP`（低有效） | V3 网表口径为 `EN1..EN4` 直连输出模块 `EN`：GPIO17/18/39/40 分别对应 EN1..EN4（高有效） | docs: `./hardware_v3_pin_assignment.md`；firmware: 实现阶段按 `ENx` 高有效语义适配 | V3 主板网表（`docs/hardware/mainboard_netlist.enet.enet`） | 已确认 |
 | 2 | V3 其它硬件改动总览 | - | TBD | docs: PLAN + pinmap | TBD | 待补齐 |
 
 ## 需求（Requirements）
@@ -138,7 +138,7 @@ None
   - V3 相对 V2 的具体调整项清单（请主人逐项给我，我会填入并维护）
   - 是否需要为 V3 新增独立的硬件连接概览文档（v2 保留不动）
 - 假设（需主人确认）：
-  - V3 仍以 ESP32-S3FH4R2 为主控，且基本功能模块（PCA9545A/TCA6408A/INA226/四路子板）仍保留（如有变更请指出）
+  - V3 主板网表 U39 标注为 `ESP32-S3R2`；若量产型号为其它 S3 变体，需在进入实现前明确并统一文档与固件目标
 
 ## 变更记录（Change log）
 

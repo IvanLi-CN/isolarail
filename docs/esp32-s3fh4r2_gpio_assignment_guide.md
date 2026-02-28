@@ -4,6 +4,9 @@
 
 本文档为基于 ESP32-S3FH4R2 微控制器的项目提供确定的 GPIO 引脚分配方案。ESP32-S3FH4R2 集成了 4MB Flash 和 2MB PSRAM，本方案经过性能优化，确保最佳的外设性能。
 
+> 版本边界：本文件为 V2/FH4R2 口径；V3 网表与引脚分配请参考
+> `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`。
+
 ## 芯片规格
 
 - **型号**: ESP32-S3FH4R2
@@ -60,7 +63,7 @@
 
 **功能特点**: 基于RT9043GB LDO的PWM调压控制，支持5V 0.7A风扇，调速范围2V-5V，集成转速反馈
 
-#### USB HUB控制接口 (7个引脚) - 专用控制信号
+#### USB HUB控制接口 (7个引脚, V2口径) - 专用控制信号
 
 - **GPIO5**: HUB_RESET# (USB HUB芯片重置，低电平有效)
 - **GPIO17**: PSTOP_CTL1 (通道1 SC8815 启停控制，高电平启用；板上反相后 `PSTOP` 低有效)
@@ -173,8 +176,8 @@
 | **GPIO40** | 45 | PSTOP_CTL4 | SC8815 通道4 启停控制 | 高电平启用（板上反相，PSTOP 低有效，MTDO） |
 | **GPIO41** | 47 | IN_EN | TPS2490DGSR使能控制 | 高电平有效，需内部上拉 |
 | **GPIO42** | 48 | IN_PG | TPS2490DGSR电源良好状态 | 高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V |
-| **GPIO45** | 46 | HUB_SDA | CH335F `LED4/SDA` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
-| **GPIO46** | 47 | HUB_SCL | CH335F `LED3/SCL` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
+| **GPIO45** | 51 | HUB_SDA | CH335F `LED4/SDA` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
+| **GPIO46** | 52 | HUB_SCL | CH335F `LED3/SCL` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
 | **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
 | **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
 

@@ -7,7 +7,7 @@
 ## 适用范围
 
 - Hardware: ISO USB Hub 主板 V3（含 4 路 USB 供电子板）
-- MCU: ESP32-S3FH4R2
+- MCU: ESP32-S3R2（以 V3 主板网表 U39 标注为准）
 - Firmware: 本仓库（`iso-usb-hub`）
 
 ## 变更状态（V3 相对当前实现）
@@ -23,9 +23,13 @@
 | I2C | I2C_SDA | 8 | MCU →/← I2C | - | 上行 I2C SDA |
 | I2C | I2C_SCL | 9 | MCU →/← I2C | - | 上行 I2C SCL |
 | I2C | I2C_INT | 16 | I2C → MCU | active-low (OD) | PCA9545A INT 汇总（开漏，外部上拉） |
-| I2C | I2C_RESET | 38 | MCU → I2C | active-low | 复位 I2C 外设（建议 OD 驱动；低电平复位） |
+| I2C | I2C_RESET | 35 | MCU → I2C | active-low | 复位 I2C 外设（网表 `RESET#`，建议 OD 驱动；低电平复位） |
 | Power in | IN_EN | 41 | MCU → Power path | active-high | TPS2490/NMOS 使能（高=导通） |
 | Power in | IN_PG | 42 | Power path → MCU | active-high (OD) | TPS2490 PG（开漏，外部上拉） |
+| USB power module | EN1 | 17 | MCU → OUT1 | active-high | OUT1 `EN` 直连控制（高=使能） |
+| USB power module | EN2 | 18 | MCU → OUT2 | active-high | OUT2 `EN` 直连控制（高=使能） |
+| USB power module | EN3 | 39 | MCU → OUT3 | active-high | OUT3 `EN` 直连控制（高=使能，MTCK 复用脚） |
+| USB power module | EN4 | 40 | MCU → OUT4 | active-high | OUT4 `EN` 直连控制（高=使能，MTDO 复用脚） |
 | USB hub | HUB_RESET# | 5 | MCU → HUB | active-low | CH335F Reset# |
 | USB hub | HUB_SCL | 46 | MCU ↔ HUB | digital I/O | CH335F `LED3/SCL` 复用控制信号（Strapping 引脚，硬件已分配） |
 | USB hub | HUB_SDA | 45 | MCU ↔ HUB | digital I/O | CH335F `LED4/SDA` 复用控制信号（Strapping 引脚，硬件已分配） |
@@ -48,17 +52,18 @@
 
 - USB D+/D-：ESP32-S3 的 USB PHY 引脚为固定映射，但当前仓库文档对 GPIO19/GPIO20 的 D+/D- 标注存在自相矛盾处；V3 请以芯片资料与板级连线最终确认，并在此处补齐。
 - HUB 侧带信号：V3 原理图使用 `HUB_SDA/HUB_SCL = GPIO45/GPIO46`（CH335F `LED4/SDA` 与 `LED3/SCL` 复用路径）。
+- 固件当前主线仍使用旧版 `PIN_I2C_RESET=GPIO38`；进入 V3 实现阶段时需按本表切换到 GPIO35 并完成联调验证。
 
-## 已释放/未分配 GPIO（V3）
+## V3 关键占用 GPIO（与 V2 差异）
 
-以下 GPIO 在 V2 中用于 `PSTOP_CTLx`（对应 `PSTOP*` 网络），但 V3 已决定不再使用 `PSTOP*`，因此这些 GPIO 在 V3 视为“未分配/可重新分配”：
+V3 网表中，原先 `PSTOP_CTLx` 讨论涉及的 4 根 MCU 引脚并未释放，而是用于 4 路输出模块 `ENx` 直连使能：
 
-| GPIO | 说明 |
-| ---: | --- |
-| 17 | 原 `PSTOP_CTL1`（V2），V3 释放 |
-| 18 | 原 `PSTOP_CTL2`（V2），V3 释放 |
-| 39 | 原 `PSTOP_CTL3`（V2），V3 释放 |
-| 40 | 原 `PSTOP_CTL4`（V2），V3 释放 |
+| GPIO | V3 信号 | 说明 |
+| ---: | --- | --- |
+| 17 | EN1 | OUT1 `EN`（高电平使能） |
+| 18 | EN2 | OUT2 `EN`（高电平使能） |
+| 39 | EN3 | OUT3 `EN`（高电平使能） |
+| 40 | EN4 | OUT4 `EN`（高电平使能） |
 
 ## I2C 拓扑与地址（V3）
 
@@ -66,7 +71,7 @@
 
 | 器件 | 作用 | I2C 地址 | 备注 |
 | --- | --- | ---: | --- |
-| TCA6408A（前面板 U43） | 五向开关输入 | 0x21 | 五向：中=P0，上/右/下/左=P1/P2/P3/P4（ADDR 接 3V3） |
+| TCA6408A（前面板 U43） | 五向开关输入 | 0x21 | 五向：中=P0，右=P1，下=P2，左=P3，上=P4（ADDR 接 3V3） |
 | TCA6408A（主板 U43） | HUB `PWREN#/OVCUR#` 扩展 | 0x20 | P0/P2/P4/P6=`PWREN1..4#`，P1/P3/P5/P7=`OVCUR1..4#`（ADDR 接地） |
 | INA226 | 输入功率/电压/电流检测 | 0x40 | 当前网表中 A1/A0 均接地；`TBD`：是否保留历史固件 `0x44` 兼容逻辑 |
 | PCA9545A | 4 通道 I2C 复用/隔离 | 0x70 | 下行通道隔离 4 路子板（SC8815/SW2303 地址固定） |
@@ -82,5 +87,4 @@
 
 - `TBD`：USB D+/D-（GPIO19/GPIO20）在本项目中的实际连接与命名
 - `TBD`：INA226 最终地址（0x40/0x44 或其它），以及是否需要在固件中做“扫描 + 锁定”策略
-- `TBD`：4 路 USB 供电子板在 V3 的“启停/使能”控制方案（若仍需要 per-channel 控制：对应信号名、极性与 GPIO 分配）
 - `TBD`：若 V3 改动了 I2C 地址脚（PCA9545A/INA226/TCA6408A），需同步更新本表与固件默认配置

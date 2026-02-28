@@ -42,7 +42,7 @@
 | Display (SPI) | LCD_RST | 14 | MCU → LCD | active-low | LCD Reset |
 | Display (SPI) | LCD_BLK | 15 | MCU → LCD | PWM | 背光（如为 PWM 调光） |
 | System | EN | - | - | - | CHIP_PU / EN（复位） |
-| System | GPIO0 | 0 | button → MCU | active-low? | BOOT 按键（Strapping，引脚用途需谨慎） |
+| System | GPIO0 | 0 | button → MCU | TBD | BOOT 按键（Strapping，引脚用途需谨慎） |
 
 备注：
 
@@ -68,19 +68,19 @@
 | --- | --- | ---: | --- |
 | TCA6408A（前面板 U43） | 五向开关输入 | 0x21 | 五向：中=P0，上/右/下/左=P1/P2/P3/P4（ADDR 接 3V3） |
 | TCA6408A（主板 U43） | HUB `PWREN#/OVCUR#` 扩展 | 0x20 | P0/P2/P4/P6=`PWREN1..4#`，P1/P3/P5/P7=`OVCUR1..4#`（ADDR 接地） |
-| INA226 | 输入功率/电压/电流检测 | 0x44 (current) / 0x40 (typ) | 固件当前使用 `0x44`（见 `src/power_in.rs`）；请在 V3 硬件确认 A0/A1 绑法后锁定最终地址 |
+| INA226 | 输入功率/电压/电流检测 | 0x40 | 当前网表中 A1/A0 均接地；`TBD`：是否保留历史固件 `0x44` 兼容逻辑 |
 | PCA9545A | 4 通道 I2C 复用/隔离 | 0x70 | 下行通道隔离 4 路子板（SC8815/SW2303 地址固定） |
 
 ### PCA9545A 下行（每个通道）
 
 | 器件 | 作用 | I2C 地址 | 备注 |
 | --- | --- | ---: | --- |
-| SC8815 | USB 电源协议/电源管理 | 0x74 | 地址来自 `sc8815-rs` 默认值（固定/需硬件确认） |
-| SW2303 | USB-C/PD 相关控制 | 0x3C | 地址来自 `sw2303-rs` 默认值（固定/需硬件确认） |
+| SC8815 | USB 电源协议/电源管理 | 0x74 | `TBD`：地址来自 `sc8815-rs` 默认值，需以 V3 硬件实测确认 |
+| SW2303 | USB-C/PD 相关控制 | 0x3C | `TBD`：地址来自 `sw2303-rs` 默认值，需以 V3 硬件实测确认 |
 
 ## 待确认（V3 必须补齐）
 
-- USB D+/D-（GPIO19/GPIO20）在本项目中的实际连接与命名
-- INA226 最终地址（0x40/0x44 或其它），以及是否需要在固件中做“扫描 + 锁定”策略
-- 4 路 USB 供电子板在 V3 的“启停/使能”控制方案（若仍需要 per-channel 控制：对应信号名、极性与 GPIO 分配）
-- 若 V3 改动了 I2C 地址脚（PCA9545A/INA226/TCA6408A），需同步更新本表与固件默认配置
+- `TBD`：USB D+/D-（GPIO19/GPIO20）在本项目中的实际连接与命名
+- `TBD`：INA226 最终地址（0x40/0x44 或其它），以及是否需要在固件中做“扫描 + 锁定”策略
+- `TBD`：4 路 USB 供电子板在 V3 的“启停/使能”控制方案（若仍需要 per-channel 控制：对应信号名、极性与 GPIO 分配）
+- `TBD`：若 V3 改动了 I2C 地址脚（PCA9545A/INA226/TCA6408A），需同步更新本表与固件默认配置

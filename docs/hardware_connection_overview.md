@@ -70,17 +70,17 @@ DC IN(5–24V)
   │          ├─→ INA226 (0x40) │  IN_EN(来自MCU，高电平闭合NMOS)
   │          └─→ TPS2490  ─────┘
 
-MCU I²C ──────────────┬───────────────┬───────────────┐
-                       │               │               │
-                   TCA6408A        INA226          PCA9545A(0x70)
-                    (0x21)          (0x40)            │  │  │  │
-                 (前面板五向开关)                     CH0 CH1 CH2 CH3
-                                                        │   │   │   │
-                                                   USB PWR1 ...   USB PWR4
-                                                    (SC8815+SW2303 子板)
-                                                       │        │
-                                                  INTx→PCA9545A→INT→MCU
-                                                        └─────── PSTOP_CTLx（MCU 控制，经板上反相→PSTOPx）
+MCU I²C ──────────────┬───────────────────┬───────────────┬───────────────┐
+                       │                   │               │               │
+                TCA6408A(0x21)      TCA6408A(0x20)    INA226          PCA9545A(0x70)
+               (前面板五向开关)   (主板 U43: PWREN/OVCUR) (0x40)          │  │  │  │
+                                                                     CH0 CH1 CH2 CH3
+                                                                      │   │   │   │
+                                                                 USB PWR1 ...   USB PWR4
+                                                                  (SC8815+SW2303 子板)
+                                                                     │        │
+                                                                INTx→PCA9545A→INT→MCU
+                                                                      └─────── PSTOP_CTLx（MCU 控制，经板上反相→PSTOPx）
 ```
 
 ## PSTOP 控制极性与真值表

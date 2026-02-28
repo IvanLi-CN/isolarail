@@ -120,14 +120,14 @@ for ch in mux.channels():               // VIN 确认后再扫描模块
 - 通道一致性要求：SC8815 与 SW2303 成对出现。若非同时在线，视为“异常通道”，需打印错误日志但不中断其他通道的扫描与初始化：
   - `i2c.scan: ch=0 anomaly=true reason="pair-mismatch"`。
 
-### 1.5 前面板 TCA6408ARGTR（0x21）发现与存在性确认
+### 1.5 前面板 TCA6408ARGTR（0x20）发现与存在性确认
 
 - 使用 crate：`port-expander`，类型：`Tca6408a`（支持阻塞 embedded‑hal）。
-- 地址：`0x21`（ADDR=1）。
+- 地址：`0x20`（ADDR=0，接地）。
 - 步骤：在上行 I²C 直接构造 `Tca6408a`，读取输入寄存器以确认 ACK。扫描时机：
   - 于“发布电源输入上电意图”之后立即进行；不等待 VIN 达标；
   - 成功/失败仅记录日志，不阻塞后续 VIN 判定与模块初始化。
-- 成功日志：`i2c.front: tca6408a=online addr=0x21`；失败：`i2c.front: tca6408a=offline addr=0x21`（仅报告，不 `panic!`）。
+- 成功日志：`i2c.front: tca6408a=online addr=0x20`；失败：`i2c.front: tca6408a=offline addr=0x20`（仅报告，不 `panic!`）。
 
 ### 1.6 设备初始化（仅对“已发现在线”的设备执行）
 

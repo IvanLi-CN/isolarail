@@ -60,4 +60,4 @@
 
 | ID    | Title                      | Status | Plan                                   | Last       | Notes |
 | ----- | -------------------------- | ------ | -------------------------------------- | ---------- | ----- |
-| j6nvw | hw-v3-pin-assignment       | todo   | `j6nvw-hw-v3-pin-assignment/PLAN.md`   | 2026-02-06 | -     |
+| j6nvw | hw-v3-pin-assignment       | 待设计 | `j6nvw-hw-v3-pin-assignment/PLAN.md`   | 2026-02-06 | -     |

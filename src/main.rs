@@ -1142,7 +1142,7 @@ async fn main(spawner: Spawner) {
         .expect("spawn fan task");
 
     if !legacy_sc8815_path_enabled() {
-        let mut vin_on = power_in::vin_on_signal().wait().await;
+        let mut vin_on = power_in::vin_on_state();
         if vin_on {
             info!("i2c.scan:start vin_on=true backend=ip6557");
         } else {
@@ -1151,20 +1151,27 @@ async fn main(spawner: Spawner) {
         let mut deferred = [false; 4];
         let mut disc = [false; 4];
         let mut probe_failures = [0u8; 4];
+        let mut deferred_refresh_countdown = 0u8;
 
         loop {
             let vin_on_now = power_in::vin_on_state();
             if vin_on_now && !vin_on {
                 info!("i2c.scan:start vin_on=true backend=ip6557");
+                deferred_refresh_countdown = 0;
             } else if !vin_on_now && vin_on {
                 warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
+                deferred = [false; 4];
+                disc = [false; 4];
+                probe_failures = [0u8; 4];
+                deferred_refresh_countdown = 0;
             }
             vin_on = vin_on_now;
 
             if vin_on {
+                let refresh_deferred = deferred_refresh_countdown == 0;
                 for ch in 0u8..4u8 {
                     let idx = ch as usize;
-                    if deferred[idx] {
+                    if deferred[idx] && !refresh_deferred {
                         continue;
                     }
 
@@ -1208,6 +1215,11 @@ async fn main(spawner: Spawner) {
                         }
                     }
                 }
+                deferred_refresh_countdown = if refresh_deferred {
+                    10
+                } else {
+                    deferred_refresh_countdown.saturating_sub(1)
+                };
             }
 
             let mut view: [PortSample; 4] = [

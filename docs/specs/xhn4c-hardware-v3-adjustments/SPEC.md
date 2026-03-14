@@ -125,12 +125,13 @@ None
 - 当前主人已确认：V3 四路子板只会使用 `IP6557` 方案，不再保留 `SC8815/SW2303` 方案。
 - 因此本任务的项目文档口径必须移除 `SC8815/SW2303` 作为 V3 子板方案的表述；历史 `docs/plan/**` 仍仅作为工作快照保留，不在本任务中改写。
 - 本任务中的固件实现仅保留 `GPIO35`、`EN1..EN4`、`UCM_DIN/UCM_DCE` 等 wiring 对齐，并在模块侧明确记录 `bringup-pending`；IP6557 子板专用初始化与遥测另立任务承接。
+- 当前任务的最新调整：IP6557 defer 路径必须在无 VIN 启动时立即暴露 `NOVIN/PowerBlocked` 状态，`vin_on` 仅代表实时输入状态；mux 最小探测需在 VIN 恢复后重新执行，并对已进入 `bringup-pending` 的通道做周期性轻量复检。
 
 ## 当前实现与证据（Implementation snapshot）
 
 - 已落地的 V3 适配：
   - `GPIO35` 作为 I2C 复位脚，固件启动后先以推挽方式拉低共享 `RESET#`，随后切回开漏释放；
-  - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制；在 IP6557 子板 dedicated bring-up 完成前，固件保持各路 `ENx` 为低电平，并保留 `PCA9545A` 最小探测、实时 `vin_on` 状态驱动与失败重试后再输出 `bringup-pending`；
+  - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制；在 IP6557 子板 dedicated bring-up 完成前，固件保持各路 `ENx` 为低电平，并保留 `PCA9545A` 最小探测、实时 `vin_on` 状态驱动、无 VIN 启动即显示 `PowerBlocked`，以及失败重试/周期性复检后再输出 `bringup-pending`；
   - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；当前启动阶段保持板级默认下拉，等待后续策略层接管；
   - 前面板五向开关维持 `TCA6408A@0x21`，并补充主板 `TCA6408A@0x20`（`PWREN#/OVCUR#`）文档与网表证据。
 - 已同步的文档：

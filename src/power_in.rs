@@ -101,19 +101,16 @@ async fn task(
         warn!("pwr.in:qual failed; keep switch open");
     }
 
-    let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
-    VIN_ON_LATEST.store(vin_on_state.vin_on, Ordering::Relaxed);
-    VIN_ON_SIG.signal(vin_on_state.vin_on);
+    VIN_ON_LATEST.store(false, Ordering::Relaxed);
+    VIN_ON_SIG.signal(false);
+
+    let initial_status = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
+    let mut vin_on = initial_status.vin_on;
+    VIN_ON_LATEST.store(vin_on, Ordering::Relaxed);
+    VIN_ON_SIG.signal(vin_on);
 
     loop {
-        let status = sample_status(
-            &mut ina,
-            &in_pg,
-            shunt_res_ohms,
-            limits,
-            vin_on_state.vin_on,
-        )
-        .await;
+        let status = sample_status(&mut ina, &in_pg, shunt_res_ohms, limits).await;
         info!(
             "pwr.in:stat vin={}V i={}A pg={} vin_on={}",
             status.vin_v,
@@ -121,13 +118,20 @@ async fn task(
             if status.pg_good { "good" } else { "bad" },
             if status.vin_on { "true" } else { "false" }
         );
-        if status.vin_on && !vin_on_state.vin_on {
-            info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
-            VIN_ON_LATEST.store(true, Ordering::Relaxed);
-            VIN_ON_SIG.signal(true);
+        if status.vin_on != vin_on {
+            if status.vin_on {
+                info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
+            } else {
+                warn!(
+                    "pwr.in:vin_on=false vin={}V pg={}",
+                    status.vin_v,
+                    if status.pg_good { "good" } else { "bad" }
+                );
+            }
+            vin_on = status.vin_on;
+            VIN_ON_LATEST.store(vin_on, Ordering::Relaxed);
+            VIN_ON_SIG.signal(vin_on);
         }
-        vin_on_state.vin_on |= status.vin_on;
-        VIN_ON_LATEST.store(vin_on_state.vin_on, Ordering::Relaxed);
 
         STATUS_CH.send(status).await;
         Timer::after(Duration::from_secs(10)).await;
@@ -139,7 +143,6 @@ async fn sample_status<I2C: I2c>(
     in_pg: &Input<'_>,
     shunt_res_ohms: f32,
     limits: Limits,
-    vin_on_state: bool,
 ) -> Status {
     let vin_v = ina.read_voltage().await as f32;
     let vshunt_v = read_signed_shunt_voltage(ina).await;
@@ -151,7 +154,7 @@ async fn sample_status<I2C: I2c>(
         vin_v,
         i_a,
         pg_good,
-        vin_on: vin_on_state || (pg_good && vin_range_ok),
+        vin_on: pg_good && vin_range_ok,
     }
 }
 

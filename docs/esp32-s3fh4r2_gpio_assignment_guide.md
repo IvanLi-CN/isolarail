@@ -174,8 +174,8 @@
 | **GPIO40** | 45 | EN4 | 输出模块通道4 启停控制 | 高电平启用（MTDO） |
 | **GPIO41** | 47 | IN_EN | TPS2490DGSR使能控制 | 高电平有效，需内部上拉 |
 | **GPIO42** | 48 | IN_PG | TPS2490DGSR电源良好状态 | 高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V |
-| **GPIO45** | 46 | HUB_SDA | CH335F `LED4/SDA` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
-| **GPIO46** | 47 | HUB_SCL | CH335F `LED3/SCL` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
+| **GPIO45** | 51 | HUB_SDA | CH335F `LED4/SDA` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
+| **GPIO46** | 52 | HUB_SCL | CH335F `LED3/SCL` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
 | **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
 | **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
 

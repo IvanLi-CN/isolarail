@@ -729,13 +729,11 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // Shared RESET# net: start low, then release by writing high in open-drain mode.
-    let i2c_reset_cfg = OutputConfig::default().with_drive_mode(DriveMode::OpenDrain);
-    let mut i2c_reset = Output::new(p.GPIO35, Level::Low, i2c_reset_cfg);
-    // Hold RESET# low briefly, then release the line by writing high in open-drain mode.
-    // small blocking delay via timer (1 ms)
+    // Firmware actively asserts the shared RESET# net low first, then releases it as open-drain.
+    let mut i2c_reset = Output::new(p.GPIO35, Level::Low, OutputConfig::default());
     Timer::after(Duration::from_millis(5)).await;
     i2c_reset.set_high();
+    i2c_reset.apply_config(&OutputConfig::default().with_drive_mode(DriveMode::OpenDrain));
     Timer::after(Duration::from_millis(5)).await;
 
     // IN_EN default off

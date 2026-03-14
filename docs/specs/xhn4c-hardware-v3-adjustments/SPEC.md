@@ -102,7 +102,7 @@ None
 
 ### Quality checks
 
-- Lint / formatting: `cargo +esp fmt --all -- --check`、`cargo +esp clippy --all-targets -- -D warnings`。
+- Lint / formatting: `cargo +esp fmt --all -- --check`、`cargo +esp clippy -- -D warnings`。
 - Build: `cargo check` 与 `cargo build --release`。
 
 ## 文档更新（Docs to Update）
@@ -128,7 +128,7 @@ None
 ## 当前实现与证据（Implementation snapshot）
 
 - 已落地的 V3 适配：
-  - `GPIO35` 作为 I2C 复位脚，并按共享 `RESET#` 语义使用开漏输出、先低后释放；
+  - `GPIO35` 作为 I2C 复位脚，固件启动后先以推挽方式拉低共享 `RESET#`，随后切回开漏释放；
   - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制，且仅在 SC8815 关键配置成功后才拉高使能；
   - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；
   - 前面板五向开关维持 `TCA6408A@0x21`，并补充主板 `TCA6408A@0x20`（`PWREN#/OVCUR#`）文档与网表证据。
@@ -139,6 +139,8 @@ None
   - `docs/software_design.md`
   - `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`
 - 本地验证证据：
+  - `source ~/export-esp.sh && cargo +esp fmt --all -- --check`
+  - `source ~/export-esp.sh && cargo +esp clippy -- -D warnings`
   - `source ~/export-esp.sh && cargo +esp check`
   - `source ~/export-esp.sh && cargo +esp build --release`
 - 尚未完成：
@@ -170,6 +172,7 @@ None
 - 2026-03-14: 根据 PR 阶段 review-loop 修正文档保留引脚与 `I2C_RESET` 开漏释放语义。
 - 2026-03-14: 根据 fresh review-proof 修正上电时序，确保 `RESET#` 先低后释放、`ENx` 在 SC8815 配置成功后再使能。
 - 2026-03-14: 清理历史计划文档中的旧版 `GPIO38` 说明，统一为当前 `GPIO35` 的 bring-up 口径。
+- 2026-03-14: 对齐 `GPIO45/46` 封装引脚编号，并把质量门槛与 `GPIO35` 复位时序更新为当前可验证实现。
 
 ## 参考（References）
 

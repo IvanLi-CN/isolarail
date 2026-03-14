@@ -1283,37 +1283,6 @@ async fn main(spawner: Spawner) {
                         _ => {}
                     }
                     Timer::after(Duration::from_millis(5)).await;
-                    // Re-assert the runtime bits after EN goes high so V3 keeps the same
-                    // post-enable programming point that older bring-up code used.
-                    if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
-                        warn!(
-                            "pwr.sc8815: ch={} vbus_set_post_en_err={}",
-                            ch,
-                            sc_err_tag(&e)
-                        );
-                        sc_startup_ok = false;
-                    }
-                    if let Err(e) = sc_drv.set_adc_conversion(true).await {
-                        warn!(
-                            "pwr.sc8815: ch={} adc_start_post_en_err={}",
-                            ch,
-                            sc_err_tag(&e)
-                        );
-                        sc_startup_ok = false;
-                    }
-                    if let Err(e) = sc_drv.set_otg_mode(true).await {
-                        warn!("pwr.sc8815: ch={} otg_post_en_err={}", ch, sc_err_tag(&e));
-                        sc_startup_ok = false;
-                    }
-                    if !sc_startup_ok {
-                        match ch {
-                            0 => en1.set_low(),
-                            1 => en2.set_low(),
-                            2 => en3.set_low(),
-                            3 => en4.set_low(),
-                            _ => {}
-                        }
-                    }
                 }
                 if sc_startup_ok {
                     {

@@ -161,6 +161,5 @@ None
 ## 参考（References）
 
 - `docs/hardware_connection_overview.md`
-- `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`
 - `docs/software_design.md`
 - `AGENTS.md`

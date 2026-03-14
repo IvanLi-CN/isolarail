@@ -3,7 +3,7 @@
 > 适用：本项目主板 + 四路 USB 供电子板（SC8815+SW2303）
 >
 > 版本边界：本文档按当前 V3 bring-up 口径维护（`EN1..EN4` 直连高有效，`UCM_DIN/UCM_DCE` 负责 USB 通道路由）。
-> 历史 V2 的 `PSTOP_CTL -> 反相 -> PSTOP` 说明仅作为迁移背景，变更细节见 `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`。
+> 历史 V2 的 `PSTOP_CTL -> 反相 -> PSTOP` 说明仅作为迁移背景；当前实现以本文和 `docs/software_design.md` 为准，旧 `docs/plan/**` 仅保留为历史快照。
 
 本文件汇总当前硬件的关键连接关系，便于固件开发与硬件联调时查阅。内容覆盖电源输入、四路 USB 快充电源模块、用户交互与 I²C 拓扑/地址等。
 

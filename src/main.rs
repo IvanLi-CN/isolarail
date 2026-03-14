@@ -653,38 +653,6 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     }
 }
 
-fn draw_dashboard_mock<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
-    disp: &mut D,
-) {
-    let samples = [
-        PortSample {
-            connected: false,
-            vbus_mv: 0,
-            ich_ma: 0,
-            ui_state: UiPortState::Disconnected,
-        },
-        PortSample {
-            connected: true,
-            vbus_mv: 9000,
-            ich_ma: 2500,
-            ui_state: UiPortState::Overcurrent,
-        },
-        PortSample {
-            connected: false,
-            vbus_mv: 0,
-            ich_ma: 0,
-            ui_state: UiPortState::Closed,
-        },
-        PortSample {
-            connected: false,
-            vbus_mv: 0,
-            ich_ma: 0,
-            ui_state: UiPortState::Initializing,
-        },
-    ];
-    draw_dashboard_frame(disp, &samples);
-}
-
 fn draw_boot_self_check_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
     disp: &mut D,
     snapshot: &BootSelfCheckSnapshot,
@@ -936,10 +904,7 @@ async fn main(spawner: Spawner) {
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {
-        // Initial frame using mock states, then UI will refresh below
-        draw_dashboard_mock(&mut disp);
-        let _ = disp.flush().await;
-        info!("lcd.draw: dashboard first frame ready");
+        info!("lcd.init: panel ready");
     }
 
     let mut boot_snapshot = BootSelfCheckSnapshot::new();
@@ -1238,9 +1203,9 @@ async fn main(spawner: Spawner) {
 
     let fan_ready = if power_boot.ready {
         if fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
-            with_timeout(Duration::from_millis(500), fan::bootstrap_signal().wait())
+            with_timeout(Duration::from_millis(1500), fan::bootstrap_signal().wait())
                 .await
-                .is_ok()
+                .is_ok_and(|ready| ready)
         } else {
             false
         }
@@ -1277,8 +1242,10 @@ async fn main(spawner: Spawner) {
 
     if !power_boot.ready {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
-        let sc_addr = sc8815_const::DEFAULT_ADDRESS;
-        ack_scan_vin_off(sc_addr).await;
+        if mux_online {
+            let sc_addr = sc8815_const::DEFAULT_ADDRESS;
+            ack_scan_vin_off(sc_addr).await;
+        }
         for (ch, done) in CH_SCAN_DONE.iter().enumerate() {
             boot_snapshot.set_port(ch, SelfCheckItemState::Skipped, power_boot.fault);
             done.store(true, Ordering::Relaxed);

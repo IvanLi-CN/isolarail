@@ -60,7 +60,7 @@
 
 **功能特点**: 基于RT9043GB LDO的PWM调压控制，支持5V 0.7A风扇，调速范围2V-5V，集成转速反馈
 
-#### USB HUB控制接口 (7个引脚) - 专用控制信号
+#### USB HUB控制接口 (9个引脚，其中2个为Strapping侧带) - 专用控制信号
 
 - **GPIO5**: HUB_RESET# (USB HUB芯片重置，低电平有效)
 - **GPIO17**: EN1 (输出模块通道1 启停控制，高电平启用)
@@ -69,8 +69,10 @@
 - **GPIO40**: EN4 (输出模块通道4 启停控制，高电平启用，物理引脚45/MTDO)
 - **GPIO33**: UCM_DIN (CH442E 路由选择，低电平默认连接 MCU 通道，建议外部下拉)
 - **GPIO34**: UCM_DCE (CH442E 使能控制，对应 EN#，低电平使能，建议外部下拉)
+- **GPIO45**: HUB_SDA (CH335F `LED4/SDA` 复用侧带，已分配，Strapping引脚)
+- **GPIO46**: HUB_SCL (CH335F `LED3/SCL` 复用侧带，已分配，Strapping引脚)
 
-**功能特点**: 专用于USB HUB/USB通道选择控制，支持独立端口电源管理与 MCU/外部接口切换
+**功能特点**: 专用于USB HUB/USB通道选择控制；其中 `GPIO45/46` 已被 HUB 侧带复用占用，不可再作为通用空闲 IO 分配
 
 #### TPS2490DGSR电源管理芯片 (2个引脚) - 输入电源保护
 
@@ -96,12 +98,12 @@
 
 **功能特点**: 数字输入，监测ISOUSB211DPR芯片隔离侧工作状态，需外部4.7kΩ上拉电阻至3.3V
 
-### ESP32-S3FH4R2额外可用引脚 (5个硬件可用，其中3个当前未分配)
+### ESP32-S3FH4R2额外可用引脚 (6个硬件可用，其中3个当前未分配)
 
 以下引脚在ESP32-S3FH4R2中额外可用（因为使用Quad SPI而非Octal SPI）：
 
-- **GPIO33-37** (ESP32-S3FH4R2中可用作普通IO)
-- 其中 `GPIO33`/`GPIO34` 当前已分配给 `UCM_DIN`/`UCM_DCE`，`GPIO35` 已分配给 `I2C_RESET`，`GPIO36`/`GPIO37` 仍可分配。
+- **GPIO33-38** (ESP32-S3FH4R2中可用作普通IO)
+- 其中 `GPIO33`/`GPIO34` 当前已分配给 `UCM_DIN`/`UCM_DCE`，`GPIO35` 已分配给 `I2C_RESET`，`GPIO36`/`GPIO37`/`GPIO38` 仍可分配。
 
 ### 预留的普通IO引脚 (2个)
 
@@ -116,13 +118,13 @@
 | **蜂鸣器** | 1个 | GPIO7 |
 | **PWM风扇控制** | 3个 | GPIO1, GPIO2, GPIO6 |
 | **USB调试接口** | 2个 | GPIO19, GPIO20 |
-| **USB HUB控制** | 7个 | GPIO5, GPIO17, GPIO18, GPIO39, GPIO40, GPIO33, GPIO34 |
+| **USB HUB控制** | 9个 | GPIO5, GPIO17, GPIO18, GPIO39, GPIO40, GPIO33, GPIO34, GPIO45, GPIO46 |
 | **TPS2490DGSR** | 2个 | GPIO41, GPIO42 |
 | **电压采样ADC** | 1个 | GPIO4 |
 | **ISOUSB211DPR** | 1个 | GPIO21 |
 | **电源管理复位** | 1个 | GPIO35 |
 | **系统控制** | 2个 | EN, GPIO0 |
-| **额外可用IO** | 3个 | GPIO36,37,38 (ESP32-S3FH4R2特有) |
+| **额外可用IO** | 3个 | GPIO36, GPIO37, GPIO38 (ESP32-S3FH4R2特有) |
 | **预留IO** | 2个 | GPIO47,48 |
 | **不可用** | 7个 | GPIO26,27,28,29,30,31,32 (Flash/PSRAM核心引脚) |
 | **不推荐** | 3个 | GPIO3,45,46 (Strapping引脚) |
@@ -172,8 +174,8 @@
 | **GPIO40** | 45 | EN4 | 输出模块通道4 启停控制 | 高电平启用（MTDO） |
 | **GPIO41** | 47 | IN_EN | TPS2490DGSR使能控制 | 高电平有效，需内部上拉 |
 | **GPIO42** | 48 | IN_PG | TPS2490DGSR电源良好状态 | 高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V |
-| **GPIO45** | 46 | 不推荐 | VDD_SPI电压选择 | ⚠️ Strapping引脚，影响Flash供电 |
-| **GPIO46** | 47 | 不推荐 | ROM消息打印控制 | ⚠️ Strapping引脚，影响启动日志 |
+| **GPIO45** | 46 | HUB_SDA | CH335F `LED4/SDA` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
+| **GPIO46** | 47 | HUB_SCL | CH335F `LED3/SCL` 复用侧带 | ⚠️ Strapping引脚，已分配，不可另行复用 |
 | **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
 | **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
 
@@ -230,15 +232,15 @@
 
 - **GPIO0**: BOOT按钮 - 启动时低电平进入下载模式
 - **GPIO3**: JTAG信号源控制 - 影响调试功能
-- **GPIO45**: VDD_SPI电压选择 - 影响Flash供电
-- **GPIO46**: ROM消息打印控制 - 影响启动日志
+- **GPIO45**: 已被 `HUB_SDA` 占用，同时仍会影响 Flash 供电配置
+- **GPIO46**: 已被 `HUB_SCL` 占用，同时仍会影响启动日志配置
 
 ### 使用建议
 
 1. **绝对避免**: GPIO26-32 (Flash/PSRAM核心引脚，被占用)
-2. **谨慎使用**: GPIO0, GPIO3, GPIO45, GPIO46 (Strapping引脚)
+2. **谨慎使用**: GPIO0, GPIO3 (Strapping引脚)
 3. **优先推荐**: GPIO36-38、GPIO47-48 (当前可优先分配的通用IO引脚)
-4. **已有分配**: GPIO35、GPIO39-42 (已分配给I2C复位、USB控制、电源管理功能)
+4. **已有分配**: GPIO33-35、GPIO39-42、GPIO45-46 (已分配给USB路由、I2C复位、电源管理与HUB侧带功能)
 
 ## USB-JTAG调试接口
 
@@ -254,7 +256,7 @@ ESP32-S3内置USB-JTAG桥接器，通过以下引脚实现：
 
 相比其他ESP32-S3变体，ESP32-S3FH4R2具有以下优势：
 
-1. **更多可用GPIO**: 由于使用Quad SPI模式，GPIO33-37可用；当前 `GPIO33/34` 已用于 UCM 控制、`GPIO35` 已用于 I2C_RESET，仍有 `GPIO36/37` 与 `GPIO47/48` 可调配
+1. **更多可用GPIO**: 由于使用Quad SPI模式，GPIO33-38可用；当前 `GPIO33/34` 已用于 UCM 控制、`GPIO35` 已用于 I2C_RESET，仍有 `GPIO36/37/38` 与 `GPIO47/48` 可调配
 2. **成本效益**: 集成2MB PSRAM，无需外部PSRAM芯片
 3. **设计简化**: 减少外部元件，降低PCB复杂度
 4. **引脚兼容性**: 与标准ESP32-S3引脚兼容，便于设计迁移
@@ -287,7 +289,7 @@ ESP32-S3内置USB-JTAG桥接器，通过以下引脚实现：
 1. **重置时序**: GPIO5 (HUB_RESET#) 低电平重置，确保足够的重置脉宽
 2. **端口管理**: EN1-4 (GPIO17/18/39/40) 独立控制各路输出模块通道的启停（高电平启用）
 3. **电源序列**: 建议先使能HUB芯片，再依次使能各端口
-4. **故障保护**: 低电平有效设计提供更好的故障安全特性
+4. **故障保护**: `EN1..EN4` 默认保持低电平，初始化完成前输出模块维持关闭态，避免误上电
 
 ### ADC 电压采样优化
 

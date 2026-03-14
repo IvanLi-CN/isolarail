@@ -128,7 +128,7 @@ None
 ## 当前实现与证据（Implementation snapshot）
 
 - 已落地的 V3 适配：
-  - `GPIO35` 作为 I2C 复位脚；
+  - `GPIO35` 作为 I2C 复位脚，并按共享 `RESET#` 语义使用开漏释放；
   - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制；
   - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；
   - 前面板五向开关维持 `TCA6408A@0x21`，并补充主板 `TCA6408A@0x20`（`PWREN#/OVCUR#`）文档与网表证据。
@@ -167,6 +167,7 @@ None
 
 - 2026-02-25: 新建 V3 硬件调整计划规格。
 - 2026-03-14: 同步 V3 网表证据与固件引脚映射，完成本地 `cargo +esp check` / `cargo +esp build --release`，状态更新为 `部分完成（2/3）`。
+- 2026-03-14: 根据 PR 阶段 review-loop 修正文档保留引脚与 `I2C_RESET` 开漏释放语义。
 
 ## 参考（References）
 

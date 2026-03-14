@@ -15,7 +15,7 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
-use esp_hal::gpio::{Input, Level, Output, Pull};
+use esp_hal::gpio::{DriveMode, Input, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
@@ -729,13 +729,10 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // I2C reset (use push-pull for MVP), default high (released)
-    let mut i2c_reset = Output::new(
-        p.GPIO35,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    // Briefly assert low then release
+    // Shared RESET# net: use open-drain so "high" means release/high-Z.
+    let i2c_reset_cfg = OutputConfig::default().with_drive_mode(DriveMode::OpenDrain);
+    let mut i2c_reset = Output::new(p.GPIO35, Level::High, i2c_reset_cfg);
+    // Briefly assert low, then release the line by writing high in open-drain mode.
     i2c_reset.set_low();
     // small blocking delay via timer (1 ms)
     Timer::after(Duration::from_millis(5)).await;

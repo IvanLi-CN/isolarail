@@ -729,11 +729,10 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // Shared RESET# net: use open-drain so "high" means release/high-Z.
+    // Shared RESET# net: start low, then release by writing high in open-drain mode.
     let i2c_reset_cfg = OutputConfig::default().with_drive_mode(DriveMode::OpenDrain);
-    let mut i2c_reset = Output::new(p.GPIO35, Level::High, i2c_reset_cfg);
-    // Briefly assert low, then release the line by writing high in open-drain mode.
-    i2c_reset.set_low();
+    let mut i2c_reset = Output::new(p.GPIO35, Level::Low, i2c_reset_cfg);
+    // Hold RESET# low briefly, then release the line by writing high in open-drain mode.
     // small blocking delay via timer (1 ms)
     Timer::after(Duration::from_millis(5)).await;
     i2c_reset.set_high();
@@ -1266,17 +1265,8 @@ async fn main(spawner: Spawner) {
 
                 // Skip ratio readback during init
 
-                // no-op
+                // Configure SC8815 first; only enable the power stage once the key writes succeed.
                 if sc_startup_ok {
-                    match ch {
-                        0 => en1.set_high(),
-                        1 => en2.set_high(),
-                        2 => en3.set_high(),
-                        3 => en4.set_high(),
-                        _ => {}
-                    }
-                    Timer::after(Duration::from_millis(5)).await;
-                    // After EN is asserted: set FB/refs in internal mode, then start ADC
                     if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
                         warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
                         sc_startup_ok = false;
@@ -1289,6 +1279,17 @@ async fn main(spawner: Spawner) {
                         warn!("pwr.sc8815: ch={} otg_err={}", ch, sc_err_tag(&e));
                         sc_startup_ok = false;
                     }
+                }
+
+                if sc_startup_ok {
+                    match ch {
+                        0 => en1.set_high(),
+                        1 => en2.set_high(),
+                        2 => en3.set_high(),
+                        3 => en4.set_high(),
+                        _ => {}
+                    }
+                    Timer::after(Duration::from_millis(5)).await;
                     {
                         use sc8815::registers::Register as ScReg;
                         // Post-EN, read-only verification of key registers and ADC raw

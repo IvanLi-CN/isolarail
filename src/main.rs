@@ -757,13 +757,8 @@ async fn main(spawner: Spawner) {
     en3.set_low();
     en4.set_low();
 
-    // CH442E mux default:
-    // - DIN low: route to MCU channel (per hardware preference)
-    // - DCE low: enable mux (EN# active low)
-    let mut ucm_din = Output::new(p.GPIO33, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut ucm_dce = Output::new(p.GPIO34, Level::Low, esp_hal::gpio::OutputConfig::default());
-    ucm_din.set_low();
-    ucm_dce.set_low();
+    // CH442E routing defaults are held by external pulldowns; leave GPIO33/34 high-z
+    // until a higher-level routing policy takes ownership.
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
@@ -1263,7 +1258,7 @@ async fn main(spawner: Spawner) {
 
                 // Skip ratio readback during init
 
-                // Configure SC8815 first; only enable the power stage once the key writes succeed.
+                // Configure SC8815 first while the downstream board gate stays disabled.
                 if sc_startup_ok {
                     if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
                         warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
@@ -1288,6 +1283,39 @@ async fn main(spawner: Spawner) {
                         _ => {}
                     }
                     Timer::after(Duration::from_millis(5)).await;
+                    // Re-assert the runtime bits after EN goes high so V3 keeps the same
+                    // post-enable programming point that older bring-up code used.
+                    if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
+                        warn!(
+                            "pwr.sc8815: ch={} vbus_set_post_en_err={}",
+                            ch,
+                            sc_err_tag(&e)
+                        );
+                        sc_startup_ok = false;
+                    }
+                    if let Err(e) = sc_drv.set_adc_conversion(true).await {
+                        warn!(
+                            "pwr.sc8815: ch={} adc_start_post_en_err={}",
+                            ch,
+                            sc_err_tag(&e)
+                        );
+                        sc_startup_ok = false;
+                    }
+                    if let Err(e) = sc_drv.set_otg_mode(true).await {
+                        warn!("pwr.sc8815: ch={} otg_post_en_err={}", ch, sc_err_tag(&e));
+                        sc_startup_ok = false;
+                    }
+                    if !sc_startup_ok {
+                        match ch {
+                            0 => en1.set_low(),
+                            1 => en2.set_low(),
+                            2 => en3.set_low(),
+                            3 => en4.set_low(),
+                            _ => {}
+                        }
+                    }
+                }
+                if sc_startup_ok {
                     {
                         use sc8815::registers::Register as ScReg;
                         // Post-EN, read-only verification of key registers and ADC raw

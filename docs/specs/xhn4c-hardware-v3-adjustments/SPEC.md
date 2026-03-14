@@ -124,7 +124,7 @@ None
 - 已落地的 V3 适配：
   - `GPIO35` 作为 I2C 复位脚，固件启动后先以推挽方式拉低共享 `RESET#`，随后切回开漏释放；
   - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制，且仅在 SC8815 关键配置成功后才拉高使能；
-  - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；
+  - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；当前启动阶段保持板级默认下拉，等待后续策略层接管；
   - 前面板五向开关维持 `TCA6408A@0x21`，并补充主板 `TCA6408A@0x20`（`PWREN#/OVCUR#`）文档与网表证据。
 - 已同步的文档：
   - `docs/esp32-s3fh4r2_gpio_assignment_guide.md`

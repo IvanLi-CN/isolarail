@@ -24,6 +24,7 @@ use esp_println as _;
 use sc8815::registers::Register as ScReg;
 use sc8815::{CellCount, DeadTime, DeviceConfiguration, OperatingMode, SwitchingFrequency};
 // Shared I2C bus infrastructure
+mod boot_diag;
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -34,6 +35,10 @@ use embassy_sync::signal::Signal;
 use static_cell::StaticCell;
 mod fan;
 mod front_panel;
+use boot_diag::{
+    fault_label, outcome_label, state_label, BootFaultCode, BootOutcome, BootSelfCheckSnapshot,
+    BootStage, GateDecision, SelfCheckItemState, SysCheck,
+};
 
 // No global mutex in MVP
 
@@ -680,6 +685,88 @@ fn draw_dashboard_mock<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb
     draw_dashboard_frame(disp, &samples);
 }
 
+fn draw_boot_self_check_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rgb565>>(
+    disp: &mut D,
+    snapshot: &BootSelfCheckSnapshot,
+    ports_page: bool,
+) {
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_fill(UI_BG_GRAY))
+        .draw(disp);
+    let _ = Rectangle::new(Point::new(0, 0), Size::new(160, 50))
+        .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
+        .draw(disp);
+
+    let head = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+    let ok_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_W_GREEN);
+    let warn_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_V_YELLOW);
+    let err_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_I_RED);
+    let rows = [2i32, 14, 26, 38];
+
+    draw_centered_text(
+        disp,
+        34,
+        2,
+        if ports_page { "PORT" } else { "SYS" },
+        head,
+        7,
+    );
+    draw_centered_text(disp, 92, 2, outcome_label(snapshot.outcome), head, 7);
+    draw_centered_text(disp, 137, 2, fault_label(snapshot.first_fault), head, 7);
+
+    if ports_page {
+        for (idx, slot) in snapshot.ports.iter().enumerate() {
+            let y = rows[idx];
+            let style = match slot.state {
+                SelfCheckItemState::Ok => ok_style,
+                SelfCheckItemState::Warn | SelfCheckItemState::Skipped => warn_style,
+                SelfCheckItemState::Err | SelfCheckItemState::Fatal => err_style,
+                SelfCheckItemState::Pending => head,
+            };
+            let mut label: heapless::String<8> = heapless::String::new();
+            let mut state: heapless::String<12> = heapless::String::new();
+            use core::fmt::Write as _;
+            let _ = write!(label, "P{}", idx + 1);
+            let _ = write!(state, "{}", state_label(slot.state));
+            draw_centered_text(disp, 15, y, &label, head, 7);
+            draw_centered_text(disp, 65, y, &state, style, 7);
+            draw_centered_text(disp, 122, y, fault_label(slot.fault), style, 7);
+        }
+    } else {
+        let sys = [
+            ("VIN", snapshot.sys[0]),
+            ("MUX", snapshot.sys[1]),
+            ("PANEL", snapshot.sys[2]),
+            ("FAN", snapshot.sys[3]),
+        ];
+        for (idx, (name, slot)) in sys.iter().enumerate() {
+            let y = rows[idx];
+            let style = match slot.state {
+                SelfCheckItemState::Ok => ok_style,
+                SelfCheckItemState::Warn | SelfCheckItemState::Skipped => warn_style,
+                SelfCheckItemState::Err | SelfCheckItemState::Fatal => err_style,
+                SelfCheckItemState::Pending => head,
+            };
+            draw_centered_text(disp, 20, y, name, head, 7);
+            draw_centered_text(disp, 74, y, state_label(slot.state), style, 7);
+            draw_centered_text(disp, 126, y, fault_label(slot.fault), style, 7);
+        }
+    }
+}
+
+async fn flush_boot_self_check<
+    BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
+    D: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
+    R: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
+>(
+    disp: &mut GC9D01<'_, SimpleSpiDev<'_, BUS>, D, R, DisplayTimer>,
+    snapshot: &BootSelfCheckSnapshot,
+    ports_page: bool,
+) {
+    draw_boot_self_check_frame(disp, snapshot, ports_page);
+    let _ = disp.flush().await;
+}
+
 async fn ack_scan_vin_off(sc_addr: u8) {
     for ch in 0u8..4u8 {
         let mut i2c_scan = mux_channel(ch);
@@ -855,35 +942,36 @@ async fn main(spawner: Spawner) {
         info!("lcd.draw: dashboard first frame ready");
     }
 
-    // I2C mux PCA9545A presence check via async driver
-    let mut pca = pca9545::Pca9545a::new(I2cDevice::new(bus), pca9545::DEFAULT_ADDRESS);
-    match pca.get_channel_status().await {
-        Ok(status) => info!("i2c.mux: ok addr=0x70 parts=4 status=0x{:02X}", status),
-        Err(_) => {
-            error!("i2c.mux: err=init addr=0x70");
-            panic!("PCA9545A not found");
-        }
-    }
-    // Record global bus reference for channel views
+    let mut boot_snapshot = BootSelfCheckSnapshot::new();
+    boot_snapshot.set_stage(BootStage::SelfCheck);
+    info!("boot.stage: stage=self-check");
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+
+    // Record global bus reference for channel views.
     unsafe {
         I2C_BUS_REF = Some(bus);
     }
 
-    // Probe front-panel presence and conditionally enable related features
-    if front_panel::is_present(bus).await {
-        info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
-        let int_pin = Input::new(
-            p.GPIO16,
-            esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
-        );
-        // Spawn front-panel task to log falling edges on P0..P4 from TCA6408A
-        front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
-    } else {
-        warn!(
-            "i2c.front: tca6408a=offline addr=0x{:02X}; disable related features",
-            TCA6408_ADDR
-        );
+    let mut mux_online = false;
+    let mut pca = pca9545::Pca9545a::new(I2cDevice::new(bus), pca9545::DEFAULT_ADDRESS);
+    match pca.get_channel_status().await {
+        Ok(status) => {
+            info!("i2c.mux: ok addr=0x70 parts=4 status=0x{:02X}", status);
+            info!("boot.check: name=mux state=ok fault=-");
+            boot_snapshot.set_sys(SysCheck::Mux, SelfCheckItemState::Ok, BootFaultCode::None);
+            mux_online = true;
+        }
+        Err(_) => {
+            error!("i2c.mux: err=init addr=0x70");
+            warn!("boot.check: name=mux state=err fault=MuxOffline");
+            boot_snapshot.set_sys(
+                SysCheck::Mux,
+                SelfCheckItemState::Err,
+                BootFaultCode::MuxOffline,
+            );
+        }
     }
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
     // Spawn SW2303 CH0 telemetry task (prints once per second)
     #[embassy_executor::task]
@@ -1111,28 +1199,108 @@ async fn main(spawner: Spawner) {
         .spawn(power_in_log_task(power_in::status_receiver()))
         .expect("spawn power_in_log_task");
 
-    // Spawn fan control + tach task early: calibrate max RPM then 10/50/100% loop
-    // Spawns regardless of VIN_ON to allow bench 5V fan tests.
-    fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6)
-        .expect("spawn fan task");
+    let power_boot = power_in::bootstrap_signal().wait().await;
+    info!(
+        "boot.check: name=vin state={} fault={} vin={}V pg={}",
+        state_label(power_boot.state),
+        fault_label(power_boot.fault),
+        power_boot.vin_v,
+        if power_boot.pg_good { "good" } else { "bad" }
+    );
+    boot_snapshot.set_sys(SysCheck::Vin, power_boot.state, power_boot.fault);
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
-    // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
-    let vin_on = power_in::vin_on_signal().wait().await;
-    if !vin_on {
+    let mut front_panel_online = false;
+    if power_boot.ready && front_panel::is_present(bus).await {
+        info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+        info!("boot.check: name=panel state=ok fault=-");
+        boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
+        front_panel_online = true;
+    } else if power_boot.ready {
+        warn!(
+            "i2c.front: tca6408a=offline addr=0x{:02X}; disable related features",
+            TCA6408_ADDR
+        );
+        warn!("boot.check: name=panel state=warn fault=FrontPanelOffline");
+        boot_snapshot.set_sys(
+            SysCheck::Front,
+            SelfCheckItemState::Warn,
+            BootFaultCode::FrontPanelOffline,
+        );
+    } else {
+        boot_snapshot.set_sys(
+            SysCheck::Front,
+            SelfCheckItemState::Skipped,
+            power_boot.fault,
+        );
+    }
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+
+    let fan_spawn_result = if power_boot.ready {
+        fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).ok()
+    } else {
+        None
+    };
+    if power_boot.ready && fan_spawn_result.is_some() {
+        info!("boot.check: name=fan state=ok fault=-");
+        boot_snapshot.set_sys(SysCheck::Fan, SelfCheckItemState::Ok, BootFaultCode::None);
+    } else if power_boot.ready {
+        warn!("boot.check: name=fan state=warn fault=FanUnavailable");
+        boot_snapshot.set_sys(
+            SysCheck::Fan,
+            SelfCheckItemState::Warn,
+            BootFaultCode::FanUnavailable,
+        );
+    } else {
+        boot_snapshot.set_sys(SysCheck::Fan, SelfCheckItemState::Skipped, power_boot.fault);
+    }
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+
+    let mut gates = GateDecision::new();
+    gates.allow_runtime_tasks = power_boot.ready;
+    gates.keep_input_switch_open = !power_boot.ready;
+    gates.allow_front_panel = front_panel_online;
+
+    if front_panel_online {
+        let int_pin = Input::new(
+            p.GPIO16,
+            esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+        );
+        front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+    }
+
+    if !power_boot.ready {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
         let sc_addr = sc8815_const::DEFAULT_ADDRESS;
         ack_scan_vin_off(sc_addr).await;
-        // Keep executor alive so background tasks (power_in, fan) run
-        core::future::pending::<()>().await;
+        for (ch, done) in CH_SCAN_DONE.iter().enumerate() {
+            boot_snapshot.set_port(ch, SelfCheckItemState::Skipped, power_boot.fault);
+            done.store(true, Ordering::Relaxed);
+        }
+    } else if !mux_online {
+        for (ch, done) in CH_SCAN_DONE.iter().enumerate() {
+            boot_snapshot.set_port(ch, SelfCheckItemState::Skipped, BootFaultCode::MuxOffline);
+            done.store(true, Ordering::Relaxed);
+        }
     }
 
     // After VIN ON, scan SC8815 and conditionally init SW2303 per channel
     let sc_addr = sc8815_const::DEFAULT_ADDRESS;
     let sw_addr = sw2303_const::DEFAULT_ADDRESS;
-    info!("i2c.scan:start vin_on=true");
+    if power_boot.ready && mux_online {
+        info!("i2c.scan:start vin_on=true");
+    }
     for ch in 0u8..4u8 {
+        if !power_boot.ready || !mux_online {
+            continue;
+        }
         let mut i2c_scan = mux_channel(ch);
         let mux_mask = 1u8 << (ch & 0x03);
+        boot_snapshot.set_port(
+            ch as usize,
+            SelfCheckItemState::Pending,
+            BootFaultCode::None,
+        );
         info!(
             "i2c.mux: ch={} select=ok ctrl_read=implicit reg=0x{:02X}",
             ch, mux_mask
@@ -1171,6 +1339,8 @@ async fn main(spawner: Spawner) {
         let mut sc_init_ok = false;
         let mut sc_status_err = None;
         let mut sc_init_err = None;
+        let mut protection_latched = false;
+        let mut vbus_ready = false;
         let _sc_vbus_last = 0u16;
         // SC8815 driver owns I2C; temporarily move and release back after use
         let mut sc_drv = sc8815::SC8815::new(i2c_scan, sc_addr);
@@ -1319,6 +1489,9 @@ async fn main(spawner: Spawner) {
                         let ad_start = ctrl3.map(|c| (c & 0x20) != 0).unwrap_or(false);
                         let dis_short_fb = ctrl3.map(|c| (c & 0x04) != 0).unwrap_or(false);
                         let vbus_short = status.map(|s| (s & 0x08) != 0).unwrap_or(false);
+                        if vbus_short {
+                            protection_latched = true;
+                        }
 
                         // For debugging: also print raw register bytes for VBUSREF_I/EB (hi/lo)
                         let vi_hi_b: u8 = vi_hi.unwrap_or(0);
@@ -1455,6 +1628,7 @@ async fn main(spawner: Spawner) {
                     if consec_ok < SC8815_VBUS_READY_CONSECUTIVE {
                         Timer::after(Duration::from_millis(SC8815_VBUS_READY_INTERVAL_MS)).await;
                     } else {
+                        vbus_ready = true;
                         info!("pwr.sc8815: ch={} vbus_ready=true vbus={}mV", ch, vbus_mv);
                     }
                 }
@@ -1533,6 +1707,8 @@ async fn main(spawner: Spawner) {
 
         if sc_ok && sw_ok {
             info!("i2c.scan: ch={} sc8815=online sw2303=online", ch);
+            gates.allow_port[ch as usize] = true;
+            boot_snapshot.set_port(ch as usize, SelfCheckItemState::Ok, BootFaultCode::None);
             match ch {
                 0 => {
                     CH_READY0.signal(true);
@@ -1554,6 +1730,22 @@ async fn main(spawner: Spawner) {
             }
             CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
         } else {
+            let port_fault = if protection_latched {
+                BootFaultCode::PortProtectionLatched(ch + 1)
+            } else if sc_ok && !vbus_ready {
+                BootFaultCode::PortVbusTimeout(ch + 1)
+            } else if sc_ok && !sw_ok {
+                BootFaultCode::PortSwOffline(ch + 1)
+            } else if !sc_ok && sw_ok {
+                BootFaultCode::PortPairMismatch(ch + 1)
+            } else {
+                BootFaultCode::PortScOffline(ch + 1)
+            };
+            let port_state = if protection_latched {
+                SelfCheckItemState::Fatal
+            } else {
+                SelfCheckItemState::Err
+            };
             info!(
                 "i2c.scan: ch={} sc8815={} sw2303={}",
                 ch,
@@ -1569,6 +1761,7 @@ async fn main(spawner: Spawner) {
             } else if sc_ok ^ sw_ok {
                 error!("i2c.scan: ch={} anomaly=true reason=\"pair-mismatch\"", ch);
             }
+            boot_snapshot.set_port(ch as usize, port_state, port_fault);
             // Mark scan done to allow UI to switch from INIT to DISC
             CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
         }
@@ -1583,13 +1776,67 @@ async fn main(spawner: Spawner) {
                 _ => {}
             }
         }
+        flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
     }
 
+    if boot_snapshot
+        .ports
+        .iter()
+        .any(|slot| slot.state == SelfCheckItemState::Fatal)
+    {
+        gates.allow_runtime_tasks = false;
+    }
+
+    boot_snapshot.set_stage(BootStage::GateApply);
+    info!("boot.stage: stage=gate-apply");
+    boot_snapshot.finalize(gates);
+    let show_sticky = boot_snapshot.outcome != BootOutcome::Ok;
+    let mut final_gates = boot_snapshot.gates;
+    final_gates.show_sticky_self_check = show_sticky;
+    boot_snapshot.finalize(final_gates);
+    info!(
+        "boot.summary: outcome={} first_fault={} runtime={} front_panel={}",
+        outcome_label(boot_snapshot.outcome),
+        fault_label(boot_snapshot.first_fault),
+        if boot_snapshot.gates.allow_runtime_tasks {
+            "on"
+        } else {
+            "off"
+        },
+        if boot_snapshot.gates.allow_front_panel {
+            "on"
+        } else {
+            "off"
+        }
+    );
+    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+
+    if boot_snapshot.outcome == BootOutcome::Fatal {
+        loop {
+            flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+            Timer::after(Duration::from_millis(700)).await;
+            flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+            Timer::after(Duration::from_millis(700)).await;
+        }
+    }
+
+    if boot_snapshot.gates.show_sticky_self_check {
+        for step in 0..4u8 {
+            flush_boot_self_check(&mut disp, &boot_snapshot, (step & 1) != 0).await;
+            Timer::after(Duration::from_millis(700)).await;
+        }
+    }
+
+    boot_snapshot.set_stage(BootStage::Runtime);
+    info!("boot.stage: stage=runtime");
+
     // 仅在扫描完成后再启动 SW2303 遥测，避免早期干扰
-    info!("sw2303.ch0: spawn");
-    spawner
-        .spawn(sw2303_ch0_telemetry_task())
-        .expect("spawn sw2303_ch0_telemetry_task");
+    if boot_snapshot.gates.allow_runtime_tasks {
+        info!("sw2303.ch0: spawn");
+        spawner
+            .spawn(sw2303_ch0_telemetry_task())
+            .expect("spawn sw2303_ch0_telemetry_task");
+    }
 
     // 其他通道的 SW2303 遥测（同样在各自 ready 后启动）
     #[embassy_executor::task]
@@ -1651,9 +1898,11 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    spawner
-        .spawn(sw2303_ch1_telemetry_task())
-        .expect("spawn sw2303_ch1_telemetry_task");
+    if boot_snapshot.gates.allow_runtime_tasks {
+        spawner
+            .spawn(sw2303_ch1_telemetry_task())
+            .expect("spawn sw2303_ch1_telemetry_task");
+    }
 
     #[embassy_executor::task]
     async fn sw2303_ch2_telemetry_task() {
@@ -1678,9 +1927,11 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    spawner
-        .spawn(sw2303_ch2_telemetry_task())
-        .expect("spawn sw2303_ch2_telemetry_task");
+    if boot_snapshot.gates.allow_runtime_tasks {
+        spawner
+            .spawn(sw2303_ch2_telemetry_task())
+            .expect("spawn sw2303_ch2_telemetry_task");
+    }
 
     #[embassy_executor::task]
     async fn sw2303_ch3_telemetry_task() {
@@ -1705,9 +1956,11 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    spawner
-        .spawn(sw2303_ch3_telemetry_task())
-        .expect("spawn sw2303_ch3_telemetry_task");
+    if boot_snapshot.gates.allow_runtime_tasks {
+        spawner
+            .spawn(sw2303_ch3_telemetry_task())
+            .expect("spawn sw2303_ch3_telemetry_task");
+    }
     // === UI periodic refresh loop (2 Hz) ===
     let sw_addr = swc::DEFAULT_ADDRESS;
     loop {

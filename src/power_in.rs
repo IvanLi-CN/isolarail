@@ -10,6 +10,7 @@ use embedded_hal_async::i2c::I2c;
 use esp_hal::gpio::{Input, Output};
 use ina226_tp as ina226;
 
+use crate::boot_diag::{BootFaultCode, SelfCheckItemState};
 use crate::I2cBus;
 
 const INA226_ADDR: u8 = 0x44;
@@ -43,8 +44,18 @@ pub struct Status {
     pub vin_on: bool,
 }
 
+#[derive(Copy, Clone)]
+pub struct BootstrapStatus {
+    pub state: SelfCheckItemState,
+    pub fault: BootFaultCode,
+    pub vin_v: f32,
+    pub pg_good: bool,
+    pub ready: bool,
+}
+
 static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
 static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, BootstrapStatus> = Signal::new();
 
 pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8> {
     STATUS_CH.receiver()
@@ -52,6 +63,10 @@ pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8
 
 pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &VIN_ON_SIG
+}
+
+pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, BootstrapStatus> {
+    &BOOTSTRAP_SIG
 }
 
 pub fn spawn(
@@ -77,12 +92,32 @@ async fn task(
     in_en.set_low();
 
     let mut i2c = I2cDevice::new(bus);
-    let mut ina = {
-        let mut dev = ina226::INA226::new(None);
-        dev.set_ina_address(INA226_ADDR);
-        dev.initialize(&mut i2c)
-            .await
-            .unwrap_or_else(|_| panic!("INA226 init failed at 0x{:02X}", INA226_ADDR))
+    let mut dev = ina226::INA226::new(None);
+    dev.set_ina_address(INA226_ADDR);
+    let mut ina = match dev.initialize(&mut i2c).await {
+        Ok(ina) => ina,
+        Err(_) => {
+            warn!("pwr.in:init failed addr=0x{:02X}", INA226_ADDR);
+            BOOTSTRAP_SIG.signal(BootstrapStatus {
+                state: SelfCheckItemState::Fatal,
+                fault: BootFaultCode::InaUnavailable,
+                vin_v: 0.0,
+                pg_good: in_pg.is_high(),
+                ready: false,
+            });
+            VIN_ON_SIG.signal(false);
+            loop {
+                STATUS_CH
+                    .send(Status {
+                        vin_v: 0.0,
+                        i_a: 0.0,
+                        pg_good: in_pg.is_high(),
+                        vin_on: false,
+                    })
+                    .await;
+                Timer::after(Duration::from_secs(10)).await;
+            }
+        }
     };
 
     configure_ina(&mut ina, shunt_res_ohms).await;
@@ -96,6 +131,28 @@ async fn task(
     }
 
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
+    let bootstrap = if vin_on_state.vin_on {
+        BootstrapStatus {
+            state: SelfCheckItemState::Ok,
+            fault: BootFaultCode::None,
+            vin_v: vin_on_state.last_vbus_v,
+            pg_good: vin_on_state.last_pg_good,
+            ready: true,
+        }
+    } else {
+        BootstrapStatus {
+            state: SelfCheckItemState::Fatal,
+            fault: if vin_on_state.last_pg_good {
+                BootFaultCode::PowerInUnavailable
+            } else {
+                BootFaultCode::PowerInPgBad
+            },
+            vin_v: vin_on_state.last_vbus_v,
+            pg_good: vin_on_state.last_pg_good,
+            ready: false,
+        }
+    };
+    BOOTSTRAP_SIG.signal(bootstrap);
     VIN_ON_SIG.signal(vin_on_state.vin_on);
 
     loop {

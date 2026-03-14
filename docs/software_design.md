@@ -31,141 +31,122 @@
 
 说明：初始化阶段在主任务启动后、其他周期性任务（如电源输入资格/状态任务）之前一次性执行。I²C 总线为共享资源，初始化流程需串行访问，避免并发访问。
 
-### 1.1 基础初始化（时钟/日志/时间源/I²C）
+### 1.1 启动阶段与自检状态机
+
+- 启动流程分为 `Early Bring-up -> Self-Check -> Gate Apply -> Runtime` 四阶段，由统一的 boot self-check 快照驱动。
+- `Self-Check` 阶段同时承担三件事：
+  - 输出 `boot.stage:*`、`boot.check:*`、`boot.summary:*` 日志；
+  - 驱动 160x50 LCD 的启动自检页；
+  - 产出 `GateDecision`，决定是否放行 runtime task、front panel 和各路端口。
+- 统一状态口径：
+  - `SelfCheckItemState = Pending / Ok / Warn / Err / Fatal / Skipped`
+  - `BootOutcome = Ok / Degraded / Fatal`
+  - `BootFaultCode` 覆盖 `MuxOffline`、`PowerInUnavailable`、`PowerInPgBad`、`InaUnavailable`、`FrontPanelOffline`、`FanUnavailable` 以及按端口编号的配对/保护/超时故障。
+- 默认策略是“只读探测 + 分级降级”：
+  - 缺模块、单路异常、front panel 离线都优先降级；
+  - 只有输入电源不安全、或明确无法保证通道安全关闭时才进入 `Fatal`。
+
+### 1.2 基础初始化（时钟/日志/时间源/I²C/LCD）
 
 - 时钟与外设：调用 `esp_hal::init(esp_hal::Config::default())` 初始化外设；用 `esp_hal_embassy::init()` 绑定 `embassy-time` 时间源。
-- 日志：沿用“0.2 日志风格（defmt）”；初始化时采用精简单行键值对输出，便于筛查启动问题。
-- I²C（共享总线）：单实例 I²C 由 `esp-hal` 提供。参考示例（ESP32‑C3）`/Users/ivan/Projects/Ivan/esp32c3-sc8815-sw2303-demo/src/main.rs:61-69` 的做法，使用 `embassy_sync::Mutex` + `static_cell::StaticCell` 构建共享访问，再视具体驱动选择阻塞或异步封装：
-  - 阶段一（初始化阶段）：优先使用“阻塞版 embedded-hal”驱动完成器件发现与一次性配置，避免 `async`/`blocking` 混用带来的 trait 兼容性问题。
-  - 阶段二（运行阶段）：如需异步访问，再将 I²C 迁移为 `embedded-hal-async` 使用（丢弃初始化阶段的临时驱动实例，重新以 async 句柄构造运行期驱动）。
+- 日志：沿用“0.2 日志风格（defmt）”；启动关键路径必须保持单行键值对输出，便于错过串口首帧时仍能从后续摘要定位问题。
+- I²C（共享总线）：单实例 I²C 由 `esp-hal` 提供，使用 `embassy_sync::Mutex` + `static_cell::StaticCell` 构建共享访问；启动自检与运行期任务都通过同一总线序列化访问。
+- LCD：显示初始化成功后，先进入 boot self-check 页，不再把 dashboard 首帧当作“系统一定正常”的信号。
 
 初始化期建议日志（示例）：
 
-- `init.hw: chip=ESP32-S3 i2c=ok sda=GPIOx scl=GPIOy`。
-- `init.time: embassy-timer=ok`。
+- `app.start`
+- `init.time: embassy-timer=ok`
+- `boot.stage: stage=self-check`
 
-### 1.2 I²C 多路开关 PCA9545A（0x70）
+### 1.3 自检顺序与门控顺序（强制）
+
+boot self-check 采用固定顺序，避免不同模块各自抢总线与各说各话：
+
+1) 完成日志、时间源、LCD、共享 I²C 与基础 GPIO 的早期 bring-up；
+2) 探测 `PCA9545A`：
+   - 成功：`boot.check: name=mux state=ok fault=-`
+   - 失败：记录 `Err/MuxOffline`，所有下游端口改为 `Skipped`，但不立即 `panic!`
+3) 启动并等待基础电源输入资格结果：
+   - `INA226` 初始化失败、VIN 不可用或 `PG` 不良都由 `power_in::bootstrap_signal()` 返回；
+   - 若输入资格失败，`IN_EN` 必须保持关闭，runtime 与端口初始化均不放行。
+4) 在 VIN ready 时探测前面板 `TCA6408A` 与风扇链路：
+   - front panel 离线记为 `Warn/FrontPanelOffline`，仅关闭面板功能；
+   - 风扇链路初始化失败记为 `Warn/FanUnavailable`，不阻断 dashboard。
+5) 仅在 `VIN ready && mux online` 时进入四路端口扫描：
+   - 每路先检查 `SC8815`，再配置并验证 `VBUS ready`，最后确认 `SW2303` 在线；
+   - 单路失败只关闭该路 `PSTOP_CTL`，不连坐其它通道。
+6) 汇总 `GateDecision`，输出 `boot.summary:*`：
+   - `BootOutcome=Fatal`：LCD 常驻自检页；
+   - `BootOutcome=Degraded`：短暂展示摘要后进入 dashboard；
+   - `BootOutcome=Ok`：直接进入 runtime。
+
+### 1.4 I²C 多路开关 PCA9545A（0x70）
 
 - 使用 crate：`xca9548a`（支持 T/PCA954xA 全系），类型：`Xca9545a`。
-  - 参考：docs.rs/xca9548a（已覆盖 PCA9545A）。
 - 地址：缺省 `0x70`（A2/A1/A0=0）。
-- 初始化步骤：
-  - 在上行 I²C 上构造 `Xca9545a` 并执行一次寄存器读取/写入以确认 ACK。
-  - 调用 `.split()` 获取四个下行通道的虚拟 I²C（`i2c0..i2c3`）；用于各通道扫描与后续设备初始化时的通道自动选择。
-- 成功日志：`i2c.mux: ok addr=0x70 parts=4`；失败日志并 `panic!`：`i2c.mux: err=...`。
+- 探测步骤：
+  - 在上行 I²C 上构造 `Xca9545a` 并执行一次寄存器读取确认 ACK；
+  - 记录 `boot.check: name=mux ...`，并把结果写入 boot self-check 快照。
+- 成功日志：`i2c.mux: ok addr=0x70 parts=4 status=0x..`
+- 失败日志：`i2c.mux: err=init addr=0x70`
+- 门控要求：
+  - `MuxOffline` 不再触发启动 `panic!`；
+  - `MuxOffline` 时四路端口全部标记为 `Skipped`，`allow_port[*]=false`，且运行期不得再启动依赖 MUX 的端口任务。
 
-### 1.3 上电与扫描时序（强制）
-
-本小节对“上电与外设扫描”的业务流程作出明确、不可二义的顺序要求，用于修正并统一实现行为：
-
-1) 发布电源输入上电意图（希望 VIN 上电）：
-   - 将全局目标态 `PWR_SW_TARGET=Closed`（仅表达意图，不等同于实际导通）。
-   - 实际导通由“基础电源输入子系统”的资格判定任务依据 `INA226` 电压/电流与 `IN_PG` 决定与等待，条件满足后才真正闭合输入开关（详见“2. 基础电源输入子系统”）。
-
-2) 发布上电意图后，立即扫描前面板 `TCA6408A` 是否在线（存在性确认即可）：
-   - 该步骤不依赖 VIN 是否已达标，作为独立可并行的存在性检查提前进行；
-   - 成功与否仅记录日志，不阻塞后续 VIN 判定与模块初始化。
-
-3) 等待 VIN 上电确认后，再开始模块侧扫描：
-   - VIN 上电定义：由 `INA226.VBUS` 达到合规范围且 `IN_PG=good`（见第 2 章阈值），二者综合判定；
-   - 在确认 VIN 上电后，才开始扫描与初始化 `SC8815`（逐通道）。
-   - 日志：
-     - `pwr.in:vin_on=true vin=..V pg=good`（确认上电后打印一次）；
-     - 若超时未达标：`pwr.in:vin_on=false vin=..V pg=good|bad`；
-     - 模块扫描开始前：`i2c.scan:start vin_on=true`。
-
-4) 对“存在 SC8815”的 USB 电源模块，按以下顺序进行检查与初始化：
-   - 读取 `SC8815` 的 `VBUS` 电压；要求 `VBUS ≥ 4.0 V` 且“连续两次扫描均达标”（建议采样间隔 ≥ 50 ms）；
-   - 连续达标后，检查对应模块的 `SW2303` 是否在线（按驱动定义的在线检测方式，例如寄存器/ACK 检测）；
-     - 若在线：执行 `SW2303` 初始化；
-     - 若不在线：判定该模块“非完整”，记录日志并跳过其初始化阶段。
-
-5) 初始化代码可参考：`/Users/ivan/Projects/Ivan/esp32c3-sc8815-sw2303-demo/src/main.rs` 中的示例流程与寄存器配置。
-
-实现参考的伪代码（仅示意，非约束）：
-
-```text
-set(PWR_SW_TARGET, Closed)              // 发布上电意图
-spawn(scan_front_panel_tca6408a)        // 立即扫描前面板存在性
-
-wait_until(vin_ok_by_ina226_and_pg())   // 基于 INA226 + PG 的资格确认
-
-for ch in mux.channels():               // VIN 确认后再扫描模块
-    if sc8815.present(ch):
-        sc8815.init(ch)
-        if sc8815.vbus_ok_twice(ch, th=4.0V):
-            if sw2303.present(ch):
-                sw2303.init(ch)
-            else:
-                log_warn("module-incomplete", ch)
-        else:
-            log_warn("vbus<4V", ch)
-```
-
-### 1.4 设备发现/初始化（四路模块：SC8815 → SW2303）
+### 1.5 四路模块发现与初始化（SC8815 -> SW2303）
 
 - 使用的设备驱动 crate：
   - `sc8815`（Git：IvanLi-CN/sc8815-rs，支持 blocking/async，默认地址参见 `sc8815::registers::constants::DEFAULT_ADDRESS`）。
   - `sw2303`（Git：IvanLi-CN/sw2303-rs，支持 blocking/async，默认地址参见 `sw2303::registers::constants::DEFAULT_ADDRESS`）。
-- 初始化/扫描策略（逐通道，串行）：
-  1) 通过 `Xca9545a::split()` 获得的 `i2c[ch]` 访问该通道，仅对 SC8815 做存在性 ACK 判定；
-  2) 若 SC8815 在线：完成初始化（外部电阻 `RS1/RS2=5mΩ`，`IBUS=5A`、`IBAT=6A`，`OTG`，`450kHz`，目标 `VBUS=5V`，使能 `ADC`/`OTG`），随后 MCU 拉高该路 `PSTOP_CTL`，经板上反相使模块侧 `PSTOP` 为低电平以使能输出；
-  3) 轮询 SC8815 的 ADC，要求 `VBUS ≥ 4.0V` 且“连续两次扫描均达标”（建议采样间隔 ≥ 50 ms）；
-     - 连续达标后先确认 `SW2303` 在线（按驱动定义的在线检测方式），在线则执行初始化；
-     - 若不在线：记录 `anomaly=module-incomplete`，该通道不再继续 SW2303 初始化；
-  4) 打印 `i2c.scan: ch=X sc8815=... sw2303=...`。若 SW2303 不在线，额外扫描 `0x30..0x3F` 打印 `sw2303_range=...` 辅助定位。
-- 发现结果日志（每通道一行）：
-  - 正常：`i2c.scan: ch=0 sc8815=online sw2303=online`；
-  - 异常（缺失其一）：`i2c.scan: ch=0 sc8815=online sw2303=offline`。
-- 通道一致性要求：SC8815 与 SW2303 成对出现。若非同时在线，视为“异常通道”，需打印错误日志但不中断其他通道的扫描与初始化：
-  - `i2c.scan: ch=0 anomaly=true reason="pair-mismatch"`。
+- 逐通道初始化策略（串行）：
+  1) 选择对应 MUX 通道，仅做 `SC8815` 的 ACK 与状态读取；
+  2) 若 `SC8815` 在线，则完成基础配置，并在配置后再拉高该路 `PSTOP_CTL`；
+  3) 轮询 `SC8815` ADC，要求 `VBUS >= 4.0V` 且达到连续样本门槛；
+  4) `VBUS ready` 后再确认 `SW2303` 在线并执行初始化；
+  5) 根据结果写入端口自检状态与门控决策。
+- 结果与故障码约定：
+  - `SC8815 + SW2303` 都成功：端口记为 `Ok`，允许该路 runtime；
+  - `SC8815` 在线但 `SW2303` 离线：`Err/PortSwOffline(ch)`；
+  - `SC8815` 离线但 `SW2303` 在线：`Err/PortPairMismatch(ch)`；
+  - `VBUS ready` 超时：`Err/PortVbusTimeout(ch)`；
+  - 检测到 `vbus_short` 等保护粘滞：`Fatal/PortProtectionLatched(ch)`。
+- 安全要求：
+  - 只要端口未拿到 `Ok`，该路 `PSTOP_CTL` 必须保持关闭；
+  - 单路异常不会阻断其它通道扫描；
+  - 任一路进入 `PortProtectionLatched`，整机 `BootOutcome` 必须提升到 `Fatal`。
 
-### 1.5 前面板 TCA6408ARGTR（0x21）发现与存在性确认
+### 1.6 前面板与风扇链路
 
-- 使用 crate：`port-expander`，类型：`Tca6408a`（支持阻塞 embedded‑hal）。
-- 地址：`0x21`（ADDR=1，接 3V3）。
-- 说明：主板 U43 的 TCA6408A 地址为 `0x20`（`PWREN#/OVCUR#`），不在本节“前面板存在性检查”流程内。
-- 步骤：在上行 I²C 直接构造 `Tca6408a`，读取输入寄存器以确认 ACK。扫描时机：
-  - 于“发布电源输入上电意图”之后立即进行；不等待 VIN 达标；
-  - 成功/失败仅记录日志，不阻塞后续 VIN 判定与模块初始化。
-- 成功日志：`i2c.front: tca6408a=online addr=0x21`；失败：`i2c.front: tca6408a=offline addr=0x21`（仅报告，不 `panic!`）。
+- 前面板 `TCA6408A` 地址为 `0x21`，仅在输入电源 ready 后探测。
+- 成功日志：`i2c.front: tca6408a=online addr=0x21`
+- 失败日志：`i2c.front: tca6408a=offline addr=0x21`
+- 门控要求：
+  - `FrontPanelOffline` 仅设置 `allow_front_panel=false`，不阻断 dashboard 与其它链路；
+  - 风扇链路初始化失败仅记录 `Warn/FanUnavailable`，不将整机提升为 fatal。
 
-### 1.6 设备初始化（仅对“已发现在线”的设备执行）
+### 1.7 启动失败与异常处理约定
 
-初始化失败策略：打印错误日志并 `panic!`（除“不可达/不存在”的发现阶段外）。每个设备初始化成功都需打印一行成功日志。
+- 器件“不可达/不存在”优先记录为 `Warn / Err / Skipped`，不允许直接因为单个探测失败而 `panic!`；
+- 输入电源资格失败时：
+  - `IN_EN` 必须保持关闭；
+  - 四路端口全部 `Skipped`；
+  - `GateDecision.allow_runtime_tasks=false`；
+  - LCD 停留在 fatal 自检页。
+- 通道配对异常（SC8815/SW2303 非成对）：
+  - 打印 `error`；
+  - 仅关闭对应通道；
+  - 继续扫描其它通道。
+- 统一摘要日志示例：
+  - `boot.check: name=vin state=FATAL fault=PG BAD ...`
+  - `boot.summary: outcome=DEG first_fault=MUX OFF runtime=on front_panel=off`
 
-- 四路模块（逐通道 ch=0..3）：
-  - 跳过条件：若该通道 SC8815 或 SW2303 其一离线，跳过此通道初始化，输出：`pwr.mod: ch=0 init=skipped reason="pair-mismatch"`。
-  - 顺序与要点：
-    1) SC8815（电源路径/OTG 管理）：
-       - 使用该通道的 `i2c[ch]` 构造 `SC8815`；
-       - `init()` → 成功即打印：`pwr.sc8815: ch=0 init=ok`；失败：`pwr.sc8815: ch=0 init=err=...` 并 `panic!`；
-       - 按项目配置进行基础参数设定（电池串数、限流、频率、OTG 设定等）；
-       - 进入待机安全态，开启 ADC 转换，日志：`pwr.sc8815: ch=0 cfg=ok`；
-    2) 等待 VBUS 就绪：轮询 SC8815 ADC，要求 `VBUS ≥ 4.0V` 且“连续两次达标”（阈值与次数可调）；达标日志：`pwr.sc8815: ch=0 vbus_ready=true vbus=xxxxmV`；超时记错误并 `panic!`；
-    3) SW2303（PD/快充控制）：
-       - 先确认 `SW2303` 在线（按驱动定义的在线检测方式，例如寄存器/ACK 检测）；
-       - 若在线：同通道 `i2c[ch]` 构造 `SW2303`，执行 `init()`/解锁写使能 → 配置功率/协议（PD/PPS 等）；成功日志：`pwr.sw2303: ch=0 init=ok proto=pd+pps`；
-       - 若离线：判定该通道“模块不完整”，记录 `pwr.sw2303: ch=0 online=false` 并跳过初始化；
-  - 完成：`pwr.mod: ch=0 init=ok`。
+### 1.8 运行期资源交接
 
-- 前面板 TCA6408A（存在时才初始化）：
-  - 方向配置：将五向开关对应引脚配置为输入（其余引脚按硬件用途配置为输入/输出）；
-  - 清中断（若接入 INT）：读取输入寄存器一次；
-  - 成功日志：`front.gpio: tca6408a init=ok`；失败则 `panic!`。
-
-### 1.7 运行期资源交接（可选）
-
-- 若运行期采用 `embedded-hal-async`：在完成上述阻塞式初始化后，销毁初始化阶段的 I²C/驱动实例，将底层 I²C 以 async 形式重建；
-- 通过 `embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice` 共享上行 I²C；
-- 运行期不再使用 `Xca9545a::split()` 的部件实例（仅初始化阶段使用），运行中由通道选择器件的“驱动层”显式切换通道，或继续复用 xca9548a 驱动在需要时切换（注意避免与 async 任务竞争）。
-
-### 1.8 失败与异常处理约定
-
-- 器件“不可达/不存在”（发现阶段）：仅打印报告，不 `panic!`；
-- 器件“初始化失败”（初始化阶段）：打印 `error` 并 `panic!`；
-- 通道配对异常（SC8815/SW2303 非成对）：打印 `error`，跳过该通道初始化；
-- 统一错误日志示例：`init.err: comp=sc8815 ch=2 op=configure code=I2cNack detail="..."`。
+- 运行期继续复用共享 async I²C；
+- 只有 `GateDecision.allow_runtime_tasks=true` 时，才允许启动依赖端口 ready 的遥测任务；
+- 只有 `GateDecision.allow_front_panel=true` 时，才允许启动前面板任务；
+- `BootSelfCheckSnapshot` 是日志、自检页与门控决策的单一事实来源。
 
 ### 1.9 参考 crate 与接口（事实依据）
 

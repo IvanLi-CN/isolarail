@@ -169,6 +169,7 @@ None
 - 2026-03-14: 同步 V3 网表证据与固件引脚映射，完成本地 `cargo +esp check` / `cargo +esp build --release`，状态更新为 `部分完成（2/3）`。
 - 2026-03-14: 根据 PR 阶段 review-loop 修正文档保留引脚与 `I2C_RESET` 开漏释放语义。
 - 2026-03-14: 根据 fresh review-proof 修正上电时序，确保 `RESET#` 先低后释放、`ENx` 在 SC8815 配置成功后再使能。
+- 2026-03-14: 清理历史计划文档中的旧版 `GPIO38` 说明，统一为当前 `GPIO35` 的 bring-up 口径。
 
 ## 参考（References）
 

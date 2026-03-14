@@ -915,7 +915,7 @@ async fn main(spawner: Spawner) {
     async fn sw2303_ch0_telemetry_task() {
         info!("sw2303.ch0: task_start");
         // 延后到 VIN_ON 再开始以避免上电早期 I2C read_err 噪声
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch0: vin_on=true; waiting ch0_ready");
         // 再等待通道0完成一次 SC8815+SW2303 初始化，避免在配置之前频繁探测
         let _ = CH_READY0.wait().await;
@@ -1211,6 +1211,7 @@ async fn main(spawner: Spawner) {
                             if !disc[idx] {
                                 warn!("i2c.mux: ch={} select=err reg=0x{:02X}", ch, mux_mask);
                             }
+                            deferred[idx] = false;
                             disc[idx] = true;
                         }
                     }
@@ -1275,7 +1276,7 @@ async fn main(spawner: Spawner) {
     }
 
     // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
-    let vin_on = power_in::vin_on_signal().wait().await;
+    let vin_on = power_in::wait_vin_on_state(50, 40).await;
     if !vin_on {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
         let sc_addr = sc8815_const::DEFAULT_ADDRESS;
@@ -1757,7 +1758,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch1_telemetry_task() {
         info!("sw2303.ch1: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch1: vin_on=true; waiting ch1_ready");
         let _ = CH_READY1.wait().await;
         info!("sw2303.ch1: ch1_ready=true; start telemetry");
@@ -1820,7 +1821,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch2_telemetry_task() {
         info!("sw2303.ch2: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch2: vin_on=true; waiting ch2_ready");
         let _ = CH_READY2.wait().await;
         info!("sw2303.ch2: ch2_ready=true; start telemetry");
@@ -1847,7 +1848,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch3_telemetry_task() {
         info!("sw2303.ch3: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch3: vin_on=true; waiting ch3_ready");
         let _ = CH_READY3.wait().await;
         info!("sw2303.ch3: ch3_ready=true; start telemetry");

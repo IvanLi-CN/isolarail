@@ -187,6 +187,7 @@ for ch in mux.channels():               // VIN 确认后再处理模块侧
 - 日志：每次读取打印一行 `info`：`pwr.in:qual vbus=..V i=..A range_ok= current_ok=`。
 - 成功后：闭合 `IN_EN`，并将本次 `VBUS/CURRENT` 写入共享测量，避免状态上报出现 `vin=n/a`。
 - `VIN_ADC` 不参与资格判定；仅在 `PG` 超时（100 ms）时单次读取用于诊断。
+- `vin_on` 的运行期状态必须独立于 10 s 遥测周期维护；当前实现按约 `500 ms` 节奏刷新实时 `vin_on`，供 UI 与 IP6557 defer 路径立即消费。
 
 #### 2.2.2 10 s 状态汇报
 
@@ -205,6 +206,7 @@ for ch in mux.channels():               // VIN 确认后再处理模块侧
     - 或差值阈值：`INA226.VBUS - V_in_from_adc > 3.0 V`；
     - 示例：`note="anom: vin_adc<<ina_v (adc=4.2V, ina=12.1V)"`。
 - 示例：`pwr.in:stat vin=12.1V i=0.46A sw_intent=on sw_actual=on pg=good`。
+- 该 10 s 周期仅约束遥测日志与状态汇报；等待真正 `VIN_ON` 的调用方必须循环等待 `vin_on == true` 或显式超时，不能把首次 `false` 当作“VIN 已就绪”事件。
 
 ### 2.3 边界与错误处理
 

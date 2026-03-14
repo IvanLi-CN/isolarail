@@ -52,7 +52,7 @@
 
 - USB D+/D-：ESP32-S3 的 USB PHY 引脚为固定映射，但当前仓库文档对 GPIO19/GPIO20 的 D+/D- 标注存在自相矛盾处；V3 请以芯片资料与板级连线最终确认，并在此处补齐。
 - HUB 侧带信号：V3 原理图使用 `HUB_SDA/HUB_SCL = GPIO45/GPIO46`（CH335F `LED4/SDA` 与 `LED3/SCL` 复用路径）。
-- 当前实现已将 `I2C_RESET` 切换到 `GPIO35`；后续联调与回归验证都应以本表为准，不要回退到 `GPIO38`。
+- 固件当前主线仍使用旧版 `PIN_I2C_RESET=GPIO38`；进入 V3 实现阶段时需按本表切换到 GPIO35 并完成联调验证。
 
 ## V3 关键占用 GPIO（与 V2 差异）
 

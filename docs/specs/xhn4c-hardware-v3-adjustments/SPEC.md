@@ -131,7 +131,6 @@ None
   - `docs/hardware_connection_overview.md`
   - `docs/power_management_and_startup_control.md`
   - `docs/software_design.md`
-  - `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`
 - 本地验证证据：
   - `source ~/export-esp.sh && cargo +esp fmt --all -- --check`
   - `source ~/export-esp.sh && cargo +esp clippy -- -D warnings`

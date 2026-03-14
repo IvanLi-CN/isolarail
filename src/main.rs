@@ -2,7 +2,7 @@
 //!
 //! Implements the MVP per docs/software_design.md:
 //! - Boot init: time, GPIO, I2C, basic presence scans
-//! - I2C mux PCA9545A (0x70) split + per-channel device ACK checks (SC8815/SW2303)
+//! - I2C mux PCA9545A (0x70) split + per-channel IP6557 module bring-up deferral
 //! - Front-panel TCA6408A (0x21) presence check
 //! - Power input subsystem MVP: INA226-based input qualification and 10s status log
 
@@ -41,7 +41,7 @@ mod front_panel;
 
 // INA226 is handled inside power_in task
 
-// Use SC8815/SW2303 crates only for their default I2C addresses
+// Legacy SC8815/SW2303 support is kept only for historical fallback code paths.
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
 use sw2303::registers::{constants as swc, Register as SwReg};
@@ -74,7 +74,7 @@ static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // No per-channel statics; channels are lightweight views over the shared bus
 
-// 各通道初始化完成标志：SC8815 已完成配置、EN 已拉高且 SW2303 在线
+// 各通道初始化完成标志：当前仅在旧子板回退路径中使用。
 static CH_READY0: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY1: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY2: Signal<CriticalSectionRawMutex, bool> = Signal::new();
@@ -87,8 +87,15 @@ static CH_RDY: [AtomicBool; 4] = [
     AtomicBool::new(false),
     AtomicBool::new(false),
 ];
-// Scan completion flag per channel (true once initial scan concludes, even if offline)
+// Scan completion flag per channel (true once initial scan concludes, even if module bring-up is deferred)
 static CH_SCAN_DONE: [AtomicBool; 4] = [
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+];
+// Module-side bring-up is intentionally deferred for the IP6557 path.
+static CH_DEFERRED: [AtomicBool; 4] = [
     AtomicBool::new(false),
     AtomicBool::new(false),
     AtomicBool::new(false),
@@ -208,6 +215,10 @@ const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
 const SC8815_DETECT_TOTAL_MS: u64 = 300; // overall grace per channel (faster: 6x50ms)
 const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
+
+fn legacy_sc8815_path_enabled() -> bool {
+    false
+}
 
 fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static str {
     use sc8815::error::Error::*;
@@ -411,6 +422,7 @@ const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
 enum UiPortState {
     #[default]
     Initializing,
+    Deferred,     // PEND
     Disconnected, // DISC
     Closed,       // OFF
     Overcurrent,  // CC
@@ -573,6 +585,12 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
                     7,
                 );
             }
+            UiPortState::Deferred => {
+                let dash = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+                draw_centered_text(disp, *cx, rows_y[0], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[1], "PEND", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
+            }
             UiPortState::Closed => {
                 // 32x32 OFF icon + label
                 draw_mask_32(disp, *cx - 16, 2, ICON_OFF_32, UI_BORDER);
@@ -629,7 +647,10 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     for (i, bx) in bar_xs.iter().enumerate() {
         // Outline (hidden for DISC/CLOSED/CC)
         match samples[i].ui_state {
-            UiPortState::Disconnected | UiPortState::Closed | UiPortState::Overcurrent => {}
+            UiPortState::Deferred
+            | UiPortState::Disconnected
+            | UiPortState::Closed
+            | UiPortState::Overcurrent => {}
             _ => {
                 let _ = Rectangle::new(Point::new(*bx, bar_y), Size::new(bar_w, bar_h))
                     .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
@@ -1119,6 +1140,75 @@ async fn main(spawner: Spawner) {
     // Spawns regardless of VIN_ON to allow bench 5V fan tests.
     fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6)
         .expect("spawn fan task");
+
+    if !legacy_sc8815_path_enabled() {
+        let vin_on = power_in::vin_on_signal().wait().await;
+        if vin_on {
+            info!("i2c.scan:start vin_on=true backend=ip6557");
+        } else {
+            warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
+        }
+
+        for ch in 0u8..4u8 {
+            let mux_mask = 1u8 << (ch & 0x03);
+            info!("i2c.mux: ch={} select=deferred reg=0x{:02X}", ch, mux_mask);
+            info!(
+                "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
+                ch
+            );
+            CH_DEFERRED[ch as usize].store(true, Ordering::Relaxed);
+        }
+
+        loop {
+            let mut view: [PortSample; 4] = [
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+            ];
+            let target = if PWR_SW_TARGET.load(Ordering::Relaxed) == (PowerSwitchTarget::Open as u8)
+            {
+                PowerSwitchTarget::Open
+            } else {
+                PowerSwitchTarget::Closed
+            };
+            for ch in 0u8..4u8 {
+                let idx = ch as usize;
+                if target == PowerSwitchTarget::Open {
+                    view[idx].ui_state = UiPortState::Closed;
+                } else if CH_DEFERRED[idx].load(Ordering::Relaxed) {
+                    view[idx].ui_state = UiPortState::Deferred;
+                } else if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {
+                    view[idx].ui_state = UiPortState::Disconnected;
+                } else {
+                    view[idx].ui_state = UiPortState::Initializing;
+                }
+            }
+            draw_dashboard_frame(&mut disp, &view);
+            let _ = disp.flush().await;
+            Timer::after(Duration::from_millis(500)).await;
+        }
+    }
 
     // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
     let vin_on = power_in::vin_on_signal().wait().await;

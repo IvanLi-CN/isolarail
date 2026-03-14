@@ -15,4 +15,4 @@
 
 |ID|Title|Spec|Notes|
 |---:|---|---|---|
-|xhn4c|硬件 V3 调整与固件适配计划|`xhn4c-hardware-v3-adjustments/SPEC.md`|聚焦 V3 硬件差异与固件适配边界|
+|xhn4c|硬件 V3 调整与固件适配计划|`xhn4c-hardware-v3-adjustments/SPEC.md`|聚焦 V3 wiring 对齐与 IP6557 子板边界澄清|

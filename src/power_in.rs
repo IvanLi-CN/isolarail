@@ -122,15 +122,37 @@ async fn task(
 
     configure_ina(&mut ina, shunt_res_ohms).await;
 
-    let ok = qualify_startup(&mut ina, shunt_res_ohms, limits).await;
-    if ok {
-        in_en.set_high();
-    } else {
+    let qualified = qualify_startup(&mut ina, shunt_res_ohms, limits).await;
+    if !qualified {
         in_en.set_low();
         warn!("pwr.in:qual failed; keep switch open");
+        let status = sample_status(&mut ina, &in_pg, shunt_res_ohms, limits, false).await;
+        BOOTSTRAP_SIG.signal(BootstrapStatus {
+            state: SelfCheckItemState::Fatal,
+            fault: if status.pg_good {
+                BootFaultCode::PowerInUnavailable
+            } else {
+                BootFaultCode::PowerInPgBad
+            },
+            vin_v: status.vin_v,
+            pg_good: status.pg_good,
+            ready: false,
+        });
+        VIN_ON_SIG.signal(false);
+        loop {
+            STATUS_CH
+                .send(sample_status(&mut ina, &in_pg, shunt_res_ohms, limits, false).await)
+                .await;
+            Timer::after(Duration::from_secs(10)).await;
+        }
     }
 
+    in_en.set_high();
+
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
+    if !vin_on_state.vin_on {
+        in_en.set_low();
+    }
     let bootstrap = if vin_on_state.vin_on {
         BootstrapStatus {
             state: SelfCheckItemState::Ok,

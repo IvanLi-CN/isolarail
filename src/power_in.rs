@@ -1,3 +1,4 @@
+use core::sync::atomic::{AtomicBool, Ordering};
 use defmt::{info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::{task, SpawnError, Spawner};
@@ -45,6 +46,7 @@ pub struct Status {
 
 static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
 static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static VIN_ON_LATEST: AtomicBool = AtomicBool::new(false);
 
 pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8> {
     STATUS_CH.receiver()
@@ -52,6 +54,10 @@ pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8
 
 pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &VIN_ON_SIG
+}
+
+pub fn vin_on_state() -> bool {
+    VIN_ON_LATEST.load(Ordering::Relaxed)
 }
 
 pub fn spawn(
@@ -96,6 +102,7 @@ async fn task(
     }
 
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
+    VIN_ON_LATEST.store(vin_on_state.vin_on, Ordering::Relaxed);
     VIN_ON_SIG.signal(vin_on_state.vin_on);
 
     loop {
@@ -116,9 +123,11 @@ async fn task(
         );
         if status.vin_on && !vin_on_state.vin_on {
             info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
+            VIN_ON_LATEST.store(true, Ordering::Relaxed);
             VIN_ON_SIG.signal(true);
         }
         vin_on_state.vin_on |= status.vin_on;
+        VIN_ON_LATEST.store(vin_on_state.vin_on, Ordering::Relaxed);
 
         STATUS_CH.send(status).await;
         Timer::after(Duration::from_secs(10)).await;

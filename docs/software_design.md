@@ -78,7 +78,8 @@
    - 每路子板的已确认器件为 `IP6557 + INA226 + TMP112`；
    - 当前固件分支尚未实现该子板的专用寄存器初始化/遥测；
    - 在 dedicated bring-up 任务落地前，模块侧流程至少保留 `PCA9545A` 的通道选择/读回探测；`EN1..EN4` 保持低电平，不再尝试历史子板方案的探测流程；
-   - 只有在 `vin_on == true` 且 mux 探测成功后，UI 才显示 `bringup-pending`；若输入电源未就绪，应显示显式的电源阻断状态。
+   - 只有在 `vin_on == true` 且 mux 探测成功后，UI 才显示 `bringup-pending`；若输入电源未就绪，应显示显式的电源阻断状态；
+   - `vin_on` 必须按实时状态驱动 UI，不能把第一次等待结果缓存成永久状态；mux 探测失败也必须允许后续重试。
 
 实现参考的伪代码（仅示意，非约束）：
 
@@ -102,7 +103,7 @@ for ch in mux.channels():               // VIN 确认后再处理模块侧
   2) 若 `vin_on == true` 且 mux 探测成功，则记录模块侧 bring-up 尚未完成：`pwr.mod: ch=X backend=ip6557 init=deferred reason="bringup-pending"`；
   3) 若 `vin_on == false`，记录 `power_blocked=true reason="vin-not-ready"`，UI 不得伪装成模块已进入 bring-up 阶段；
   4) 保持 `ENx` 为低电平，防止在驱动与保护策略未完成前误上电；
-  5) 只有 mux 探测失败时，才把该通道映射为 `Disconnected/Error`。
+  5) 只有 mux 探测连续失败达到阈值时，才把该通道映射为 `Disconnected/Error`；后续轮询仍应允许重新探测恢复。
 - dedicated bring-up 任务应覆盖：
   - IP6557 输出策略与保护寄存器初始化；
   - 子板 INA226/TMP112 的地址确认、遥测采样与异常告警；

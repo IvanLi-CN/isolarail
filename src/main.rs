@@ -94,14 +94,6 @@ static CH_SCAN_DONE: [AtomicBool; 4] = [
     AtomicBool::new(false),
     AtomicBool::new(false),
 ];
-// Module-side bring-up is intentionally deferred for the IP6557 path.
-static CH_DEFERRED: [AtomicBool; 4] = [
-    AtomicBool::new(false),
-    AtomicBool::new(false),
-    AtomicBool::new(false),
-    AtomicBool::new(false),
-];
-
 // （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
 
 // Global target state: open/closed (intent)
@@ -1150,47 +1142,74 @@ async fn main(spawner: Spawner) {
         .expect("spawn fan task");
 
     if !legacy_sc8815_path_enabled() {
-        let vin_on = power_in::vin_on_signal().wait().await;
+        let mut vin_on = power_in::vin_on_signal().wait().await;
         if vin_on {
             info!("i2c.scan:start vin_on=true backend=ip6557");
         } else {
             warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
         }
-
-        for ch in 0u8..4u8 {
-            let mux_mask = 1u8 << (ch & 0x03);
-            let mut ctrl = [0u8; 1];
-            let mut upstream = I2cDevice::new(bus);
-            let select_ok = embedded_hal_async::i2c::I2c::write_read(
-                &mut upstream,
-                pca9545::DEFAULT_ADDRESS,
-                &[mux_mask],
-                &mut ctrl,
-            )
-            .await
-            .is_ok()
-                && (ctrl[0] & mux_mask) != 0;
-            if select_ok {
-                info!("i2c.mux: ch={} select=ok ctrl=0x{:02X}", ch, ctrl[0]);
-                if vin_on {
-                    info!(
-                        "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
-                        ch
-                    );
-                    CH_DEFERRED[ch as usize].store(true, Ordering::Relaxed);
-                } else {
-                    warn!(
-                        "pwr.mod: ch={} backend=ip6557 power_blocked=true reason=\"vin-not-ready\"",
-                        ch
-                    );
-                }
-            } else {
-                warn!("i2c.mux: ch={} select=err reg=0x{:02X}", ch, mux_mask);
-                CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
-            }
-        }
+        let mut deferred = [false; 4];
+        let mut disc = [false; 4];
+        let mut probe_failures = [0u8; 4];
 
         loop {
+            let vin_on_now = power_in::vin_on_state();
+            if vin_on_now && !vin_on {
+                info!("i2c.scan:start vin_on=true backend=ip6557");
+            } else if !vin_on_now && vin_on {
+                warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
+            }
+            vin_on = vin_on_now;
+
+            if vin_on {
+                for ch in 0u8..4u8 {
+                    let idx = ch as usize;
+                    if deferred[idx] {
+                        continue;
+                    }
+
+                    let mux_mask = 1u8 << (ch & 0x03);
+                    let mut select_ok = false;
+                    let mut ctrl = [0u8; 1];
+                    for _ in 0..3 {
+                        let mut upstream = I2cDevice::new(bus);
+                        if embedded_hal_async::i2c::I2c::write_read(
+                            &mut upstream,
+                            pca9545::DEFAULT_ADDRESS,
+                            &[mux_mask],
+                            &mut ctrl,
+                        )
+                        .await
+                        .is_ok()
+                            && (ctrl[0] & mux_mask) != 0
+                        {
+                            select_ok = true;
+                            break;
+                        }
+                        Timer::after(Duration::from_millis(20)).await;
+                    }
+
+                    if select_ok {
+                        probe_failures[idx] = 0;
+                        disc[idx] = false;
+                        deferred[idx] = true;
+                        info!("i2c.mux: ch={} select=ok ctrl=0x{:02X}", ch, ctrl[0]);
+                        info!(
+                            "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
+                            ch
+                        );
+                    } else {
+                        probe_failures[idx] = probe_failures[idx].saturating_add(1);
+                        if probe_failures[idx] >= 3 {
+                            if !disc[idx] {
+                                warn!("i2c.mux: ch={} select=err reg=0x{:02X}", ch, mux_mask);
+                            }
+                            disc[idx] = true;
+                        }
+                    }
+                }
+            }
+
             let mut view: [PortSample; 4] = [
                 PortSample {
                     connected: false,
@@ -1229,9 +1248,9 @@ async fn main(spawner: Spawner) {
                     view[idx].ui_state = UiPortState::Closed;
                 } else if !vin_on {
                     view[idx].ui_state = UiPortState::PowerBlocked;
-                } else if CH_DEFERRED[idx].load(Ordering::Relaxed) {
+                } else if deferred[idx] {
                     view[idx].ui_state = UiPortState::Deferred;
-                } else if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {
+                } else if disc[idx] {
                     view[idx].ui_state = UiPortState::Disconnected;
                 } else {
                     view[idx].ui_state = UiPortState::Initializing;

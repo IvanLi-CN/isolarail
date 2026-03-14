@@ -112,8 +112,8 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 ## 10. Data Source Notes
 
 - Dashboard consumes `V/I/W` from a data service. The hardware backend
-  may aggregate measurements from INA226/TPS devices or estimates tied
-  to port controllers (e.g., SW2303 negotiation info). For accuracy,
+  may aggregate measurements from INA226/TPS devices or other
+  module-side telemetry providers. For accuracy,
   prefer measured values for `I` and `V`; compute `W = V × I`.
 
 ## 11. Assets

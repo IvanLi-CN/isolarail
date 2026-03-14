@@ -1,3 +1,4 @@
+use core::sync::atomic::{AtomicBool, Ordering};
 use defmt::{info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::{task, SpawnError, Spawner};
@@ -45,13 +46,37 @@ pub struct Status {
 
 static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
 static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static VIN_ON_LATEST: AtomicBool = AtomicBool::new(false);
 
 pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8> {
     STATUS_CH.receiver()
 }
 
-pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
-    &VIN_ON_SIG
+pub fn vin_on_state() -> bool {
+    VIN_ON_LATEST.load(Ordering::Relaxed)
+}
+
+pub async fn wait_until_vin_on() {
+    if vin_on_state() {
+        return;
+    }
+
+    loop {
+        if VIN_ON_SIG.wait().await {
+            return;
+        }
+    }
+}
+
+pub async fn wait_vin_on_state(interval_ms: u64, max_iters: u32) -> bool {
+    for _ in 0..max_iters {
+        if vin_on_state() {
+            return true;
+        }
+        Timer::after(Duration::from_millis(interval_ms)).await;
+    }
+
+    vin_on_state()
 }
 
 pub fn spawn(
@@ -95,33 +120,46 @@ async fn task(
         warn!("pwr.in:qual failed; keep switch open");
     }
 
-    let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
-    VIN_ON_SIG.signal(vin_on_state.vin_on);
+    VIN_ON_LATEST.store(false, Ordering::Relaxed);
 
+    let initial_status = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
+    let mut vin_on = initial_status.vin_on;
+    VIN_ON_LATEST.store(vin_on, Ordering::Relaxed);
+    VIN_ON_SIG.signal(vin_on);
+
+    let mut telemetry_countdown = 0u8;
     loop {
-        let status = sample_status(
-            &mut ina,
-            &in_pg,
-            shunt_res_ohms,
-            limits,
-            vin_on_state.vin_on,
-        )
-        .await;
-        info!(
-            "pwr.in:stat vin={}V i={}A pg={} vin_on={}",
-            status.vin_v,
-            status.i_a,
-            if status.pg_good { "good" } else { "bad" },
-            if status.vin_on { "true" } else { "false" }
-        );
-        if status.vin_on && !vin_on_state.vin_on {
-            info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
-            VIN_ON_SIG.signal(true);
+        let status = sample_status(&mut ina, &in_pg, shunt_res_ohms, limits).await;
+        if status.vin_on != vin_on {
+            if status.vin_on {
+                info!("pwr.in:vin_on=true vin={}V pg=good", status.vin_v);
+            } else {
+                warn!(
+                    "pwr.in:vin_on=false vin={}V pg={}",
+                    status.vin_v,
+                    if status.pg_good { "good" } else { "bad" }
+                );
+            }
+            vin_on = status.vin_on;
+            VIN_ON_LATEST.store(vin_on, Ordering::Relaxed);
+            VIN_ON_SIG.signal(vin_on);
         }
-        vin_on_state.vin_on |= status.vin_on;
 
-        STATUS_CH.send(status).await;
-        Timer::after(Duration::from_secs(10)).await;
+        if telemetry_countdown == 0 {
+            info!(
+                "pwr.in:stat vin={}V i={}A pg={} vin_on={}",
+                status.vin_v,
+                status.i_a,
+                if status.pg_good { "good" } else { "bad" },
+                if status.vin_on { "true" } else { "false" }
+            );
+            STATUS_CH.send(status).await;
+            telemetry_countdown = 20;
+        } else {
+            telemetry_countdown = telemetry_countdown.saturating_sub(1);
+        }
+
+        Timer::after(Duration::from_millis(500)).await;
     }
 }
 
@@ -130,7 +168,6 @@ async fn sample_status<I2C: I2c>(
     in_pg: &Input<'_>,
     shunt_res_ohms: f32,
     limits: Limits,
-    vin_on_state: bool,
 ) -> Status {
     let vin_v = ina.read_voltage().await as f32;
     let vshunt_v = read_signed_shunt_voltage(ina).await;
@@ -142,7 +179,7 @@ async fn sample_status<I2C: I2c>(
         vin_v,
         i_a,
         pg_good,
-        vin_on: vin_on_state || (pg_good && vin_range_ok),
+        vin_on: pg_good && vin_range_ok,
     }
 }
 

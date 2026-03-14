@@ -2,7 +2,7 @@
 //!
 //! Implements the MVP per docs/software_design.md:
 //! - Boot init: time, GPIO, I2C, basic presence scans
-//! - I2C mux PCA9545A (0x70) split + per-channel device ACK checks (SC8815/SW2303)
+//! - I2C mux PCA9545A (0x70) split + per-channel IP6557 module bring-up deferral
 //! - Front-panel TCA6408A (0x21) presence check
 //! - Power input subsystem MVP: INA226-based input qualification and 10s status log
 
@@ -15,7 +15,7 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
-use esp_hal::gpio::{Input, Level, Output, Pull};
+use esp_hal::gpio::{DriveMode, Input, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
@@ -41,7 +41,7 @@ mod front_panel;
 
 // INA226 is handled inside power_in task
 
-// Use SC8815/SW2303 crates only for their default I2C addresses
+// Legacy SC8815/SW2303 support is kept only for historical fallback code paths.
 use sc8815::registers::constants as sc8815_const;
 use sw2303::registers::constants as sw2303_const;
 use sw2303::registers::{constants as swc, Register as SwReg};
@@ -74,7 +74,7 @@ static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // No per-channel statics; channels are lightweight views over the shared bus
 
-// 各通道初始化完成标志：SC8815 已完成配置、PSTOP 已拉高且 SW2303 在线
+// 各通道初始化完成标志：当前仅在旧子板回退路径中使用。
 static CH_READY0: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY1: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static CH_READY2: Signal<CriticalSectionRawMutex, bool> = Signal::new();
@@ -87,14 +87,13 @@ static CH_RDY: [AtomicBool; 4] = [
     AtomicBool::new(false),
     AtomicBool::new(false),
 ];
-// Scan completion flag per channel (true once initial scan concludes, even if offline)
+// Scan completion flag per channel (true once initial scan concludes, even if module bring-up is deferred)
 static CH_SCAN_DONE: [AtomicBool; 4] = [
     AtomicBool::new(false),
     AtomicBool::new(false),
     AtomicBool::new(false),
     AtomicBool::new(false),
 ];
-
 // （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
 
 // Global target state: open/closed (intent)
@@ -120,23 +119,30 @@ const PIN_I2C_SCL: u8 = 9;
 #[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
 #[allow(dead_code)]
-const PIN_I2C_RESET: u8 = 38; // open-drain, low to reset I2C peripherals
+const PIN_I2C_RESET: u8 = 35; // open-drain, low to reset I2C peripherals
 
 #[allow(dead_code)]
 const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
-// SC8815 PSTOP control lines via MCU-side PSTOP_CTL (board-inverted to module PSTOP)
-// MCU: PSTOP_CTL high -> module PSTOP low (enable)
+// Output module channel enable lines (MCU direct drive, high = enable)
 #[allow(dead_code)]
-const PIN_PSTOP_CTL1: u8 = 17;
+const PIN_EN1: u8 = 17;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL2: u8 = 18;
+const PIN_EN2: u8 = 18;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL3: u8 = 39;
+const PIN_EN3: u8 = 39;
 #[allow(dead_code)]
-const PIN_PSTOP_CTL4: u8 = 40;
+const PIN_EN4: u8 = 40;
+
+// USB channel mux control (CH442E)
+// UCM_DIN: route select, low => connect selected HUB downstream lane to MCU
+// UCM_DCE: CH442E EN#, low => enable mux
+#[allow(dead_code)]
+const PIN_UCM_DIN: u8 = 33;
+#[allow(dead_code)]
+const PIN_UCM_DCE: u8 = 34;
 
 // INA226 shunt value (ohms) from docs: 5 mΩ
 const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
@@ -201,6 +207,10 @@ const SC8815_STATUS_REG_ADDR: u8 = 0x17;
 const SC8815_DETECT_INTERVAL_MS: u64 = 50; // ms between attempts
 const SC8815_DETECT_TOTAL_MS: u64 = 300; // overall grace per channel (faster: 6x50ms)
 const SC8815_DETECT_RETRIES: u8 = (SC8815_DETECT_TOTAL_MS / SC8815_DETECT_INTERVAL_MS) as u8; // 40
+
+fn legacy_sc8815_path_enabled() -> bool {
+    false
+}
 
 fn sc_err_tag<E: core::fmt::Debug>(err: &sc8815::error::Error<E>) -> &'static str {
     use sc8815::error::Error::*;
@@ -404,6 +414,8 @@ const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
 enum UiPortState {
     #[default]
     Initializing,
+    PowerBlocked, // NOVIN
+    Deferred,     // PEND
     Disconnected, // DISC
     Closed,       // OFF
     Overcurrent,  // CC
@@ -566,6 +578,18 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
                     7,
                 );
             }
+            UiPortState::Deferred => {
+                let dash = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+                draw_centered_text(disp, *cx, rows_y[0], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[1], "PEND", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
+            }
+            UiPortState::PowerBlocked => {
+                let dash = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+                draw_centered_text(disp, *cx, rows_y[0], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[1], "NOVIN", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
+            }
             UiPortState::Closed => {
                 // 32x32 OFF icon + label
                 draw_mask_32(disp, *cx - 16, 2, ICON_OFF_32, UI_BORDER);
@@ -622,7 +646,11 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
     for (i, bx) in bar_xs.iter().enumerate() {
         // Outline (hidden for DISC/CLOSED/CC)
         match samples[i].ui_state {
-            UiPortState::Disconnected | UiPortState::Closed | UiPortState::Overcurrent => {}
+            UiPortState::Deferred
+            | UiPortState::PowerBlocked
+            | UiPortState::Disconnected
+            | UiPortState::Closed
+            | UiPortState::Overcurrent => {}
             _ => {
                 let _ = Rectangle::new(Point::new(*bx, bar_y), Size::new(bar_w, bar_h))
                     .into_styled(PrimitiveStyle::with_stroke(UI_BORDER, 1))
@@ -722,17 +750,11 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // I2C reset (use push-pull for MVP), default high (released)
-    let mut i2c_reset = Output::new(
-        p.GPIO38,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    // Briefly assert low then release
-    i2c_reset.set_low();
-    // small blocking delay via timer (1 ms)
+    // Firmware actively asserts the shared RESET# net low first, then releases it as open-drain.
+    let mut i2c_reset = Output::new(p.GPIO35, Level::Low, OutputConfig::default());
     Timer::after(Duration::from_millis(5)).await;
     i2c_reset.set_high();
+    i2c_reset.apply_config(&OutputConfig::default().with_drive_mode(DriveMode::OpenDrain));
     Timer::after(Duration::from_millis(5)).await;
 
     // IN_EN default off
@@ -745,16 +767,19 @@ async fn main(spawner: Spawner) {
 
     // Front-panel INT pin will be initialized only if panel is present.
 
-    // PSTOP_CTL lines default disabled (drive low => board-inverted PSTOP=high -> module disabled)
-    let mut pstop_ctl1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut pstop_ctl4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
+    // EN1~EN4 default disabled (drive low)
+    let mut en1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
+    let mut en4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
     // Keep variables used
-    pstop_ctl1.set_low();
-    pstop_ctl2.set_low();
-    pstop_ctl3.set_low();
-    pstop_ctl4.set_low();
+    en1.set_low();
+    en2.set_low();
+    en3.set_low();
+    en4.set_low();
+
+    // CH442E routing defaults are held by external pulldowns; leave GPIO33/34 high-z
+    // until a higher-level routing policy takes ownership.
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
@@ -890,7 +915,7 @@ async fn main(spawner: Spawner) {
     async fn sw2303_ch0_telemetry_task() {
         info!("sw2303.ch0: task_start");
         // 延后到 VIN_ON 再开始以避免上电早期 I2C read_err 噪声
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch0: vin_on=true; waiting ch0_ready");
         // 再等待通道0完成一次 SC8815+SW2303 初始化，避免在配置之前频繁探测
         let _ = CH_READY0.wait().await;
@@ -1116,8 +1141,142 @@ async fn main(spawner: Spawner) {
     fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6)
         .expect("spawn fan task");
 
+    if !legacy_sc8815_path_enabled() {
+        let mut vin_on = power_in::vin_on_state();
+        if vin_on {
+            info!("i2c.scan:start vin_on=true backend=ip6557");
+        } else {
+            warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
+        }
+        let mut deferred = [false; 4];
+        let mut disc = [false; 4];
+        let mut probe_failures = [0u8; 4];
+        let mut deferred_refresh_countdown = 0u8;
+
+        loop {
+            let vin_on_now = power_in::vin_on_state();
+            if vin_on_now && !vin_on {
+                info!("i2c.scan:start vin_on=true backend=ip6557");
+                deferred_refresh_countdown = 0;
+            } else if !vin_on_now && vin_on {
+                warn!("pwr.in: vin_on=false; keep ip6557 modules disabled");
+                deferred = [false; 4];
+                disc = [false; 4];
+                probe_failures = [0u8; 4];
+                deferred_refresh_countdown = 0;
+            }
+            vin_on = vin_on_now;
+
+            if vin_on {
+                let refresh_deferred = deferred_refresh_countdown == 0;
+                for ch in 0u8..4u8 {
+                    let idx = ch as usize;
+                    if deferred[idx] && !refresh_deferred {
+                        continue;
+                    }
+
+                    let mux_mask = 1u8 << (ch & 0x03);
+                    let mut select_ok = false;
+                    let mut ctrl = [0u8; 1];
+                    for _ in 0..3 {
+                        let mut upstream = I2cDevice::new(bus);
+                        if embedded_hal_async::i2c::I2c::write_read(
+                            &mut upstream,
+                            pca9545::DEFAULT_ADDRESS,
+                            &[mux_mask],
+                            &mut ctrl,
+                        )
+                        .await
+                        .is_ok()
+                            && (ctrl[0] & mux_mask) != 0
+                        {
+                            select_ok = true;
+                            break;
+                        }
+                        Timer::after(Duration::from_millis(20)).await;
+                    }
+
+                    if select_ok {
+                        probe_failures[idx] = 0;
+                        disc[idx] = false;
+                        deferred[idx] = true;
+                        info!("i2c.mux: ch={} select=ok ctrl=0x{:02X}", ch, ctrl[0]);
+                        info!(
+                            "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
+                            ch
+                        );
+                    } else {
+                        probe_failures[idx] = probe_failures[idx].saturating_add(1);
+                        if probe_failures[idx] >= 3 {
+                            if !disc[idx] {
+                                warn!("i2c.mux: ch={} select=err reg=0x{:02X}", ch, mux_mask);
+                            }
+                            deferred[idx] = false;
+                            disc[idx] = true;
+                        }
+                    }
+                }
+                deferred_refresh_countdown = if refresh_deferred {
+                    10
+                } else {
+                    deferred_refresh_countdown.saturating_sub(1)
+                };
+            }
+
+            let mut view: [PortSample; 4] = [
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+                PortSample {
+                    connected: false,
+                    vbus_mv: 0,
+                    ich_ma: 0,
+                    ui_state: UiPortState::Initializing,
+                },
+            ];
+            let target = if PWR_SW_TARGET.load(Ordering::Relaxed) == (PowerSwitchTarget::Open as u8)
+            {
+                PowerSwitchTarget::Open
+            } else {
+                PowerSwitchTarget::Closed
+            };
+            for ch in 0u8..4u8 {
+                let idx = ch as usize;
+                if target == PowerSwitchTarget::Open {
+                    view[idx].ui_state = UiPortState::Closed;
+                } else if !vin_on {
+                    view[idx].ui_state = UiPortState::PowerBlocked;
+                } else if deferred[idx] {
+                    view[idx].ui_state = UiPortState::Deferred;
+                } else if disc[idx] {
+                    view[idx].ui_state = UiPortState::Disconnected;
+                } else {
+                    view[idx].ui_state = UiPortState::Initializing;
+                }
+            }
+            draw_dashboard_frame(&mut disp, &view);
+            let _ = disp.flush().await;
+            Timer::after(Duration::from_millis(500)).await;
+        }
+    }
+
     // Wait for VIN_ON signal before scanning SC8815 modules; fallback to ACK-only scan when false
-    let vin_on = power_in::vin_on_signal().wait().await;
+    let vin_on = power_in::wait_vin_on_state(50, 40).await;
     if !vin_on {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
         let sc_addr = sc8815_const::DEFAULT_ADDRESS;
@@ -1218,7 +1377,7 @@ async fn main(spawner: Spawner) {
                 );
             }
         } else {
-            // Initialize SC8815 per design (keep PSTOP_CTL low until init succeeds)
+            // Initialize SC8815 per design (keep EN low until init succeeds)
             match sc_drv.init().await {
                 Ok(()) => {
                     sc_init_ok = true;
@@ -1254,17 +1413,8 @@ async fn main(spawner: Spawner) {
 
                 // Skip ratio readback during init
 
-                // no-op
+                // Configure SC8815 first while the downstream board gate stays disabled.
                 if sc_startup_ok {
-                    match ch {
-                        0 => pstop_ctl1.set_high(),
-                        1 => pstop_ctl2.set_high(),
-                        2 => pstop_ctl3.set_high(),
-                        3 => pstop_ctl4.set_high(),
-                        _ => {}
-                    }
-                    Timer::after(Duration::from_millis(5)).await;
-                    // After PSTOP is HIGH per datasheet: set FB/refs in internal mode, then start ADC
                     if let Err(e) = sc_drv.set_vbus_external_reference(615).await {
                         warn!("pwr.sc8815: ch={} vbus_set_err={}", ch, sc_err_tag(&e));
                         sc_startup_ok = false;
@@ -1277,9 +1427,22 @@ async fn main(spawner: Spawner) {
                         warn!("pwr.sc8815: ch={} otg_err={}", ch, sc_err_tag(&e));
                         sc_startup_ok = false;
                     }
+                }
+
+                if sc_startup_ok {
+                    match ch {
+                        0 => en1.set_high(),
+                        1 => en2.set_high(),
+                        2 => en3.set_high(),
+                        3 => en4.set_high(),
+                        _ => {}
+                    }
+                    Timer::after(Duration::from_millis(5)).await;
+                }
+                if sc_startup_ok {
                     {
                         use sc8815::registers::Register as ScReg;
-                        // Post-PSTOP, read-only verification of key registers and ADC raw
+                        // Post-EN, read-only verification of key registers and ADC raw
                         let ctrl1 = sc_drv.read_register(ScReg::Ctrl1Set).await.ok();
                         let ctrl0 = sc_drv.read_register(ScReg::Ctrl0Set).await.ok();
                         let ctrl3 = sc_drv.read_register(ScReg::Ctrl3Set).await.ok();
@@ -1576,10 +1739,10 @@ async fn main(spawner: Spawner) {
         // 按新策略：只要 SW2303 不在线也要关闭该通道功率级
         if !sc_ok || (!sw_ok && !ALLOW_SC8815_WITHOUT_SW2303) {
             match ch {
-                0 => pstop_ctl1.set_low(),
-                1 => pstop_ctl2.set_low(),
-                2 => pstop_ctl3.set_low(),
-                3 => pstop_ctl4.set_low(),
+                0 => en1.set_low(),
+                1 => en2.set_low(),
+                2 => en3.set_low(),
+                3 => en4.set_low(),
                 _ => {}
             }
         }
@@ -1595,7 +1758,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch1_telemetry_task() {
         info!("sw2303.ch1: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch1: vin_on=true; waiting ch1_ready");
         let _ = CH_READY1.wait().await;
         info!("sw2303.ch1: ch1_ready=true; start telemetry");
@@ -1658,7 +1821,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch2_telemetry_task() {
         info!("sw2303.ch2: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch2: vin_on=true; waiting ch2_ready");
         let _ = CH_READY2.wait().await;
         info!("sw2303.ch2: ch2_ready=true; start telemetry");
@@ -1685,7 +1848,7 @@ async fn main(spawner: Spawner) {
     #[embassy_executor::task]
     async fn sw2303_ch3_telemetry_task() {
         info!("sw2303.ch3: task_start");
-        let _ = power_in::vin_on_signal().wait().await;
+        power_in::wait_until_vin_on().await;
         info!("sw2303.ch3: vin_on=true; waiting ch3_ready");
         let _ = CH_READY3.wait().await;
         info!("sw2303.ch3: ch3_ready=true; start telemetry");

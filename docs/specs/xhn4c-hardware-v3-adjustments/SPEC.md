@@ -2,9 +2,9 @@
 
 ## 状态
 
-- Status: 待设计
+- Status: 部分完成（2/3）
 - Created: 2026-02-25
-- Last: 2026-02-25
+- Last: 2026-03-14
 
 ## 背景 / 问题陈述
 
@@ -67,7 +67,7 @@
 
 - 收到 V3 硬件变更输入（原理图/BOM/连线说明）后，整理成结构化差异表。
 - 基于差异表生成固件改动计划与验收项，形成可执行里程碑。
-- 由主人确认后，将状态从 `待设计` 切换到 `待实现` 并进入实现流程。
+- 基于已冻结的 V3 差异，完成固件引脚与文档更新，并在进入台架验证前保留可审阅证据。
 
 ### Edge cases / errors
 
@@ -121,9 +121,29 @@ None
 
 ## 实现里程碑（Milestones / Delivery checklist）
 
-- [ ] M1: 冻结 V2 -> V3 硬件差异表并完成主人确认。
-- [ ] M2: 完成受影响模块的固件改动与本地质量检查（fmt/clippy/check/build）。
+- [x] M1: 冻结 V2 -> V3 硬件差异表并完成主人确认。
+- [x] M2: 完成受影响模块的固件改动与本地质量检查（fmt/clippy/check/build）。
 - [ ] M3: 完成台架验证与文档同步，达到本地 PR-ready。
+
+## 当前实现与证据（Implementation snapshot）
+
+- 已落地的 V3 适配：
+  - `GPIO35` 作为 I2C 复位脚；
+  - `GPIO17/18/39/40` 切换为 `EN1..EN4` 高有效输出模块控制；
+  - `GPIO33/34` 分配给 `UCM_DIN/UCM_DCE`，用于 CH442E USB 通道路由；
+  - 前面板五向开关维持 `TCA6408A@0x21`，并补充主板 `TCA6408A@0x20`（`PWREN#/OVCUR#`）文档与网表证据。
+- 已同步的文档：
+  - `docs/esp32-s3fh4r2_gpio_assignment_guide.md`
+  - `docs/hardware_connection_overview.md`
+  - `docs/power_management_and_startup_control.md`
+  - `docs/software_design.md`
+  - `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`
+- 本地验证证据：
+  - `source ~/export-esp.sh && cargo +esp check`
+  - `source ~/export-esp.sh && cargo +esp build --release`
+- 尚未完成：
+  - 台架上电验证；
+  - 串口日志对照 `front_panel`/I2C 设备发现结果的现场证据。
 
 ## 方案概述（Approach, high-level）
 
@@ -146,9 +166,11 @@ None
 ## 变更记录（Change log）
 
 - 2026-02-25: 新建 V3 硬件调整计划规格。
+- 2026-03-14: 同步 V3 网表证据与固件引脚映射，完成本地 `cargo +esp check` / `cargo +esp build --release`，状态更新为 `部分完成（2/3）`。
 
 ## 参考（References）
 
 - `docs/hardware_connection_overview.md`
+- `docs/plan/j6nvw-hw-v3-pin-assignment/hardware_v3_pin_assignment.md`
 - `docs/software_design.md`
 - `AGENTS.md`

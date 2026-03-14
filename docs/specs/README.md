@@ -27,4 +27,4 @@
 
 |ID|Title|Status|Spec|Last|Notes|
 |---:|---|---|---|---|---|
-|xhn4c|硬件 V3 调整与固件适配计划|待设计|`xhn4c-hardware-v3-adjustments/SPEC.md`|2026-02-25|新建|
+|xhn4c|硬件 V3 调整与固件适配计划|部分完成（2/3）|`xhn4c-hardware-v3-adjustments/SPEC.md`|2026-03-14|已完成本地构建验证，待台架验证|

@@ -107,14 +107,14 @@ async fn handle_read_and_log<I2C: I2c>(i2c: &mut I2C, last_inputs: &mut u8) {
 
 #[inline]
 fn dir_name(bit: u8) -> &'static str {
-    // Mapping confirmed by test order: 上(Up), 下(Down), 左(Left), 右(Right), 中(Center)
-    // Sequence observed: P2, P4, P1, P3, P0
+    // V3 front-panel netlist mapping:
+    // P0=center, P1=right, P2=down, P3=left, P4=up
     match bit {
         0 => "center",
-        1 => "left",
-        2 => "up",
-        3 => "right",
-        4 => "down",
+        1 => "right",
+        2 => "down",
+        3 => "left",
+        4 => "up",
         _ => "p?",
     }
 }

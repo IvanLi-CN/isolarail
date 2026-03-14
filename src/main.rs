@@ -422,6 +422,7 @@ const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
 enum UiPortState {
     #[default]
     Initializing,
+    PowerBlocked, // NOVIN
     Deferred,     // PEND
     Disconnected, // DISC
     Closed,       // OFF
@@ -591,6 +592,12 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
                 draw_centered_text(disp, *cx, rows_y[1], "PEND", dash, 7);
                 draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
             }
+            UiPortState::PowerBlocked => {
+                let dash = MonoTextStyle::new(&FONT_7X13_BOLD, UI_BORDER);
+                draw_centered_text(disp, *cx, rows_y[0], "--", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[1], "NOVIN", dash, 7);
+                draw_centered_text(disp, *cx, rows_y[2], "--", dash, 7);
+            }
             UiPortState::Closed => {
                 // 32x32 OFF icon + label
                 draw_mask_32(disp, *cx - 16, 2, ICON_OFF_32, UI_BORDER);
@@ -648,6 +655,7 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
         // Outline (hidden for DISC/CLOSED/CC)
         match samples[i].ui_state {
             UiPortState::Deferred
+            | UiPortState::PowerBlocked
             | UiPortState::Disconnected
             | UiPortState::Closed
             | UiPortState::Overcurrent => {}
@@ -1151,12 +1159,35 @@ async fn main(spawner: Spawner) {
 
         for ch in 0u8..4u8 {
             let mux_mask = 1u8 << (ch & 0x03);
-            info!("i2c.mux: ch={} select=deferred reg=0x{:02X}", ch, mux_mask);
-            info!(
-                "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
-                ch
-            );
-            CH_DEFERRED[ch as usize].store(true, Ordering::Relaxed);
+            let mut ctrl = [0u8; 1];
+            let mut upstream = I2cDevice::new(bus);
+            let select_ok = embedded_hal_async::i2c::I2c::write_read(
+                &mut upstream,
+                pca9545::DEFAULT_ADDRESS,
+                &[mux_mask],
+                &mut ctrl,
+            )
+            .await
+            .is_ok()
+                && (ctrl[0] & mux_mask) != 0;
+            if select_ok {
+                info!("i2c.mux: ch={} select=ok ctrl=0x{:02X}", ch, ctrl[0]);
+                if vin_on {
+                    info!(
+                        "pwr.mod: ch={} backend=ip6557 init=deferred reason=\"bringup-pending\"",
+                        ch
+                    );
+                    CH_DEFERRED[ch as usize].store(true, Ordering::Relaxed);
+                } else {
+                    warn!(
+                        "pwr.mod: ch={} backend=ip6557 power_blocked=true reason=\"vin-not-ready\"",
+                        ch
+                    );
+                }
+            } else {
+                warn!("i2c.mux: ch={} select=err reg=0x{:02X}", ch, mux_mask);
+                CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
+            }
         }
 
         loop {
@@ -1196,6 +1227,8 @@ async fn main(spawner: Spawner) {
                 let idx = ch as usize;
                 if target == PowerSwitchTarget::Open {
                     view[idx].ui_state = UiPortState::Closed;
+                } else if !vin_on {
+                    view[idx].ui_state = UiPortState::PowerBlocked;
                 } else if CH_DEFERRED[idx].load(Ordering::Relaxed) {
                     view[idx].ui_state = UiPortState::Deferred;
                 } else if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {

@@ -77,7 +77,8 @@
 4) 当前 V3 项目口径只保留 IP6557 子板：
    - 每路子板的已确认器件为 `IP6557 + INA226 + TMP112`；
    - 当前固件分支尚未实现该子板的专用寄存器初始化/遥测；
-   - 在 dedicated bring-up 任务落地前，模块侧流程只做通道选择与状态登记，保持 `EN1..EN4` 为低电平，不再尝试历史子板方案的探测流程。
+   - 在 dedicated bring-up 任务落地前，模块侧流程至少保留 `PCA9545A` 的通道选择/读回探测；`EN1..EN4` 保持低电平，不再尝试历史子板方案的探测流程；
+   - 只有在 `vin_on == true` 且 mux 探测成功后，UI 才显示 `bringup-pending`；若输入电源未就绪，应显示显式的电源阻断状态。
 
 实现参考的伪代码（仅示意，非约束）：
 
@@ -97,10 +98,11 @@ for ch in mux.channels():               // VIN 确认后再处理模块侧
 
 - 当前项目文档只维护 IP6557 子板口径，不再混入历史子板方案描述。
 - 当前分支对四路模块的行为：
-  1) 通过 PCA9545A 选择对应通道；
-  2) 记录模块侧 bring-up 尚未完成：`pwr.mod: ch=X backend=ip6557 init=deferred reason="bringup-pending"`；
-  3) 保持 `ENx` 为低电平，防止在驱动与保护策略未完成前误上电；
-  4) UI 侧将该通道视为“已扫描但未接管”。
+  1) 通过 PCA9545A 对对应通道做最小化选择/读回探测；
+  2) 若 `vin_on == true` 且 mux 探测成功，则记录模块侧 bring-up 尚未完成：`pwr.mod: ch=X backend=ip6557 init=deferred reason="bringup-pending"`；
+  3) 若 `vin_on == false`，记录 `power_blocked=true reason="vin-not-ready"`，UI 不得伪装成模块已进入 bring-up 阶段；
+  4) 保持 `ENx` 为低电平，防止在驱动与保护策略未完成前误上电；
+  5) 只有 mux 探测失败时，才把该通道映射为 `Disconnected/Error`。
 - dedicated bring-up 任务应覆盖：
   - IP6557 输出策略与保护寄存器初始化；
   - 子板 INA226/TMP112 的地址确认、遥测采样与异常告警；

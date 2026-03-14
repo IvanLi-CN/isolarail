@@ -12,7 +12,7 @@
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use defmt::{error, info, warn};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::{with_timeout, Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::gpio::{Input, Level, Output, Pull};
@@ -701,7 +701,7 @@ fn draw_boot_self_check_frame<D: embedded_graphics::draw_target::DrawTarget<Colo
     let ok_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_W_GREEN);
     let warn_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_V_YELLOW);
     let err_style = MonoTextStyle::new(&FONT_7X13_BOLD, UI_I_RED);
-    let rows = [2i32, 14, 26, 38];
+    let rows = [14i32, 23, 32, 41];
 
     draw_centered_text(
         disp,
@@ -1236,12 +1236,18 @@ async fn main(spawner: Spawner) {
     }
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
-    let fan_spawn_result = if power_boot.ready {
-        fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).ok()
+    let fan_ready = if power_boot.ready {
+        if fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
+            with_timeout(Duration::from_millis(500), fan::bootstrap_signal().wait())
+                .await
+                .is_ok()
+        } else {
+            false
+        }
     } else {
-        None
+        false
     };
-    if power_boot.ready && fan_spawn_result.is_some() {
+    if power_boot.ready && fan_ready {
         info!("boot.check: name=fan state=ok fault=-");
         boot_snapshot.set_sys(SysCheck::Fan, SelfCheckItemState::Ok, BootFaultCode::None);
     } else if power_boot.ready {
@@ -1831,7 +1837,7 @@ async fn main(spawner: Spawner) {
     info!("boot.stage: stage=runtime");
 
     // 仅在扫描完成后再启动 SW2303 遥测，避免早期干扰
-    if boot_snapshot.gates.allow_runtime_tasks {
+    if boot_snapshot.gates.allow_runtime_tasks && boot_snapshot.gates.allow_port[0] {
         info!("sw2303.ch0: spawn");
         spawner
             .spawn(sw2303_ch0_telemetry_task())
@@ -1898,7 +1904,7 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    if boot_snapshot.gates.allow_runtime_tasks {
+    if boot_snapshot.gates.allow_runtime_tasks && boot_snapshot.gates.allow_port[1] {
         spawner
             .spawn(sw2303_ch1_telemetry_task())
             .expect("spawn sw2303_ch1_telemetry_task");
@@ -1927,7 +1933,7 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    if boot_snapshot.gates.allow_runtime_tasks {
+    if boot_snapshot.gates.allow_runtime_tasks && boot_snapshot.gates.allow_port[2] {
         spawner
             .spawn(sw2303_ch2_telemetry_task())
             .expect("spawn sw2303_ch2_telemetry_task");
@@ -1956,7 +1962,7 @@ async fn main(spawner: Spawner) {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-    if boot_snapshot.gates.allow_runtime_tasks {
+    if boot_snapshot.gates.allow_runtime_tasks && boot_snapshot.gates.allow_port[3] {
         spawner
             .spawn(sw2303_ch3_telemetry_task())
             .expect("spawn sw2303_ch3_telemetry_task");

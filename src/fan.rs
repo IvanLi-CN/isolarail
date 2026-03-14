@@ -1,5 +1,7 @@
 use defmt::info;
 use embassy_executor::{task, SpawnError, Spawner};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, Pull};
 use esp_hal::ledc::channel::ChannelIFace;
@@ -59,6 +61,12 @@ const TEMP_FORCE_FULL_C: f32 = 80.0; // safety: 强制满速阈值
 const TSENS_ADC_FACTOR: f32 = 0.4386;
 const TSENS_DAC_FACTOR: f32 = 27.88;
 const TSENS_SYS_OFFSET: f32 = 20.52;
+
+static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+
+pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
+    &BOOTSTRAP_SIG
+}
 
 pub fn spawn(
     spawner: &Spawner,
@@ -202,6 +210,9 @@ async fn task(
             r6,
         );
     }
+
+    // Report that the fan control chain reached its initial hardware-ready point.
+    BOOTSTRAP_SIG.signal(true);
 
     // Temperature EMA & sampling heartbeats
     let mut ema_temp: Option<f32> = None;

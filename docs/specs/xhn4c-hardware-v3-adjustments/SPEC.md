@@ -1,11 +1,5 @@
 # 硬件 V3 调整与固件适配计划（#xhn4c）
 
-## 状态
-
-- Status: 部分完成（2/3）
-- Created: 2026-02-25
-- Last: 2026-03-14
-
 ## 背景 / 问题陈述
 
 - 现有文档与固件实现基于“硬件 V2”假设（见 `docs/hardware_connection_overview.md`、`docs/software_design.md`）。
@@ -164,15 +158,6 @@ None
 - 假设（需主人确认）：
   - 假设当前仍以 ESP32-S3 为主控与 Embassy 异步框架。
   - 假设暂不改动 CI/workflow，仅聚焦固件与文档适配。
-
-## 变更记录（Change log）
-
-- 2026-02-25: 新建 V3 硬件调整计划规格。
-- 2026-03-14: 同步 V3 网表证据与固件引脚映射，完成本地 `cargo +esp check` / `cargo +esp build --release`，状态更新为 `部分完成（2/3）`。
-- 2026-03-14: 根据 PR 阶段 review-loop 修正文档保留引脚与 `I2C_RESET` 开漏释放语义。
-- 2026-03-14: 根据 fresh review-proof 修正上电时序，确保 `RESET#` 先低后释放、`ENx` 在 SC8815 配置成功后再使能。
-- 2026-03-14: 清理历史计划文档中的旧版 `GPIO38` 说明，统一为当前 `GPIO35` 的 bring-up 口径。
-- 2026-03-14: 对齐 `GPIO45/46` 封装引脚编号，并把质量门槛与 `GPIO35` 复位时序更新为当前可验证实现。
 
 ## 参考（References）
 

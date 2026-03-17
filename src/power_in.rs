@@ -120,6 +120,7 @@ pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, BootstrapS
     &BOOTSTRAP_SIG
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn(
     spawner: &Spawner,
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,

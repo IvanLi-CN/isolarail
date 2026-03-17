@@ -7,7 +7,10 @@ use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c::I2c;
+use esp_hal::analog::adc::{Adc, AdcCalLine, AdcPin};
 use esp_hal::gpio::{Input, Output};
+use esp_hal::peripherals::{ADC1, GPIO4};
+use esp_hal::Blocking;
 use ina226_tp as ina226;
 
 use crate::boot_diag::{BootFaultCode, SelfCheckItemState};
@@ -16,8 +19,11 @@ use crate::I2cBus;
 const INA226_ADDR: u8 = 0x44;
 // INA226 shunt voltage LSB = 2.5 uV per datasheet and crate constants.
 const INA226_SHUNT_LSB_V: f32 = 2.5e-6;
+const VIN_ADC_DIVIDER_RATIO: f32 = 11.0;
 
 pub type InaOp<'a, I2C> = ina226::INA226<&'a mut I2C, ina226::Operational>;
+pub type VinAdc = Adc<'static, ADC1<'static>, Blocking>;
+pub type VinAdcPin = AdcPin<GPIO4<'static>, ADC1<'static>, AdcCalLine<ADC1<'static>>>;
 
 #[derive(Copy, Clone)]
 pub struct Limits {
@@ -57,10 +63,55 @@ static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
 static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, BootstrapStatus> = Signal::new();
 
+fn pin_level_label(is_high: bool) -> &'static str {
+    if is_high {
+        "high"
+    } else {
+        "low"
+    }
+}
+
+fn pg_label(is_good: bool) -> &'static str {
+    if is_good {
+        "good"
+    } else {
+        "bad"
+    }
+}
+
+fn log_input_command(
+    phase: &'static str,
+    in_en: &Output<'_>,
+    in_pg: &Input<'_>,
+    vin_adc_mv: Option<u16>,
+) {
+    match vin_adc_mv {
+        Some(adc_mv) => info!(
+            "pwr.in:cmd phase={} in_en={} pg={} vin_adc={}mV vin_est={}V",
+            phase,
+            pin_level_label(in_en.is_set_high()),
+            pg_label(in_pg.is_high()),
+            adc_mv,
+            adc_mv as f32 / 1000.0 * VIN_ADC_DIVIDER_RATIO
+        ),
+        None => info!(
+            "pwr.in:cmd phase={} in_en={} pg={} vin_adc=n/a",
+            phase,
+            pin_level_label(in_en.is_set_high()),
+            pg_label(in_pg.is_high())
+        ),
+    }
+}
+
+fn read_vin_adc_mv(adc: &mut VinAdc, pin: &mut VinAdcPin) -> Option<u16> {
+    nb::block!(adc.read_oneshot(pin)).ok()
+}
+
 pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8> {
     STATUS_CH.receiver()
 }
 
+#[allow(dead_code)]
 pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &VIN_ON_SIG
 }
@@ -74,10 +125,20 @@ pub fn spawn(
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
     in_en: Output<'static>,
     in_pg: Input<'static>,
+    vin_adc: VinAdc,
+    vin_adc_pin: VinAdcPin,
     shunt_res_ohms: f32,
     limits: Limits,
 ) -> Result<(), SpawnError> {
-    spawner.spawn(task(bus, in_en, in_pg, shunt_res_ohms, limits))
+    spawner.spawn(task(
+        bus,
+        in_en,
+        in_pg,
+        vin_adc,
+        vin_adc_pin,
+        shunt_res_ohms,
+        limits,
+    ))
 }
 
 #[task]
@@ -85,11 +146,19 @@ async fn task(
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
     mut in_en: Output<'static>,
     in_pg: Input<'static>,
+    mut vin_adc: VinAdc,
+    mut vin_adc_pin: VinAdcPin,
     shunt_res_ohms: f32,
     limits: Limits,
 ) {
     // Ensure power path is held open until qualification passes.
     in_en.set_low();
+    log_input_command(
+        "hold-open",
+        &in_en,
+        &in_pg,
+        read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
+    );
 
     let mut i2c = I2cDevice::new(bus);
     let mut dev = ina226::INA226::new(None);
@@ -125,6 +194,12 @@ async fn task(
     let qualified = qualify_startup(&mut ina, shunt_res_ohms, limits).await;
     if !qualified {
         in_en.set_low();
+        log_input_command(
+            "qual-failed",
+            &in_en,
+            &in_pg,
+            read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
+        );
         warn!("pwr.in:qual failed; keep switch open");
         let status = sample_status(&mut ina, &in_pg, shunt_res_ohms, limits, false).await;
         BOOTSTRAP_SIG.signal(BootstrapStatus {
@@ -148,10 +223,29 @@ async fn task(
     }
 
     in_en.set_high();
+    log_input_command(
+        "drive-high",
+        &in_en,
+        &in_pg,
+        read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
+    );
+    Timer::after(Duration::from_millis(10)).await;
+    log_input_command(
+        "settle",
+        &in_en,
+        &in_pg,
+        read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
+    );
 
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
     if !vin_on_state.vin_on {
         in_en.set_low();
+        log_input_command(
+            "pg-timeout-open",
+            &in_en,
+            &in_pg,
+            read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
+        );
     }
     let bootstrap = if vin_on_state.vin_on {
         BootstrapStatus {

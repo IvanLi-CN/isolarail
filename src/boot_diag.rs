@@ -32,17 +32,14 @@ pub enum BootOutcome {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Format)]
 pub enum BootFaultCode {
     None,
-    MuxOffline,
     PowerInUnavailable,
     PowerInPgBad,
     InaUnavailable,
     FrontPanelOffline,
     FanUnavailable,
-    PortPairMismatch(u8),
-    PortScOffline(u8),
-    PortSwOffline(u8),
-    PortVbusTimeout(u8),
-    PortProtectionLatched(u8),
+    PortModuleOffline(u8),
+    PortInaOffline(u8),
+    PortTempOffline(u8),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -166,17 +163,14 @@ impl BootSelfCheckSnapshot {
 pub fn fault_label(fault: BootFaultCode) -> &'static str {
     match fault {
         BootFaultCode::None => "-",
-        BootFaultCode::MuxOffline => "MUX OFF",
         BootFaultCode::PowerInUnavailable => "VIN OFF",
         BootFaultCode::PowerInPgBad => "PG BAD",
         BootFaultCode::InaUnavailable => "INA OFF",
         BootFaultCode::FrontPanelOffline => "PANEL",
         BootFaultCode::FanUnavailable => "FAN",
-        BootFaultCode::PortPairMismatch(_) => "PAIR",
-        BootFaultCode::PortScOffline(_) => "SC OFF",
-        BootFaultCode::PortSwOffline(_) => "SW OFF",
-        BootFaultCode::PortVbusTimeout(_) => "VBUS",
-        BootFaultCode::PortProtectionLatched(_) => "PROT",
+        BootFaultCode::PortModuleOffline(_) => "MOD OFF",
+        BootFaultCode::PortInaOffline(_) => "INA OFF",
+        BootFaultCode::PortTempOffline(_) => "TMP OFF",
     }
 }
 

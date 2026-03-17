@@ -2,9 +2,9 @@
 
 ## 状态
 
-- Status: 部分完成（3/4）
+- Status: 已完成
 - Created: 2026-03-14
-- Last: 2026-03-14
+- Last: 2026-03-17
 
 ## 背景 / 问题陈述
 
@@ -45,10 +45,10 @@
 ### MUST
 
 - 启动期关键检查必须输出 `boot.stage:*`、`boot.check:*`、`boot.summary:*` 日志。
-- `PCA9545A` 缺失时不得再直接 `panic!`；应记录 `MuxOffline` 并禁用所有下游端口初始化。
 - 输入电源链路异常时必须保持 `IN_EN` 关闭，并停留在 fatal 自检页。
 - 前面板缺失时不得阻断 dashboard 与其余链路运行。
-- 单路 `SC8815/SW2303` 异常时只能关闭该路功率级，不连坐其它路。
+- 当前直连 I²C 板型下，端口自检失败只记录诊断，不得单独阻断该路输出；只要总输入 `OK`，自检完成后统一放行 `EN1..EN4`。
+- boot self-check 必须保留 `mux` 槽位，以兼容后续硬件版本恢复 `PCA9545A`。
 
 ### SHOULD
 
@@ -64,17 +64,17 @@
 ### Core flows
 
 - 固件初始化时先建立显示与基础 GPIO，再进入 `Self-Check` 阶段。
-- `Self-Check` 固定顺序为：MUX -> VIN/INA226 -> Front Panel -> Fan -> 4 路端口。
+- `Self-Check` 固定顺序为：I²C 拓扑 -> VIN/INA226 -> Front Panel -> Fan -> 4 路端口。
 - 通过 `GateDecision` 决定是否放行 runtime task、front panel 和各端口。
 - `BootOutcome=Fatal` 时常驻自检页；`BootOutcome=Degraded` 时展示摘要后进入 dashboard；`BootOutcome=Ok` 时直接切换 dashboard。
 
 ### Edge cases / errors
 
-- MUX 离线：标记系统项 `Err/MuxOffline`，四路端口全部 `Skipped`，PSTOP 保持关闭。
+- 当前板型无 `PCA9545A`：记录 `boot.check: name=mux state=skip fault=-`，端口扫描继续进行。
 - VIN 不可用或 PG 不良：标记系统项 `Fatal`，不进入端口初始化，不放行 runtime。
 - Front panel 离线：标记 `Warn/FrontPanelOffline`，只禁用 panel 功能。
-- 单路端口 `VBUS ready` 超时、SC/SW 缺失或配对异常：标记对应端口 `Err`，并关闭该路 PSTOP。
-- 明确的端口保护粘滞：标记该路 `Fatal`，整机停留在 fatal 自检页。
+- 单路端口若 `INA226`/`TMP112` 缺失：标记对应端口 `Err`，但只影响诊断与该路运行期测量，不阻断统一输出放行。
+- 端口自检以“存在性与可诊断性优先”为准，不再依赖旧的 `SC8815/SW2303` 初始化链路。
 
 ## 接口契约（Interfaces & Contracts）
 
@@ -92,16 +92,17 @@ None
 ## 验收标准（Acceptance Criteria）
 
 - Given 板子正常上电，When 固件启动，Then LCD 先显示自检页，串口输出 `boot.stage:*` 与 `boot.check:*`，最终输出 `boot.summary: outcome=OK|DEG` 并进入 dashboard。
-- Given `PCA9545A` 缺失，When 固件启动，Then 不发生启动 `panic!`，LCD 与日志都显示 `MuxOffline`，四路端口保持关闭。
+- Given 当前直连 I²C 板型，When 固件启动，Then 日志记录 `boot.check: name=mux state=skip fault=-`，且端口扫描继续进行。
 - Given 前面板 `TCA6408A` 缺失，When 固件启动，Then front panel 功能被禁用，但 dashboard 仍可运行。
-- Given 单路 SC/SW 异常或 `VBUS ready` 超时，When 固件启动，Then 仅该路被门控关闭，其余路按结果继续运行。
+- Given 单路输出模块缺少 `INA226` 或 `TMP112`，When 固件启动且总输入 `OK`，Then 该路记为 `Err`，但 `EN1..EN4` 仍在自检结束后统一放行。
 - Given 输入电源资格失败或 PG 不良，When 固件启动，Then `IN_EN` 保持关闭且 LCD 常驻 fatal 自检页。
+- Given 当前验证基线中的通道 4 模块接入，When 固件启动，Then 端口 4 按 `INA226@0x43 + TMP112@0x4B` 识别并可报告 `boot.check: name=port4 state=ok fault=-`。
 
 ## 实现前置条件（Definition of Ready / Preconditions）
 
 - 目标、非目标、范围与 fatal/degraded 判据已冻结。
 - 关键内部接口与自检口径已在本 SPEC 确定。
-- 验收标准覆盖正常启动、MUX 离线、VIN 异常、front panel 离线、单路异常几种核心场景。
+- 验收标准覆盖正常启动、直连 I²C 拓扑、VIN 异常、front panel 离线、单路异常几种核心场景。
 
 ## 非功能性验收 / 质量门槛（Quality Gates）
 
@@ -141,26 +142,22 @@ None
 ## 实现里程碑（Milestones / Delivery checklist）
 
 - [x] M1: 落地 boot self-check 状态模型、阶段日志与门控框架
-- [x] M2: 启动流程改为降级而非 panic，并补齐 VIN/MUX/front panel/port 判定
+- [x] M2: 启动流程改为降级而非 panic，并补齐 VIN/topology/front panel/port 判定
 - [x] M3: 落地 LCD boot self-check 摘要页与 degraded/fatal 切换行为
-- [ ] M4: 更新软件设计文档并完成构建/真机验证证据
+- [x] M4: 更新设计文档，并完成构建与真机验证证据
 
 ## 方案概述（Approach, high-level）
 
 - 参考 `mains-aegis/docs/boot-self-test-flow.md` 的“默认只读探测 + 非紧急不乱改输出 + 紧急才阻断”方法，但只保留本仓库所需的最小实现。
 - 用统一 `BootSelfCheckSnapshot` 驱动日志、自检页和启动后门控，避免每个模块各说各话。
 - 用最小的两页轮转自检 UI 承载系统项和端口项，不新增复杂交互。
+- 当前板型按直连共享 I²C 实现；后续若恢复 `PCA9545A`，在保留 `mux` 槽位的前提下切回真实 MUX 探测与门控。
 
 ## 风险 / 开放问题 / 假设（Risks, Open Questions, Assumptions）
 
-- 风险：现有监视工具可能仍会错过启动瞬间日志，因此需要依赖固件自身 LCD 摘要页兜底。
+- 风险：当前工程验证阶段并非所有可选硬件都会接入，因此端口 `Err` 需要结合开发笔记解释，不能直接等同于硬件故障。
 - 需要决策的问题：None
-- 假设（需主人确认）：当前可观测的 fatal 条件以输入电源不安全和端口保护粘滞为主。
-
-## 变更记录（Change log）
-
-- 2026-03-14: 初版规格，冻结 boot self-check 与分级降级方案。
-- 2026-03-14: 启动状态机、boot self-check 页、输入电源 bootstrap 结果上报与门控框架已落地，等待真机证据补齐。
+- 假设（需主人确认）：当前可观测的 fatal 条件以输入电源不安全为主；单路输出模块缺失传感器按 degraded 处理；总输入 `OK` 时统一放行各路输出。
 
 ## 参考（References）
 

@@ -65,5 +65,5 @@
 |    ID | Title      | Status    | Spec                                     | Last       | Notes  |
 |------:|------------|-----------|------------------------------------------|------------|--------|
 | k3p8m | 示例：新增工作项规格 | 待设计       | `k3p8m-example-spec/SPEC.md`             | YYYY-MM-DD | -      |
-| 5f74j | 固件健壮化与开机自检 | 部分完成（3/4） | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-14 | 待补真机证据 |
+| 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
 <!-- markdownlint-enable MD060 -->

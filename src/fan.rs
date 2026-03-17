@@ -1,5 +1,7 @@
 use defmt::info;
 use embassy_executor::{task, SpawnError, Spawner};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, Pull};
 use esp_hal::ledc::channel::ChannelIFace;
@@ -60,6 +62,16 @@ const TSENS_ADC_FACTOR: f32 = 0.4386;
 const TSENS_DAC_FACTOR: f32 = 27.88;
 const TSENS_SYS_OFFSET: f32 = 20.52;
 
+static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+
+pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
+    &BOOTSTRAP_SIG
+}
+
+fn fail_bootstrap() {
+    BOOTSTRAP_SIG.signal(false);
+}
+
 pub fn spawn(
     spawner: &Spawner,
     ledc: esp_hal::peripherals::LEDC<'static>,
@@ -98,11 +110,17 @@ async fn task(
         .is_err()
     {
         // Fallback: 10 kHz @ 13-bit (always valid)
-        let _ = lst.configure(timer::config::Config {
-            duty: timer::config::Duty::Duty13Bit,
-            clock_source: timer::LSClockSource::APBClk,
-            frequency: Rate::from_khz(10),
-        });
+        if lst
+            .configure(timer::config::Config {
+                duty: timer::config::Duty::Duty13Bit,
+                clock_source: timer::LSClockSource::APBClk,
+                frequency: Rate::from_khz(10),
+            })
+            .is_err()
+        {
+            fail_bootstrap();
+            return;
+        }
     }
     info!(
         "fan.pwm: timer cfg ok freq={}Hz duty_bits={}",
@@ -112,11 +130,17 @@ async fn task(
 
     // Create channel on GPIO1（DC 调速：需要推挽输出，给 LDO/PWM 控制脚提供完整电平）
     let mut ch0 = ledc.channel(channel::Number::Channel0, pwm_pin);
-    let _ = ch0.configure(channel::config::Config {
-        timer: &lst,
-        duty_pct: 0,
-        pin_config: channel::config::PinConfig::PushPull,
-    });
+    if ch0
+        .configure(channel::config::Config {
+            timer: &lst,
+            duty_pct: 0,
+            pin_config: channel::config::PinConfig::PushPull,
+        })
+        .is_err()
+    {
+        fail_bootstrap();
+        return;
+    }
     info!("fan.pwm: ch0 cfg ok on GPIO1 (push-pull)");
 
     // PCNT tachometer setup on Unit0/Channel0, count rising edges
@@ -125,10 +149,15 @@ async fn task(
     let tach_in = tach_gpio.peripheral_input();
     let pcnt = Pcnt::new(pcnt_dev);
     let u0 = &pcnt.unit0;
-    u0.set_low_limit(Some(-32_000)).ok();
-    u0.set_high_limit(Some(32_000)).ok();
+    if u0.set_low_limit(Some(-32_000)).is_err() || u0.set_high_limit(Some(32_000)).is_err() {
+        fail_bootstrap();
+        return;
+    }
     // 启用数字滤波去抖：约 800 个 APB 周期（APB 80MHz 时 ~10µs）。
-    u0.set_filter(Some(800)).ok();
+    if u0.set_filter(Some(800)).is_err() {
+        fail_bootstrap();
+        return;
+    }
     u0.clear();
     let ch = &u0.channel0;
     ch.set_ctrl_mode(pcnt_channel::CtrlMode::Keep, pcnt_channel::CtrlMode::Keep);
@@ -203,12 +232,16 @@ async fn task(
         );
     }
 
+    fan_en.set_high();
+    set_speed_pct(&ch0, 100);
+    Timer::after(Duration::from_millis(300)).await;
+    let (_bootstrap_win_ms, _bootstrap_rpm, bootstrap_pulses) = rpm_sample_fixed(u0, 300).await;
+    BOOTSTRAP_SIG.signal(bootstrap_pulses > 0);
+
     // Temperature EMA & sampling heartbeats
     let mut ema_temp: Option<f32> = None;
 
     // ----- 上电满速校准（仅依据“转起来后的”连续采样中位数与稳定性）-----
-    fan_en.set_high();
-    set_speed_pct(&ch0, 100);
     let calib = measure_max_rpm_diag(u0, CALIB_SPINUP_MS, CALIB_OBSERVE_MAX_MS).await;
     let tach_valid = calib.valid;
     let max_rpm = calib.rpm;

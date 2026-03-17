@@ -38,3 +38,7 @@ docs/assets/*.ppm
 
 # Probe-rs
 .probe-rs/
+
+# Local MCU tooling state
+.esp32-port
+.mcu-agentd/

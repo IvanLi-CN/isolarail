@@ -1,0 +1,16 @@
+[project]
+id = "iso-usb-hub"
+
+[agentd]
+auto_start_daemon = true
+tail_default = 200
+
+[mcu.usb_hub]
+backend = "espflash"
+chip = "esp32s3"
+artifact_elf = "target/xtensa-esp32s3-none-elf/release/iso-usb-hub"
+selector_cache_file = ".esp32-port"
+
+[mcu.usb_hub.espflash]
+log_format = "defmt"
+skip_update_check = true

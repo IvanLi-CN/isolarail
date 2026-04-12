@@ -66,4 +66,5 @@
 |------:|------------|-----------|------------------------------------------|------------|--------|
 | k3p8m | 示例：新增工作项规格 | 待设计       | `k3p8m-example-spec/SPEC.md`             | YYYY-MM-DD | -      |
 | 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
+| e5nyr | 发布失败 Telegram 告警接入 | 待实现 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-04-12 | - |
 <!-- markdownlint-enable MD060 -->

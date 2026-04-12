@@ -43,4 +43,4 @@
 
 - [x] 新增 repo-local notifier wrapper。
 - [x] 配置 repo secret `SHOUTRRR_URL`。
-- [ ] 合并后验证 smoke test。
+- [x] 合并后验证 smoke test。

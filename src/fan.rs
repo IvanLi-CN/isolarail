@@ -463,11 +463,9 @@ async fn measure_max_rpm_diag(
         // 组内抖动（max-min 占比），仅用于日志
         let minv = *buf[..got].iter().min().unwrap();
         let maxv = *buf[..got].iter().max().unwrap();
-        jitter_pct = if med > 0 {
-            ((maxv.saturating_sub(minv)) * 100) / med
-        } else {
-            100
-        };
+        jitter_pct = ((maxv.saturating_sub(minv)) * 100)
+            .checked_div(med)
+            .unwrap_or(100);
 
         // 稳定性：至少观测满时长，且近 K 个窗口无“显著新高”
         if elapsed_ms >= CALIB_MIN_OBS_MS && no_improve_streak >= CALIB_NO_IMPROVE_K {
@@ -478,12 +476,11 @@ async fn measure_max_rpm_diag(
 
     // 计算总窗时间上的等效 RPM（用于日志自证；不改变返回值）
     // 自证：平均RPM与最佳单窗RPM（便于人工复核）
-    let _proof_avg_rpm = if win_ms_total > 0 {
-        ((total_pulses as u64).saturating_mul(60_000) / win_ms_total / (TACH_PULSES_PER_REV as u64))
-            as u32
-    } else {
-        0
-    };
+    let _proof_avg_rpm = (total_pulses as u64)
+        .saturating_mul(60_000)
+        .checked_div(win_ms_total)
+        .and_then(|rpm| rpm.checked_div(TACH_PULSES_PER_REV as u64))
+        .unwrap_or(0) as u32;
     let _proof_best_rpm = ((best_win_pulses as u64).saturating_mul(60_000)
         / RPM_WIN_MS_CAL
         / (TACH_PULSES_PER_REV as u64)) as u32;

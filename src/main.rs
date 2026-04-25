@@ -135,10 +135,11 @@ const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 const VIN_MIN_V: f32 = 4.5;
 const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
+const INA226_SHUNT_LSB_V: f32 = 2.5e-6;
 
 // Direct-bus V3 IP6557 modules are expected to be strapped to unique addresses.
 // Channel 4 is the current validation target and is populated as INA226@0x43 + TMP112@0x4B.
-const MODULE_INA226_ADDRS: [u8; 4] = [0x40, 0x41, 0x44, 0x43];
+const MODULE_INA226_ADDRS: [u8; 4] = [0x40, 0x41, 0x42, 0x43];
 const MODULE_TMP112_ADDRS: [u8; 4] = [0x48, 0x49, 0x4A, 0x4B];
 const MODULE_SENSOR_RETRY_MS: u64 = 50;
 const MODULE_SENSOR_RETRIES: u8 = 6;
@@ -197,8 +198,10 @@ async fn sample_module_ina226(ch: u8) -> Option<(u32, u32)> {
     dev.set_ina_address(ina_addr);
     let mut ina = dev.initialize(i2c).await.ok()?;
     let vbus_mv = (ina.read_voltage().await * 1000.0) as u32;
-    let shunt_v = ina.read_shunt_voltage().await;
-    let current_ma = ((shunt_v / SHUNT_RESISTANCE_OHMS as f64).abs() * 1000.0) as u32;
+    let raw = ina.read_raw_shunt_voltage().await;
+    let signed = i16::from_be_bytes(raw.to_be_bytes());
+    let shunt_v = signed as f32 * INA226_SHUNT_LSB_V;
+    let current_ma = ((shunt_v / SHUNT_RESISTANCE_OHMS).abs() * 1000.0) as u32;
     Some((vbus_mv, current_ma))
 }
 
@@ -307,6 +310,16 @@ enum UiPortState {
     #[allow(dead_code)]
     Overcurrent, // CC
     Normal,
+}
+
+fn port_state_label(state: UiPortState) -> &'static str {
+    match state {
+        UiPortState::Initializing => "init",
+        UiPortState::Disconnected => "disc",
+        UiPortState::Closed => "off",
+        UiPortState::Overcurrent => "cc",
+        UiPortState::Normal => "ok",
+    }
 }
 
 // Embed icon masks (ASCII '0'/'1' bitmaps), authoritative assets per spec
@@ -1177,6 +1190,21 @@ async fn main(spawner: Spawner) {
                 }
             }
         }
+        info!(
+            "port.telemetry: p1={} {}mV {}mA p2={} {}mV {}mA p3={} {}mV {}mA p4={} {}mV {}mA",
+            port_state_label(view[0].ui_state),
+            view[0].vbus_mv,
+            view[0].ich_ma,
+            port_state_label(view[1].ui_state),
+            view[1].vbus_mv,
+            view[1].ich_ma,
+            port_state_label(view[2].ui_state),
+            view[2].vbus_mv,
+            view[2].ich_ma,
+            port_state_label(view[3].ui_state),
+            view[3].vbus_mv,
+            view[3].ich_ma,
+        );
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
         let _ = disp.flush().await;

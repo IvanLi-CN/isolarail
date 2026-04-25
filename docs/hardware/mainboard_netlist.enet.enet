@@ -1530,7 +1530,7 @@
                 "2": {
                     "name": "A0",
                     "number": "2",
-                    "net": "GND",
+                    "net": "3V3",
                     "props": {
                         "Pin Number": "2"
                     }

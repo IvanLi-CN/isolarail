@@ -12,7 +12,7 @@
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use defmt::{info, warn};
 use embassy_executor::Spawner;
-use embassy_time::{with_timeout, Duration, Ticker, Timer};
+use embassy_time::{with_timeout, Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
@@ -1127,7 +1127,6 @@ async fn main(spawner: Spawner) {
     // 当前 V3 输出模块不再沿用旧的 SW2303 runtime 遥测任务；
     // dashboard 直接按通道读取模块 INA226，避免旧驱动误报。
     // === UI periodic refresh loop (2 Hz) ===
-    let mut telemetry_ticker = Ticker::every(Duration::from_millis(500));
     loop {
         // Derive per-port samples
         let mut view: [PortSample; 4] = [
@@ -1209,6 +1208,6 @@ async fn main(spawner: Spawner) {
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
         let _ = disp.flush().await;
-        telemetry_ticker.next().await;
+        Timer::after(Duration::from_millis(500)).await;
     }
 }

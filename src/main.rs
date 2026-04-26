@@ -144,10 +144,9 @@ const MODULE_TMP112_ADDRS: [u8; 4] = [0x48, 0x49, 0x4A, 0x4B];
 const MODULE_SENSOR_RETRY_MS: u64 = 50;
 const MODULE_SENSOR_RETRIES: u8 = 6;
 
-// ===== Display pin mapping (assumed; please confirm) =====
-// SPI2 SCLK/MOSI to panel; MISO unused.
-// DC uses MCU GPIO (data/command). Backlight not managed here.
-// 回退实现：MCU 直接控制 CS/RES，与示例一致
+// ===== Display pin mapping (V3 netlist) =====
+// SPI2 SCLK/MOSI to panel; MISO unused. MCU directly drives DC/CS/RES/BLK.
+// BLK drives a panel-side P-channel gate and is therefore active-low.
 const PIN_LCD_SCLK: u8 = 12;
 const PIN_LCD_MOSI: u8 = 11;
 const PIN_LCD_DC: u8 = 10;
@@ -207,7 +206,7 @@ async fn sample_module_ina226(ch: u8) -> Option<(u32, u32)> {
 
 // NOTE: no arbitrary address enumeration; only probe known devices.
 
-// 按项目要求：不在固件中操作 TCA6408A（不扫描/不复位/不拉 CS），RES/CS 由外部电路或其它控制实体负责。
+// The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
 
 // Embassy timer adapter for the display driver
 struct DisplayTimer;
@@ -750,10 +749,10 @@ async fn main(spawner: Spawner) {
         .with_scl(p.GPIO9)
         .into_async();
     let bus = I2C_BUS.init(Mutex::new(i2c_hw));
-    // MCU 直接控制 CS/RES（回退实现）
+    // MCU 直接控制 CS/RES（V3 网表）
     info!("lcd.ctrl: cs,res via MCU GPIO");
 
-    // Setup SPI2 and display. CS/RES 由 TCA6408A 控制（本固件不介入）。
+    // Setup SPI2 and display. CS/RES/BLK are direct MCU GPIOs.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()
@@ -775,12 +774,12 @@ async fn main(spawner: Spawner) {
         10 => Output::new(p.GPIO10, Level::Low, esp_hal::gpio::OutputConfig::default()),
         _ => Output::new(p.GPIO10, Level::Low, esp_hal::gpio::OutputConfig::default()),
     };
-    // Backlight on (high)
+    // Backlight enable is active-low through the panel-side P-MOS gate.
     let mut blk = match PIN_LCD_BLK_GPIO {
         15 => Output::new(p.GPIO15, Level::Low, esp_hal::gpio::OutputConfig::default()),
         _ => Output::new(p.GPIO15, Level::Low, esp_hal::gpio::OutputConfig::default()),
     };
-    blk.set_high();
+    blk.set_low();
 
     const LOGICAL_W: usize = 160;
     const LOGICAL_H: usize = 50;
@@ -807,7 +806,7 @@ async fn main(spawner: Spawner) {
     let cfg = DisplayConfig {
         width: LOGICAL_W as u16,
         height: LOGICAL_H as u16,
-        orientation: Orientation::Landscape,
+        orientation: Orientation::LandscapeSwapped,
         rgb: false,
         inverted: false,
         dx: 15,
@@ -826,7 +825,7 @@ async fn main(spawner: Spawner) {
         ),
     };
     let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
-    info!("lcd.init: start panel_160x50 mode (fallback MCU CS/RST)");
+    info!("lcd.init: start panel_160x50 mode (mcu cs/rst, landscape-swapped)");
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {

@@ -152,7 +152,7 @@
 | **GPIO12** | 17 | SPI_SCLK | SPI时钟 | ⚡ IOMUX直连，最高80MHz |
 | **GPIO13** | 18 | SPI_CS | 片选信号 | ⚡ IOMUX直连，最低延迟 |
 | **GPIO14** | 19 | SPI_RES | 复位信号 | SPI屏幕复位控制 |
-| **GPIO15** | 21 | SPI_BLK | PWM背光控制 | SPI屏幕背光调节 |
+| **GPIO15** | 21 | SPI_BLK | 背光控制 | 低有效；驱动前面板 P 沟道背光门极 |
 | **GPIO16** | 22 | I2C_INT | I2C设备中断引脚 | 中断处理 |
 | **GPIO17** | 23 | PSTOP_CTL1 | SC8815 通道1 启停控制 | 高电平启用（板上反相，PSTOP 低有效） |
 | **GPIO18** | 24 | PSTOP_CTL2 | SC8815 通道2 启停控制 | 高电平启用（板上反相，PSTOP 低有效） |

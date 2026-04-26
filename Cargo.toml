@@ -32,7 +32,7 @@ esp-hal-embassy = { version = "0.9.0", features = ["esp32s3"] }
 esp-println = { version = "0.15.0", features = ["esp32s3", "defmt-espflash"] }
 
 # Display driver and drawing
-# Use local submodule for GC9D01 with panel_160x50 tuning; async is enabled by default in the crate branch
+# Use local submodule for GC9D01 with panel_160x50 tuning.
 gc9d01 = { path = "gc9d01", default-features = false, features = ["defmt", "panel_160x50", "async"] }
 embedded-graphics = { version = "0.8", default-features = false }
 

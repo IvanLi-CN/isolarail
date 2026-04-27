@@ -14,3 +14,13 @@ selector_cache_file = ".esp32-port"
 [mcu.usb_hub.espflash]
 log_format = "defmt"
 skip_update_check = true
+
+[mcu.usb_hub_eeprom]
+backend = "espflash"
+chip = "esp32s3"
+artifact_elf = "target/xtensa-esp32s3-none-elf/release/ch335f_eeprom_init"
+selector_cache_file = ".esp32-eeprom-port"
+
+[mcu.usb_hub_eeprom.espflash]
+log_format = "defmt"
+skip_update_check = true

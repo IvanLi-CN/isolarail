@@ -70,8 +70,8 @@
 - **GPIO18**: PSTOP_CTL2 (通道2 SC8815 启停控制，高电平启用；板上反相后 `PSTOP` 低有效)
 - **GPIO39**: PSTOP_CTL3 (通道3 SC8815 启停控制，高电平启用；板上反相后 `PSTOP` 低有效，物理引脚44/MTCK)
 - **GPIO40**: PSTOP_CTL4 (通道4 SC8815 启停控制，高电平启用；板上反相后 `PSTOP` 低有效，物理引脚45/MTDO)
-- **GPIO45**: HUB_SDA (CH335F `LED4/SDA` 复用控制，Strapping 引脚，需保证上电不被外设强拉)
-- **GPIO46**: HUB_SCL (CH335F `LED3/SCL` 复用控制，Strapping 引脚，需保证上电不被外设强拉)
+- **GPIO36**: HUB_SDA (CH335F `LED4/SDA` 复用控制)
+- **GPIO37**: HUB_SCL (CH335F `LED3/SCL` 复用控制)
 
 **功能特点**: 专用于USB HUB芯片(CH335F)控制，支持独立端口电源管理
 
@@ -120,13 +120,13 @@
 | **蜂鸣器** | 1个 | GPIO7 |
 | **PWM风扇控制** | 3个 | GPIO1, GPIO2, GPIO6 |
 | **USB调试接口** | 2个 | GPIO19, GPIO20 |
-| **USB HUB控制** | 7个 | GPIO5, GPIO17, GPIO18, GPIO39, GPIO40, GPIO45, GPIO46 |
+| **USB HUB控制** | 7个 | GPIO5, GPIO17, GPIO18, GPIO36, GPIO37, GPIO39, GPIO40 |
 | **TPS2490DGSR** | 2个 | GPIO41, GPIO42 |
 | **电压采样ADC** | 1个 | GPIO4 |
 | **ISOUSB211DPR** | 1个 | GPIO21 |
 | **电源管理复位** | 1个 | GPIO38 |
 | **系统控制** | 2个 | EN, GPIO0 |
-| **额外可用IO** | 5个 | GPIO33,34,35,36,37 (ESP32-S3FH4R2特有) |
+| **额外可用IO** | 3个 | GPIO33,34,35 (ESP32-S3FH4R2特有) |
 | **预留IO** | 2个 | GPIO47,48 |
 | **不可用** | 7个 | GPIO26,27,28,29,30,31,32 (Flash/PSRAM核心引脚) |
 | **Strapping约束** | 4个 | GPIO0, GPIO3, GPIO45, GPIO46 (启动配置相关引脚) |
@@ -169,15 +169,15 @@
 | **GPIO33** | 36 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
 | **GPIO34** | 37 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
 | **GPIO35** | 38 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
-| **GPIO36** | 39 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
-| **GPIO37** | 40 | 可用IO | 普通数字输入输出 | ✅ 通用IO (ESP32-S3FH4R2可用) |
+| **GPIO36** | 39 | HUB_SDA | CH335F `LED4/SDA` 复用控制 | 普通数字 I/O |
+| **GPIO37** | 40 | HUB_SCL | CH335F `LED3/SCL` 复用控制 | 普通数字 I/O |
 | **GPIO38** | 43 | I2C_RESET | I2C器件复位控制 | 低电平有效复位，可控制多个器件 |
 | **GPIO39** | 44 | PSTOP_CTL3 | SC8815 通道3 启停控制 | 高电平启用（板上反相，PSTOP 低有效，MTCK） |
 | **GPIO40** | 45 | PSTOP_CTL4 | SC8815 通道4 启停控制 | 高电平启用（板上反相，PSTOP 低有效，MTDO） |
 | **GPIO41** | 47 | IN_EN | TPS2490DGSR使能控制 | 高电平有效，需内部上拉 |
 | **GPIO42** | 48 | IN_PG | TPS2490DGSR电源良好状态 | 高电平有效，开漏输出，需外部4.7kΩ上拉至3.3V |
-| **GPIO45** | 51 | HUB_SDA | CH335F `LED4/SDA` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
-| **GPIO46** | 52 | HUB_SCL | CH335F `LED3/SCL` 复用控制 | ⚠️ Strapping引脚，避免上电时外部强拉 |
+| **GPIO45** | 51 | 未连接 | 未分配给 HUB 侧带控制 | ⚠️ Strapping 引脚 |
+| **GPIO46** | 52 | 未连接 | 未分配给 HUB 侧带控制 | ⚠️ Strapping 引脚 |
 | **GPIO47** | 37 | 预留IO | 普通数字输入输出 | 通用IO |
 | **GPIO48** | 36 | 预留IO | 普通数字输入输出 | 通用IO |
 
@@ -242,7 +242,7 @@
 1. **绝对避免**: GPIO26-32 (Flash/PSRAM核心引脚，被占用)
 2. **谨慎使用**: GPIO0, GPIO3, GPIO45, GPIO46 (Strapping引脚)
 3. **优先推荐**: GPIO33-37, GPIO47-48 (ESP32-S3FH4R2额外可用的通用IO引脚)
-4. **Strapping约束**: GPIO45/46 已分配给 HUB 侧带控制，需在硬件上保证上电采样窗口内电平稳定
+4. **Strapping约束**: GPIO45/46 不再分配给 HUB 侧带控制，避免在启动采样窗口内外接强拉
 
 ## USB-JTAG调试接口
 

@@ -93,7 +93,7 @@ None
 
 - Given 板子正常上电，When 固件启动，Then LCD 先显示自检页，串口输出 `boot.stage:*` 与 `boot.check:*`，最终输出 `boot.summary: outcome=OK|DEG` 并进入 dashboard。
 - Given 当前直连 I²C 板型，When 固件启动，Then 日志记录 `boot.check: name=mux state=skip fault=-`，且端口扫描继续进行。
-- Given 前面板 `TCA6408A` 缺失，When 固件启动，Then front panel 功能被禁用，但 dashboard 仍可运行。
+- Given 前面板 `TCA6408A` 缺失，When 固件启动，Then LCD 停留在系统自检页并持续重试前面板探测，不进入 dashboard。
 - Given 单路输出模块缺少 `INA226` 或 `TMP112`，When 固件启动且总输入 `OK`，Then 该路记为 `Err`，但 `EN1..EN4` 仍在自检结束后统一放行。
 - Given 输入电源资格失败或 PG 不良，When 固件启动，Then `IN_EN` 保持关闭且 LCD 常驻 fatal 自检页。
 - Given 当前验证基线中的通道 4 模块接入，When 固件启动，Then 端口 4 按 `INA226@0x43 + TMP112@0x4B` 识别并可报告 `boot.check: name=port4 state=ok fault=-`。

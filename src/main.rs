@@ -922,22 +922,40 @@ async fn main(spawner: Spawner) {
         if main_ok { "online" } else { "offline" },
         MAIN_TCA6408_ADDR
     );
-    if power_boot.ready && front_panel::is_present(bus).await {
-        info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
-        info!("boot.check: name=panel state=ok fault=-");
-        boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
-        front_panel_online = true;
-    } else if power_boot.ready {
-        warn!(
-            "i2c.front: tca6408a=offline addr=0x{:02X}; disable related features",
-            TCA6408_ADDR
-        );
-        warn!("boot.check: name=panel state=warn fault=FrontPanelOffline");
+    if power_boot.ready {
         boot_snapshot.set_sys(
             SysCheck::Front,
-            SelfCheckItemState::Warn,
-            BootFaultCode::FrontPanelOffline,
+            SelfCheckItemState::Pending,
+            BootFaultCode::None,
         );
+        flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+
+        let mut attempts: u32 = 0;
+        loop {
+            if front_panel::is_present(bus).await {
+                info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+                info!("boot.check: name=panel state=ok fault=-");
+                boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
+                front_panel_online = true;
+                break;
+            }
+
+            if attempts == 0 || attempts.is_multiple_of(20) {
+                let waiting_fault = BootFaultCode::FrontPanelOffline;
+                warn!(
+                    "i2c.front: tca6408a=offline addr=0x{:02X}; waiting for front panel",
+                    TCA6408_ADDR
+                );
+                warn!(
+                    "boot.wait: name=panel state=pending fault={} retry={}",
+                    fault_label(waiting_fault),
+                    attempts + 1
+                );
+            }
+            attempts = attempts.wrapping_add(1);
+            flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+            Timer::after(Duration::from_millis(500)).await;
+        }
     } else {
         boot_snapshot.set_sys(
             SysCheck::Front,

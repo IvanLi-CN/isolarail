@@ -16,7 +16,7 @@ use embassy_time::{with_timeout, Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
-use esp_hal::gpio::{Input, Level, Output, Pull};
+use esp_hal::gpio::{DriveMode, Input, Level, Output, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
@@ -109,7 +109,7 @@ const PIN_I2C_SCL: u8 = 9;
 #[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
 #[allow(dead_code)]
-const PIN_I2C_RESET: u8 = 35; // open-drain, low to reset I2C peripherals
+const PIN_I2C_RESET: u8 = 35; // active-low reset for I2C peripherals
 
 #[allow(dead_code)]
 const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
@@ -204,7 +204,32 @@ async fn sample_module_ina226(ch: u8) -> Option<(u32, u32)> {
     Some((vbus_mv, current_ma))
 }
 
-// NOTE: no arbitrary address enumeration; only probe known devices.
+// Diagnostic scan is limited to board-relevant address windows.
+async fn log_i2c_diag_scan(bus: &'static SharedI2cBus, reason: &'static str) {
+    info!("i2c.diag: start reason={}", reason);
+    for addr in 0x18u8..=0x27u8 {
+        let mut i2c = I2cDevice::new(bus);
+        let (ok, method) = i2c_ack_probe(&mut i2c, addr).await;
+        if ok {
+            info!("i2c.diag: addr=0x{:02X} online via={}", addr, method);
+        }
+    }
+    for addr in 0x40u8..=0x4Bu8 {
+        let mut i2c = I2cDevice::new(bus);
+        let (ok, method) = i2c_ack_probe(&mut i2c, addr).await;
+        if ok {
+            info!("i2c.diag: addr=0x{:02X} online via={}", addr, method);
+        }
+    }
+    for addr in 0x70u8..=0x77u8 {
+        let mut i2c = I2cDevice::new(bus);
+        let (ok, method) = i2c_ack_probe(&mut i2c, addr).await;
+        if ok {
+            info!("i2c.diag: addr=0x{:02X} online via={}", addr, method);
+        }
+    }
+    info!("i2c.diag: end reason={}", reason);
+}
 
 // The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
 
@@ -709,18 +734,20 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // I2C reset (use push-pull for MVP), default high (released)
+    // I2C RESET# is shared by the TCA6408A expanders. Provide deterministic
+    // levels from the MCU: low pulse to reset, then actively drive high to release.
     let mut i2c_reset = Output::new(
         p.GPIO35,
-        Level::High,
-        esp_hal::gpio::OutputConfig::default(),
-    );
-    // Briefly assert low then release
-    i2c_reset.set_low();
-    // small blocking delay via timer (1 ms)
-    Timer::after(Duration::from_millis(5)).await;
+        Level::Low,
+        esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
+    )
+    .into_flex();
+    i2c_reset.set_input_enable(true);
+    info!("i2c.reset: gpio=GPIO35 mode=push-pull pulse=10ms release_wait=50ms");
+    Timer::after(Duration::from_millis(10)).await;
     i2c_reset.set_high();
-    Timer::after(Duration::from_millis(5)).await;
+    Timer::after(Duration::from_millis(50)).await;
+    let i2c_reset_released_high = i2c_reset.is_high();
 
     // IN_EN default off
     let in_en = Output::new(p.GPIO41, Level::Low, esp_hal::gpio::OutputConfig::default());
@@ -841,6 +868,14 @@ async fn main(spawner: Spawner) {
     } else {
         info!("lcd.init: panel ready");
     }
+    info!(
+        "i2c.reset: release_level={}",
+        if i2c_reset_released_high {
+            "high"
+        } else {
+            "low"
+        }
+    );
 
     let mut boot_snapshot = BootSelfCheckSnapshot::new();
     boot_snapshot.set_stage(BootStage::SelfCheck);
@@ -914,6 +949,10 @@ async fn main(spawner: Spawner) {
     boot_snapshot.set_sys(SysCheck::Vin, power_boot.state, power_boot.fault);
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
+    info!(
+        "i2c.reset: pre-tca-probe level={}",
+        if i2c_reset.is_high() { "high" } else { "low" }
+    );
     let mut front_panel_online = false;
     let mut main_i2c = I2cDevice::new(bus);
     let (main_ok, _) = i2c_ack_probe(&mut main_i2c, MAIN_TCA6408_ADDR).await;
@@ -922,6 +961,9 @@ async fn main(spawner: Spawner) {
         if main_ok { "online" } else { "offline" },
         MAIN_TCA6408_ADDR
     );
+    if !main_ok {
+        log_i2c_diag_scan(bus, "main-tca-offline").await;
+    }
     if power_boot.ready {
         boot_snapshot.set_sys(
             SysCheck::Front,

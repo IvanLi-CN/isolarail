@@ -46,6 +46,7 @@
 
 - `LCD_DC/LCD_MOSI/LCD_SCLK/LCD_CS/LCD_RST/LCD_BLK` 使用 V3 网表定义的 MCU GPIO。
 - `LCD_BLK` 必须按低有效背光使能处理。
+- `I2C_RESET#` 使用 `GPIO35` 主动输出确定电平：低电平复位，高电平释放。
 - display config 必须使用 `Orientation::LandscapeSwapped`，并依赖包含该映射修复的 `gc9d01-rs` 版本。
 - 前面板 `TCA6408A@0x21` 离线必须阻塞启动自检，直到按键输入扩展器可达。
 

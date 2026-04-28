@@ -1,17 +1,21 @@
 use defmt::{info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::{task, SpawnError, Spawner};
+use embassy_futures::select::{select, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, Receiver};
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Timer};
+use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Ticker, Timer};
 // not using InputPin trait directly; rely on esp-hal Input::is_high()
 use embedded_hal_async::i2c::I2c;
 use esp_hal::gpio::Input;
 
 use crate::{I2cBus, TCA6408_ADDR};
 
-const KEY_DEBOUNCE_TICKS: u8 = 8; // 8 * 5 ms polling cadence = ~40 ms
+const KEY_DEBOUNCE_MS: u64 = 25;
+const FALLBACK_SCAN_MS: u64 = 50;
+const TCA_READ_RETRY_DELAY_MS: u64 = 2;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum KeyEvent {
@@ -21,6 +25,7 @@ pub enum KeyEvent {
 }
 
 static KEY_EVENTS: Channel<CriticalSectionRawMutex, KeyEvent, 8> = Channel::new();
+static INT_TRIGGER: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 pub fn event_receiver() -> Receiver<'static, CriticalSectionRawMutex, KeyEvent, 8> {
     KEY_EVENTS.receiver()
@@ -45,11 +50,25 @@ pub fn spawn(
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
     int_pin: Input<'static>,
 ) -> Result<(), SpawnError> {
-    spawner.spawn(task(bus, int_pin))
+    spawner.spawn(int_task(int_pin))?;
+    spawner.spawn(task(bus))
 }
 
 #[task]
-async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, int_pin: Input<'static>) {
+async fn int_task(mut int_pin: Input<'static>) {
+    info!("front.gpio: int=edge-wait");
+    loop {
+        if int_pin.is_low() {
+            INT_TRIGGER.signal(());
+            int_pin.wait_for_high().await;
+            Timer::after(Duration::from_millis(KEY_DEBOUNCE_MS)).await;
+        }
+        int_pin.wait_for_falling_edge().await;
+    }
+}
+
+#[task]
+async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) {
     // Establish baseline: read input register once.
     let mut i2c = I2cDevice::new(bus);
     let mut last_inputs: u8 = match tca_read_inputs(&mut i2c).await {
@@ -61,31 +80,18 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>, int_pin: Inp
     };
     info!("front.gpio: tca6408a baseline=0x{:02X}", last_inputs);
 
-    // Track last INT level（若该引脚未接线，后续轮询亦可识别按键变化）。
-    let mut last_int_high = int_pin.is_high();
-    let mut debounce_ticks = [0u8; 5];
+    let mut pressed = [false; 5];
+    let mut fallback = Ticker::every(Duration::from_millis(FALLBACK_SCAN_MS));
 
     loop {
-        let now_high = int_pin.is_high();
-        let mut handled = false;
-
-        // 快速路径：检测到 INT 变化时打印电平，并在下降沿优先读取
-        if last_int_high && !now_high {
-            handled = true;
-            handle_read_and_log(&mut i2c, &mut last_inputs, &mut debounce_ticks).await;
-            info!("front.gpio: int=low");
-        } else if !last_int_high && now_high {
-            info!("front.gpio: int=high");
+        match select(INT_TRIGGER.wait(), fallback.next()).await {
+            Either::First(()) => {
+                handle_read_and_log(&mut i2c, &mut last_inputs, &mut pressed, true).await;
+            }
+            Either::Second(()) => {
+                handle_read_and_log(&mut i2c, &mut last_inputs, &mut pressed, false).await;
+            }
         }
-        last_int_high = now_high;
-
-        // 保障路径：定期轮询，避免 INT 未接线时漏报
-        if !handled {
-            handle_read_and_log(&mut i2c, &mut last_inputs, &mut debounce_ticks).await;
-        }
-
-        // 轻微去抖/限流
-        Timer::after(Duration::from_millis(5)).await;
     }
 }
 
@@ -96,46 +102,72 @@ async fn tca_read_inputs<I2C: I2c>(i2c: &mut I2C) -> Result<u8, I2C::Error> {
     Ok(b[0])
 }
 
+async fn tca_read_inputs_retry<I2C: I2c>(i2c: &mut I2C, attempts: usize) -> Result<u8, I2C::Error> {
+    for attempt in 0..attempts {
+        match tca_read_inputs(i2c).await {
+            Ok(v) => return Ok(v),
+            Err(e) if attempt + 1 == attempts => return Err(e),
+            Err(_) => Timer::after(Duration::from_millis(TCA_READ_RETRY_DELAY_MS)).await,
+        }
+    }
+    unreachable!()
+}
+
 async fn handle_read_and_log<I2C: I2c>(
     i2c: &mut I2C,
     last_inputs: &mut u8,
-    debounce_ticks: &mut [u8; 5],
+    pressed: &mut [bool; 5],
+    debounce: bool,
 ) {
-    for ticks in debounce_ticks.iter_mut() {
-        *ticks = ticks.saturating_sub(1);
+    let first = match tca_read_inputs_retry(i2c, 3).await {
+        Ok(v) => v,
+        Err(_) => {
+            warn!("front.gpio: tca6408a read fail addr=0x21");
+            return;
+        }
+    };
+
+    let now = if debounce {
+        Timer::after(Duration::from_millis(KEY_DEBOUNCE_MS)).await;
+        match tca_read_inputs_retry(i2c, 2).await {
+            Ok(v) => v,
+            Err(_) => {
+                warn!("front.gpio: tca6408a debounce read fail addr=0x21; use edge sample");
+                first
+            }
+        }
+    } else {
+        first
+    };
+
+    let prev = *last_inputs;
+    *last_inputs = now;
+    let mask_5 = 0x1F; // P0..P4
+    let falling = (prev & mask_5) & !(now & mask_5); // 1->0
+    let rising = !(prev & mask_5) & (now & mask_5); // 0->1
+    if falling != 0 || rising != 0 {
+        info!(
+            "front.key: change prev=0x{:02X} now=0x{:02X} fall=0x{:02X} rise=0x{:02X}",
+            prev, now, falling, rising
+        );
     }
-    match tca_read_inputs(i2c).await {
-        Ok(now) => {
-            let prev = *last_inputs;
-            *last_inputs = now;
-            let mask_5 = 0x1F; // P0..P4
-            let falling = (prev & mask_5) & !(now & mask_5); // 1->0
-            let rising = !(prev & mask_5) & (now & mask_5); // 0->1
-            if falling != 0 || rising != 0 {
-                info!(
-                    "front.key: change prev=0x{:02X} now=0x{:02X} fall=0x{:02X} rise=0x{:02X}",
-                    prev, now, falling, rising
-                );
-                for bit in 0..=4u8 {
-                    let m = 1u8 << bit;
-                    if (falling & m) != 0 {
-                        info!("front.key: fall={}", dir_name(bit));
-                        let idx = bit as usize;
-                        if let Some(event) = key_event(bit).filter(|_| debounce_ticks[idx] == 0) {
-                            debounce_ticks[idx] = KEY_DEBOUNCE_TICKS;
-                            if KEY_EVENTS.try_send(event).is_err() {
-                                warn!("front.key: event queue full");
-                            }
-                        }
-                    }
-                    if (rising & m) != 0 {
-                        info!("front.key: rise={}", dir_name(bit));
-                    }
+
+    for bit in 0..=4u8 {
+        let m = 1u8 << bit;
+        let idx = bit as usize;
+        let is_low = (now & m) == 0;
+        if is_low && !pressed[idx] {
+            pressed[idx] = true;
+            info!("front.key: fall={}", dir_name(bit));
+            if let Some(event) = key_event(bit) {
+                if KEY_EVENTS.try_send(event).is_err() {
+                    warn!("front.key: event queue full");
                 }
             }
         }
-        Err(_) => {
-            warn!("front.gpio: tca6408a read fail addr=0x21");
+        if !is_low && pressed[idx] {
+            pressed[idx] = false;
+            info!("front.key: rise={}", dir_name(bit));
         }
     }
 }

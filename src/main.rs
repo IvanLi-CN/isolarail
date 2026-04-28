@@ -231,6 +231,49 @@ async fn log_i2c_diag_scan(bus: &'static SharedI2cBus, reason: &'static str) {
     info!("i2c.diag: end reason={}", reason);
 }
 
+fn handle_front_key_event(
+    event: front_panel::KeyEvent,
+    selected_port: &mut usize,
+    manual_enabled: &mut [bool; 4],
+    power_ready: bool,
+    port_enables: &mut [Output<'static>; 4],
+) {
+    match event {
+        front_panel::KeyEvent::Left => {
+            *selected_port = if *selected_port == 0 {
+                3
+            } else {
+                *selected_port - 1
+            };
+            info!("front.ui: selected_port={}", *selected_port + 1);
+        }
+        front_panel::KeyEvent::Right => {
+            *selected_port = (*selected_port + 1) % 4;
+            info!("front.ui: selected_port={}", *selected_port + 1);
+        }
+        front_panel::KeyEvent::Center => {
+            manual_enabled[*selected_port] = !manual_enabled[*selected_port];
+            let enabled = power_ready && manual_enabled[*selected_port];
+            if enabled {
+                port_enables[*selected_port].set_high();
+            } else {
+                port_enables[*selected_port].set_low();
+            }
+            let en_high = port_enables[*selected_port].is_set_high();
+            info!(
+                "front.ui: ch={} manual_output={} en={}",
+                *selected_port + 1,
+                if manual_enabled[*selected_port] {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+                if en_high { "high" } else { "low" }
+            );
+        }
+    }
+}
+
 // The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
 
 // Embassy timer adapter for the display driver
@@ -345,6 +388,34 @@ fn port_state_label(state: UiPortState) -> &'static str {
         UiPortState::Closed => "off",
         UiPortState::Overcurrent => "cc",
         UiPortState::Normal => "ok",
+    }
+}
+
+fn apply_dashboard_control_state(
+    samples: &mut [PortSample; 4],
+    selected_port: usize,
+    manual_enabled: [bool; 4],
+    target: PowerSwitchTarget,
+) {
+    for (idx, sample) in samples.iter_mut().enumerate() {
+        sample.selected = idx == selected_port;
+        if !manual_enabled[idx] || target == PowerSwitchTarget::Open {
+            sample.connected = false;
+            sample.vbus_mv = 0;
+            sample.ich_ma = 0;
+            sample.ui_state = UiPortState::Closed;
+        } else if sample.ui_state == UiPortState::Closed {
+            sample.connected = false;
+            sample.vbus_mv = 0;
+            sample.ich_ma = 0;
+            sample.ui_state = if CH_SCAN_DONE[idx].load(Ordering::Relaxed)
+                && !CH_RDY[idx].load(Ordering::Relaxed)
+            {
+                UiPortState::Disconnected
+            } else {
+                UiPortState::Initializing
+            };
+        }
     }
 }
 
@@ -764,14 +835,15 @@ async fn main(spawner: Spawner) {
     // Front-panel INT pin will be initialized only if panel is present.
 
     // EN lines default disabled (drive low => module disabled)
-    let mut en1 = Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut en2 = Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut en3 = Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default());
-    let mut en4 = Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default());
-    en1.set_low();
-    en2.set_low();
-    en3.set_low();
-    en4.set_low();
+    let mut port_enables = [
+        Output::new(p.GPIO17, Level::Low, esp_hal::gpio::OutputConfig::default()),
+        Output::new(p.GPIO18, Level::Low, esp_hal::gpio::OutputConfig::default()),
+        Output::new(p.GPIO39, Level::Low, esp_hal::gpio::OutputConfig::default()),
+        Output::new(p.GPIO40, Level::Low, esp_hal::gpio::OutputConfig::default()),
+    ];
+    for port_enable in port_enables.iter_mut() {
+        port_enable.set_low();
+    }
 
     info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
 
@@ -1142,10 +1214,9 @@ async fn main(spawner: Spawner) {
     if power_boot.ready {
         // Self-check failures remain visible in logs/UI, but only total input faults
         // are allowed to block output enable during bring-up.
-        en1.set_high();
-        en2.set_high();
-        en3.set_high();
-        en4.set_high();
+        for port_enable in port_enables.iter_mut() {
+            port_enable.set_high();
+        }
         gates.allow_port = [true; 4];
         info!("boot.gate: ports=all-open reason=power_input_ok");
     }
@@ -1202,72 +1273,13 @@ async fn main(spawner: Spawner) {
     let mut manual_enabled = [true; 4];
     loop {
         while let Ok(event) = front_events.try_receive() {
-            match event {
-                front_panel::KeyEvent::Left => {
-                    selected_port = if selected_port == 0 {
-                        3
-                    } else {
-                        selected_port - 1
-                    };
-                    info!("front.ui: selected_port={}", selected_port + 1);
-                }
-                front_panel::KeyEvent::Right => {
-                    selected_port = (selected_port + 1) % 4;
-                    info!("front.ui: selected_port={}", selected_port + 1);
-                }
-                front_panel::KeyEvent::Center => {
-                    manual_enabled[selected_port] = !manual_enabled[selected_port];
-                    let enabled = power_boot.ready && manual_enabled[selected_port];
-                    match selected_port {
-                        0 => {
-                            if enabled {
-                                en1.set_high();
-                            } else {
-                                en1.set_low();
-                            }
-                        }
-                        1 => {
-                            if enabled {
-                                en2.set_high();
-                            } else {
-                                en2.set_low();
-                            }
-                        }
-                        2 => {
-                            if enabled {
-                                en3.set_high();
-                            } else {
-                                en3.set_low();
-                            }
-                        }
-                        3 => {
-                            if enabled {
-                                en4.set_high();
-                            } else {
-                                en4.set_low();
-                            }
-                        }
-                        _ => {}
-                    }
-                    let en_high = match selected_port {
-                        0 => en1.is_set_high(),
-                        1 => en2.is_set_high(),
-                        2 => en3.is_set_high(),
-                        3 => en4.is_set_high(),
-                        _ => false,
-                    };
-                    info!(
-                        "front.ui: ch={} manual_output={} en={}",
-                        selected_port + 1,
-                        if manual_enabled[selected_port] {
-                            "enabled"
-                        } else {
-                            "disabled"
-                        },
-                        if en_high { "high" } else { "low" }
-                    );
-                }
-            }
+            handle_front_key_event(
+                event,
+                &mut selected_port,
+                &mut manual_enabled,
+                power_boot.ready,
+                &mut port_enables,
+            );
         }
 
         // Derive per-port samples
@@ -1359,6 +1371,17 @@ async fn main(spawner: Spawner) {
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
         let _ = disp.flush().await;
-        Timer::after(Duration::from_millis(500)).await;
+        if let Ok(event) = with_timeout(Duration::from_millis(500), front_events.receive()).await {
+            handle_front_key_event(
+                event,
+                &mut selected_port,
+                &mut manual_enabled,
+                power_boot.ready,
+                &mut port_enables,
+            );
+            apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);
+            draw_dashboard_frame(&mut disp, &view);
+            let _ = disp.flush().await;
+        }
     }
 }

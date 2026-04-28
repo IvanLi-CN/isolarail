@@ -109,7 +109,7 @@ const PIN_I2C_SCL: u8 = 9;
 #[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
 #[allow(dead_code)]
-const PIN_I2C_RESET: u8 = 35; // active-low reset for I2C peripherals
+const PIN_I2C_RESET: u8 = 35; // mainboard active-low reset net; front-panel TCA reset is local pull-up
 
 #[allow(dead_code)]
 const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
@@ -734,8 +734,8 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // I2C RESET# is shared by the TCA6408A expanders. Provide deterministic
-    // levels from the MCU: low pulse to reset, then actively drive high to release.
+    // Mainboard RESET# is MCU-driven. The front-panel TCA6408A reset pin is a
+    // local fixed pull-up on the front-panel PCB and is not controlled here.
     let mut i2c_reset = Output::new(
         p.GPIO35,
         Level::Low,
@@ -743,7 +743,7 @@ async fn main(spawner: Spawner) {
     )
     .into_flex();
     i2c_reset.set_input_enable(true);
-    info!("i2c.reset: gpio=GPIO35 mode=push-pull pulse=10ms release_wait=50ms");
+    info!("main.reset: gpio=GPIO35 mode=push-pull pulse=10ms release_wait=50ms");
     Timer::after(Duration::from_millis(10)).await;
     i2c_reset.set_high();
     Timer::after(Duration::from_millis(50)).await;
@@ -869,7 +869,7 @@ async fn main(spawner: Spawner) {
         info!("lcd.init: panel ready");
     }
     info!(
-        "i2c.reset: release_level={}",
+        "main.reset: release_level={}",
         if i2c_reset_released_high {
             "high"
         } else {
@@ -950,7 +950,7 @@ async fn main(spawner: Spawner) {
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
     info!(
-        "i2c.reset: pre-tca-probe level={}",
+        "main.reset: pre-tca-probe level={}",
         if i2c_reset.is_high() { "high" } else { "low" }
     );
     let mut front_panel_online = false;

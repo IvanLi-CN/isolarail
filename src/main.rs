@@ -1249,14 +1249,22 @@ async fn main(spawner: Spawner) {
                         }
                         _ => {}
                     }
+                    let en_high = match selected_port {
+                        0 => en1.is_set_high(),
+                        1 => en2.is_set_high(),
+                        2 => en3.is_set_high(),
+                        3 => en4.is_set_high(),
+                        _ => false,
+                    };
                     info!(
-                        "front.ui: ch={} manual_output={}",
+                        "front.ui: ch={} manual_output={} en={}",
                         selected_port + 1,
                         if manual_enabled[selected_port] {
                             "enabled"
                         } else {
                             "disabled"
-                        }
+                        },
+                        if en_high { "high" } else { "low" }
                     );
                 }
             }

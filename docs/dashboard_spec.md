@@ -86,10 +86,11 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 ## 7. States & Indicators (compact)
 
 - No headers/column labels are shown.
+- The selected column is shown with a thin cyan inset rectangle. The marker must remain visible in Normal, Disconnected, Closed, and Initializing states without covering values or icons.
 - Per‑column states used in previews:
   - Disconnected: 32×32 icon + `DISC` abbreviation below; no V/I/W values; no power bar (omit entirely).
   - Over‑current: CC icon (24×24) on the power row（centered within W row area）; no numeric power value; no power bar.
-  - Closed (port disabled): 32×32 plug-disconnected icon + `OFF` abbreviation below; no power bar (omit entirely).
+  - Closed (port disabled, including manual output disconnect): 32×32 plug-disconnected icon + `OFF` abbreviation below; no power bar (omit entirely).
   - Initializing / no data yet: all three rows show `--`; power bar may show outline only.
   - Normal: V/I/W values in yellow/red/green; bar filled proportionally.
   
@@ -103,11 +104,10 @@ The colored previews use 7×13 bold for improved readability while fitting into 
 
 ## 9. Input Mapping (five‑way)
 
-- Left/Right: move selection across the 4 columns.
-- Up/Down: cycle display modes (standard / bold power / hide units) or
-  enter/exit per‑column detail view.
-- Center (short): toggle detail view for the selected column.
-- Center (long): quick menu (clear peak, reset, etc.).
+- Left/Right: move selection across the 4 columns, wrapping between column 1 and column 4.
+- Up/Down: reserved for future display modes or per-column detail view; no current runtime action.
+- Center (short): manually disconnect or restore output power for the selected column.
+- Center (long): reserved for a future quick menu.
 
 ## 10. Data Source Notes
 

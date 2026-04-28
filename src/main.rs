@@ -281,6 +281,7 @@ impl embedded_hal::digital::OutputPin for NoopPin {
 #[derive(Copy, Clone, Debug, Default)]
 struct PortSample {
     connected: bool,
+    selected: bool,
     // millivolts and milliamps for convenience
     vbus_mv: u32,
     ich_ma: u32,
@@ -295,6 +296,7 @@ impl PortSample {
 
 const UI_BG_GRAY: Rgb565 = Rgb565::new(31, 63, 31); // pure white background for max contrast
 const UI_BORDER: Rgb565 = Rgb565::new(0, 0, 0);
+const UI_SELECTED: Rgb565 = Rgb565::new(0, 24, 31);
 const UI_V_YELLOW: Rgb565 = Rgb565::new(31, 45, 0); // darker amber for better contrast on white
 const UI_I_RED: Rgb565 = Rgb565::new(31, 0, 0); // vivid red
 const UI_W_GREEN: Rgb565 = Rgb565::new(0, 42, 0); // darker green for contrast
@@ -421,6 +423,14 @@ fn draw_dashboard_frame<D: embedded_graphics::draw_target::DrawTarget<Color = Rg
 
     // Column centers
     let centers = [20i32, 60, 100, 140];
+    for (col, sample) in samples.iter().enumerate() {
+        if sample.selected {
+            let left = (col as i32) * 40 + 1;
+            let _ = Rectangle::new(Point::new(left, 1), Size::new(38, 48))
+                .into_styled(PrimitiveStyle::with_stroke(UI_SELECTED, 1))
+                .draw(disp);
+        }
+    }
 
     // Rows with larger bold font (no header): y = 2, 16, 30 (tight spacing)
     let rows_y = [2i32, 16, 30];
@@ -1126,29 +1136,98 @@ async fn main(spawner: Spawner) {
     // 当前 V3 输出模块不再沿用旧的 SW2303 runtime 遥测任务；
     // dashboard 直接按通道读取模块 INA226，避免旧驱动误报。
     // === UI periodic refresh loop (2 Hz) ===
+    front_panel::clear_events();
+    let front_events = front_panel::event_receiver();
+    let mut selected_port: usize = 0;
+    let mut manual_enabled = [true; 4];
     loop {
+        while let Ok(event) = front_events.try_receive() {
+            match event {
+                front_panel::KeyEvent::Left => {
+                    selected_port = if selected_port == 0 {
+                        3
+                    } else {
+                        selected_port - 1
+                    };
+                    info!("front.ui: selected_port={}", selected_port + 1);
+                }
+                front_panel::KeyEvent::Right => {
+                    selected_port = (selected_port + 1) % 4;
+                    info!("front.ui: selected_port={}", selected_port + 1);
+                }
+                front_panel::KeyEvent::Center => {
+                    manual_enabled[selected_port] = !manual_enabled[selected_port];
+                    let enabled = power_boot.ready && manual_enabled[selected_port];
+                    match selected_port {
+                        0 => {
+                            if enabled {
+                                en1.set_high();
+                            } else {
+                                en1.set_low();
+                            }
+                        }
+                        1 => {
+                            if enabled {
+                                en2.set_high();
+                            } else {
+                                en2.set_low();
+                            }
+                        }
+                        2 => {
+                            if enabled {
+                                en3.set_high();
+                            } else {
+                                en3.set_low();
+                            }
+                        }
+                        3 => {
+                            if enabled {
+                                en4.set_high();
+                            } else {
+                                en4.set_low();
+                            }
+                        }
+                        _ => {}
+                    }
+                    info!(
+                        "front.ui: ch={} manual_output={}",
+                        selected_port + 1,
+                        if manual_enabled[selected_port] {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        }
+                    );
+                }
+            }
+        }
+
         // Derive per-port samples
         let mut view: [PortSample; 4] = [
             PortSample {
                 connected: false,
+                selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
             },
             PortSample {
                 connected: false,
+                selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
             },
             PortSample {
                 connected: false,
+                selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
             },
             PortSample {
                 connected: false,
+                selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
@@ -1161,6 +1240,11 @@ async fn main(spawner: Spawner) {
         };
         for ch in 0u8..4u8 {
             let idx = ch as usize;
+            view[idx].selected = idx == selected_port;
+            if !manual_enabled[idx] {
+                view[idx].ui_state = UiPortState::Closed;
+                continue;
+            }
             // OFF takes precedence (global intent in MVP)
             if target == PowerSwitchTarget::Open {
                 view[idx].ui_state = UiPortState::Closed;

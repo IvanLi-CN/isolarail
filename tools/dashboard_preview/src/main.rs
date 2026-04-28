@@ -87,7 +87,15 @@ fn draw_centered_text<D: DrawTarget<Color = Rgb565>>(
     let _ = Text::with_baseline(text, Point::new(x, y), style, Baseline::Top).draw(disp);
 }
 
-fn draw_dashboard(samples: &[(bool, &str, &str, &str); 4], svg_path: &str) {
+fn draw_selected(c: &mut Canvas, col: usize) {
+    let left = (col as i32) * 40 + 1;
+    Rectangle::new(Point::new(left, 1), Size::new(38, 48))
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::new(0, 97 / 4, 255 / 8), 1))
+        .draw(c)
+        .ok();
+}
+
+fn draw_dashboard(samples: &[(bool, bool, &str, &str, &str); 4], svg_path: &str) {
     let mut c = Canvas::new(160, 50, Rgb565::new(31, 63, 31));
     // borders and separators
     let border = PrimitiveStyle::with_stroke(Rgb565::new(0,0,0), 1);
@@ -96,12 +104,17 @@ fn draw_dashboard(samples: &[(bool, &str, &str, &str); 4], svg_path: &str) {
         Rectangle::new(Point::new(x,0), Size::new(1,50)).into_styled(PrimitiveStyle::with_fill(Rgb565::new(0,0,0))).draw(&mut c).ok();
     }
     let centers = [20i32, 60, 100, 140];
+    for (col, sample) in samples.iter().enumerate() {
+        if sample.1 {
+            draw_selected(&mut c, col);
+        }
+    }
     let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,45,0));
     let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,0,0));
     let w_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,42,0));
     // rows: y=2, 16, 30 (1 px interline spacing; no header)
     for (col, cx) in centers.iter().enumerate() {
-        let (conn, v, i, w) = samples[col];
+        let (conn, _selected, v, i, w) = samples[col];
         if conn {
             // outline pass
             for (dx,dy) in [(-1,0),(1,0),(0,-1),(0,1)] {
@@ -139,10 +152,11 @@ fn draw_states_preview(svg_path: &str) {
     for x in [40i32, 80, 120] {
         Rectangle::new(Point::new(x,0), Size::new(1,50)).into_styled(PrimitiveStyle::with_fill(Rgb565::new(0,0,0))).draw(&mut c).ok();
     }
+    draw_selected(&mut c, 2);
     let centers = [20i32, 60, 100, 140];
     let v_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,45,0));
     let i_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(31,0,0));
-    let w_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,42,0));
+    let _w_style = MonoTextStyle::new(&FONT_7X13_BOLD, Rgb565::new(0,42,0));
 
     // Helper: draw icon from 32x32 .raw mask (ASCII '0'/'1' x32 lines)
     fn draw_icon_raw(c: &mut Canvas, left: i32, top: i32, raw: &str, color: Rgb565) {
@@ -225,10 +239,10 @@ fn main() {
     let out_states = base.join("dashboard_wireframe_160x50_states_color_bold.svg");
     // All online for the normal preview
     let normal = [
-        (true,  "5.12V", "980mA", "5.0W"),
-        (true,  "9.00V", "2.50A", "22.5W"),
-        (true,  "20.0V", "1.50A", "30.0W"),
-        (true,  "12.0V", "1.00A", "12.0W"),
+        (true,  true,  "5.12V", "980mA", "5.0W"),
+        (true,  false, "9.00V", "2.50A", "22.5W"),
+        (true,  false, "20.0V", "1.50A", "30.0W"),
+        (true,  false, "12.0V", "1.00A", "12.0W"),
     ];
     draw_dashboard(&normal, out_normal.to_str().unwrap());
     draw_states_preview(out_states.to_str().unwrap());

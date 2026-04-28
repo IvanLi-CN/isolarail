@@ -81,6 +81,9 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) {
     info!("front.gpio: tca6408a baseline=0x{:02X}", last_inputs);
 
     let mut pressed = [false; 5];
+    for bit in 0..=4u8 {
+        pressed[bit as usize] = (last_inputs & (1u8 << bit)) == 0;
+    }
     let mut fallback = Ticker::every(Duration::from_millis(FALLBACK_SCAN_MS));
 
     loop {

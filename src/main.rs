@@ -1636,6 +1636,9 @@ async fn main(spawner: Spawner) {
                             ocp_latched[idx] = true;
                             ocp_safe_samples[idx] = 0;
                             ocp_retry_wait[idx] = 0;
+                            set_port_enable(ch, false, &mut port_enables);
+                            port_output_active[idx] = false;
+                            view[idx].en_enabled = false;
                             if !was_latched {
                                 warn!(
                                     "hub.sideband: ocp latch port{} reason={} vbus={}mV i={}mA",

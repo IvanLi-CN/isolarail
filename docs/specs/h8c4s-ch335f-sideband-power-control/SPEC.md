@@ -4,7 +4,7 @@
 
 - Status: 部分完成（2/3）
 - Created: 2026-04-28
-- Last: 2026-04-28
+- Last: 2026-04-29
 
 ## 背景 / 问题陈述
 
@@ -18,7 +18,7 @@
 
 - 初始化主板 `TCA6408A@0x20`，读取 CH335F `PWREN1#..4#` 并转换为每路端口使能布尔状态。
 - 用 `OVCUR1#..4#` 向 CH335F 注入过流：释放为输入高阻，告警为输出低。
-- 四路 MCU `EN1..EN4` 由 `VIN ready && PWREN enabled && !ocp_latched` 决定。
+- 四路 MCU `EN1..EN4` 由 `VIN ready`、主板 sideband 在线、`GPIO21/V1OK` 模式、`PWREN#` 与 `ocp_latched` 决定。
 - 运行期按 INA226 读数估算过流并锁存，连续安全周期后释放。
 
 ### Non-goals
@@ -47,6 +47,7 @@
 - P0/P2/P4/P6 必须保持输入，用于读取低有效 `PWREN1#..4#`。
 - P1/P3/P5/P7 必须按“输出低=OVCUR asserted，输入高阻=OVCUR released”处理。
 - `TCA6408A@0x20` 离线时四路 `EN` 必须保持关闭。
+- `GPIO21/V1OK` 为低时必须进入 standalone 模式，允许产品在未连接上游电脑时独立输出。
 - 过流判定默认：`vbus < 3.0 V && current > 0.1 A`，或 `current > 5.3 A`。
 - 命中过流必须立即关闭对应 `ENx` 并拉低对应 `OVCUR#`。
 
@@ -58,7 +59,8 @@
 ## 功能与行为规格
 
 - 启动时在 VIN ready 后初始化 `TCA6408A@0x20`：输出寄存器先写 `0xFF`，极性寄存器写 `0x00`，方向寄存器写 `0xFF`，默认全部高阻释放。
-- 若主板 TCA 在线，启动门控先读取一次 `PWREN#`，仅对 CH335F 已使能且未过流的端口拉高 `ENx`。
+- 若主板 TCA 在线且 `V1OK=low`，启动门控进入 standalone 模式，端口输出不因 `PWREN#` 为高而关闭。
+- 若主板 TCA 在线且 `V1OK=high`，启动门控进入 host-managed 模式，仅对 CH335F 已使能且未过流的端口拉高 `ENx`。
 - 若主板 TCA 离线，四路端口保持关闭，boot self-check 记录 degraded 端口故障。
 - 运行期每 500 ms 复用现有 INA226 采样；安全读数更新 dashboard，过流读数进入 `Overcurrent` UI 状态。
 - 过流 latch 清除条件为恢复探测期间输出带电时连续 4 个安全采样周期；读取失败或输出关闭后的 0V/0mA 不清除 latch。
@@ -66,7 +68,8 @@
 ## 验收标准
 
 - Given 固件启动且主板 TCA 在线，When 初始化完成，Then 日志出现 `hub.sideband: tca6408a=online addr=0x20` 与寄存器初始化成功。
-- Given CH335F 禁用某一路端口，When 固件读取 `PWREN#`，Then 对应 `ENx` 为低且日志中该路 `pwren=off en=off`。
+- Given `V1OK=low` 且主板 TCA 在线，When 固件启动或 runtime 刷新，Then 日志中 `hub_mode=standalone`，四路输出不因 `pwren=off` 关闭。
+- Given `V1OK=high` 且 CH335F 禁用某一路端口，When 固件读取 `PWREN#`，Then 对应 `ENx` 为低且日志中该路 `pwren=off en=off`。
 - Given 某路 INA226 读数满足过流阈值，When runtime 刷新，Then 对应 `OVCUR#` 被拉低、`ENx` 为低、UI 状态为 `cc`。
 - Given 过流后进入恢复探测且连续 4 个带电周期读数安全，When runtime 刷新，Then 对应 `OVCUR#` 释放，若 `PWREN#` 仍 enabled 则 `ENx` 保持高。
 
@@ -101,7 +104,8 @@
 ## 风险 / 开放问题 / 假设
 
 - 风险：若 CH335F host 控制程序不可发现，只能完成固件与串口侧验证，不能自动切换电脑端端口。
-- 当前阻塞：`mcu-agentd flash usb_hub` 因本 worktree 与已登记项目根目录冲突拒绝执行；未修改全局项目登记。
+- 当前硬件缺陷：`PWREN1#` / `PWREN2#` 连接错误已登记为 GitHub issue #18。
+- 当前验证缺口：物理 OCP 未用高电流或低压负载夹具强制触发。
 - 假设：IP6557 标称 `28V5A`，固件软件硬阈值 `5.3A` 作为保护余量。
 
 ## 参考

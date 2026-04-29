@@ -57,16 +57,24 @@ impl Controller {
         asserted: bool,
     ) -> Result<(), I2C::Error> {
         let bit = ovcur_bit(ch);
+        let next_output;
+        let next_config;
         if asserted {
-            self.output &= !bit;
-            self.write_output(i2c).await?;
-            self.config &= !bit;
-            self.config |= PWREN_MASK;
-            self.write_config(i2c).await?;
+            next_output = self.output & !bit;
+            next_config = (self.config & !bit) | PWREN_MASK;
         } else {
-            self.output |= bit;
+            next_output = self.output | bit;
+            next_config = self.config | bit | PWREN_MASK;
+        }
+        if self.output == next_output && self.config == next_config {
+            return Ok(());
+        }
+        if self.output != next_output {
+            self.output = next_output;
             self.write_output(i2c).await?;
-            self.config |= bit | PWREN_MASK;
+        }
+        if self.config != next_config {
+            self.config = next_config;
             self.write_config(i2c).await?;
         }
         Ok(())

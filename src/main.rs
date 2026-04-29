@@ -16,14 +16,16 @@ use embassy_time::{with_timeout, Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
-use esp_hal::gpio::{DriveMode, Input, Level, Output, Pull};
+use esp_hal::gpio::{DriveMode, Flex, Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
+use esp_hal::system;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 // Shared I2C bus infrastructure
 mod boot_diag;
+mod hub_sideband;
 mod power_in;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -116,6 +118,9 @@ const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
+#[allow(dead_code)]
+const PIN_USB_V1OK: u8 = 21; // ISOUSB211 side-1 power OK (high = upstream side powered)
+
 // Output-module enable lines (V3): EN high = module enabled
 #[allow(dead_code)]
 const PIN_EN1: u8 = 17;
@@ -154,9 +159,13 @@ const PIN_LCD_CS_GPIO: u8 = 13;
 const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
-// TCA6408A 地址仅用于存在性检测日志
-const MAIN_TCA6408_ADDR: u8 = 0x20;
 const TCA6408_ADDR: u8 = 0x21;
+const I2C_RECOVERY_CLOCKS: u8 = 18;
+const FRONT_PANEL_BOOT_PROBE_ATTEMPTS: u8 = 3;
+const PORT_OCP_LOW_VBUS_MV: u32 = 3000;
+const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
+const PORT_OCP_HIGH_CURRENT_MA: u32 = 5300;
+const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
 
 fn module_addr_pair(ch: u8) -> (u8, u8) {
     let idx = (ch & 0x03) as usize;
@@ -231,11 +240,124 @@ async fn log_i2c_diag_scan(bus: &'static SharedI2cBus, reason: &'static str) {
     info!("i2c.diag: end reason={}", reason);
 }
 
+async fn recover_i2c_bus(
+    sda_pin: esp_hal::peripherals::GPIO8<'static>,
+    scl_pin: esp_hal::peripherals::GPIO9<'static>,
+) -> (Flex<'static>, Flex<'static>) {
+    let mut sda = Flex::new(sda_pin);
+    let mut scl = Flex::new(scl_pin);
+    let output_config = OutputConfig::default()
+        .with_drive_mode(DriveMode::OpenDrain)
+        .with_pull(Pull::Up);
+    let input_config = InputConfig::default().with_pull(Pull::Up);
+
+    sda.apply_input_config(&input_config);
+    scl.apply_input_config(&input_config);
+    sda.apply_output_config(&output_config);
+    scl.apply_output_config(&output_config);
+    sda.set_input_enable(true);
+    scl.set_input_enable(true);
+    sda.set_high();
+    scl.set_high();
+    sda.set_output_enable(true);
+    scl.set_output_enable(true);
+    Timer::after(Duration::from_micros(10)).await;
+
+    let sda_initial = sda.is_high();
+    let scl_initial = scl.is_high();
+    for _ in 0..I2C_RECOVERY_CLOCKS {
+        scl.set_low();
+        Timer::after(Duration::from_micros(50)).await;
+        scl.set_high();
+        Timer::after(Duration::from_micros(50)).await;
+    }
+
+    sda.set_low();
+    Timer::after(Duration::from_micros(50)).await;
+    scl.set_high();
+    Timer::after(Duration::from_micros(50)).await;
+    sda.set_high();
+    Timer::after(Duration::from_micros(50)).await;
+
+    info!(
+        "i2c.recover: clocks={} sda_initial={} scl_initial={} sda_final={} scl_final={}",
+        I2C_RECOVERY_CLOCKS,
+        if sda_initial { "high" } else { "low" },
+        if scl_initial { "high" } else { "low" },
+        if sda.is_high() { "high" } else { "low" },
+        if scl.is_high() { "high" } else { "low" }
+    );
+    (sda, scl)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum PortOcpDecision {
+    None,
+    LowVbus,
+    HighCurrent,
+}
+
+fn port_overcurrent(vbus_mv: u32, current_ma: u32) -> PortOcpDecision {
+    if current_ma > PORT_OCP_HIGH_CURRENT_MA {
+        return PortOcpDecision::HighCurrent;
+    }
+    if vbus_mv < PORT_OCP_LOW_VBUS_MV && current_ma > PORT_OCP_LOW_VBUS_MIN_CURRENT_MA {
+        return PortOcpDecision::LowVbus;
+    }
+    PortOcpDecision::None
+}
+
+fn ocp_reason_label(decision: PortOcpDecision) -> &'static str {
+    match decision {
+        PortOcpDecision::None => "none",
+        PortOcpDecision::LowVbus => "low_vbus",
+        PortOcpDecision::HighCurrent => "high_current",
+    }
+}
+
+fn reset_reason_label(reason: Option<esp_hal::rtc_cntl::SocResetReason>) -> &'static str {
+    use esp_hal::rtc_cntl::SocResetReason;
+
+    match reason {
+        Some(SocResetReason::ChipPowerOn) => "chip_power_on",
+        Some(SocResetReason::CoreSw) => "core_sw",
+        Some(SocResetReason::CoreDeepSleep) => "core_deep_sleep",
+        Some(SocResetReason::CoreMwdt0) => "core_mwdt0",
+        Some(SocResetReason::CoreMwdt1) => "core_mwdt1",
+        Some(SocResetReason::CoreRtcWdt) => "core_rtc_wdt",
+        Some(SocResetReason::CpuMwdt0) => "cpu_mwdt0",
+        Some(SocResetReason::CpuSw) => "cpu_sw",
+        Some(SocResetReason::CpuRtcWdt) => "cpu_rtc_wdt",
+        Some(SocResetReason::SysBrownOut) => "sys_brown_out",
+        Some(SocResetReason::SysRtcWdt) => "sys_rtc_wdt",
+        Some(SocResetReason::CpuMwdt1) => "cpu_mwdt1",
+        Some(SocResetReason::SysSuperWdt) => "sys_super_wdt",
+        Some(SocResetReason::SysClkGlitch) => "sys_clk_glitch",
+        Some(SocResetReason::CoreEfuseCrc) => "core_efuse_crc",
+        Some(SocResetReason::CoreUsbUart) => "core_usb_uart",
+        Some(SocResetReason::CoreUsbJtag) => "core_usb_jtag",
+        Some(SocResetReason::CorePwrGlitch) => "core_pwr_glitch",
+        None => "unknown",
+    }
+}
+
+fn port_ocp_recovery_safe(vbus_mv: u32, current_ma: u32) -> bool {
+    vbus_mv >= PORT_OCP_LOW_VBUS_MV && current_ma <= PORT_OCP_HIGH_CURRENT_MA
+}
+
+fn set_port_enable(ch: u8, enabled: bool, port_enables: &mut [Output<'static>; 4]) {
+    let pin = &mut port_enables[(ch & 0x03) as usize];
+    if enabled {
+        pin.set_high();
+    } else {
+        pin.set_low();
+    }
+}
+
 fn handle_front_key_event(
     event: front_panel::KeyEvent,
     selected_port: &mut usize,
     manual_enabled: &mut [bool; 4],
-    power_ready: bool,
     port_enables: &mut [Output<'static>; 4],
 ) {
     match event {
@@ -253,22 +375,17 @@ fn handle_front_key_event(
         }
         front_panel::KeyEvent::Center => {
             manual_enabled[*selected_port] = !manual_enabled[*selected_port];
-            let enabled = power_ready && manual_enabled[*selected_port];
-            if enabled {
-                port_enables[*selected_port].set_high();
-            } else {
+            if !manual_enabled[*selected_port] {
                 port_enables[*selected_port].set_low();
             }
-            let en_high = port_enables[*selected_port].is_set_high();
             info!(
-                "front.ui: ch={} manual_output={} en={}",
+                "front.ui: ch={} manual_output={}",
                 *selected_port + 1,
                 if manual_enabled[*selected_port] {
                     "enabled"
                 } else {
                     "disabled"
-                },
-                if en_high { "high" } else { "low" }
+                }
             );
         }
     }
@@ -354,6 +471,9 @@ struct PortSample {
     vbus_mv: u32,
     ich_ma: u32,
     ui_state: UiPortState,
+    pwren_enabled: bool,
+    en_enabled: bool,
+    ocp_latched: bool,
 }
 
 impl PortSample {
@@ -391,6 +511,25 @@ fn port_state_label(state: UiPortState) -> &'static str {
     }
 }
 
+fn hub_power_mode_label(sideband_online: bool, upstream_powered: bool) -> &'static str {
+    if !sideband_online {
+        "offline"
+    } else if upstream_powered {
+        "host"
+    } else {
+        "standalone"
+    }
+}
+
+fn hub_allows_output(
+    sideband_online: bool,
+    upstream_powered: bool,
+    pwren_enabled: [bool; 4],
+    idx: usize,
+) -> bool {
+    sideband_online && (!upstream_powered || pwren_enabled[idx])
+}
+
 fn apply_dashboard_control_state(
     samples: &mut [PortSample; 4],
     selected_port: usize,
@@ -404,17 +543,6 @@ fn apply_dashboard_control_state(
             sample.vbus_mv = 0;
             sample.ich_ma = 0;
             sample.ui_state = UiPortState::Closed;
-        } else if sample.ui_state == UiPortState::Closed {
-            sample.connected = false;
-            sample.vbus_mv = 0;
-            sample.ich_ma = 0;
-            sample.ui_state = if CH_SCAN_DONE[idx].load(Ordering::Relaxed)
-                && !CH_RDY[idx].load(Ordering::Relaxed)
-            {
-                UiPortState::Disconnected
-            } else {
-                UiPortState::Initializing
-            };
         }
     }
 }
@@ -797,6 +925,7 @@ async fn ack_scan_vin_off() {
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     let p = esp_hal::init(esp_hal::Config::default());
+    let reset_reason = system::reset_reason();
     info!("app.start");
 
     // Initialize the embassy time driver
@@ -827,12 +956,24 @@ async fn main(spawner: Spawner) {
         p.GPIO42,
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     );
+    let usb_v1ok = Input::new(
+        p.GPIO21,
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    );
+    info!(
+        "hub.upstream: v1ok={} gpio=GPIO{}",
+        if usb_v1ok.is_high() { "high" } else { "low" },
+        PIN_USB_V1OK
+    );
     let mut vin_adc_config = AdcConfig::new();
     let vin_adc_pin: power_in::VinAdcPin =
         vin_adc_config.enable_pin_with_cal(p.GPIO4, Attenuation::_11dB);
     let vin_adc = Adc::new(p.ADC1, vin_adc_config);
 
-    // Front-panel INT pin will be initialized only if panel is present.
+    let front_int_pin = Input::new(
+        p.GPIO16,
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    );
 
     // EN lines default disabled (drive low => module disabled)
     let mut port_enables = [
@@ -850,12 +991,13 @@ async fn main(spawner: Spawner) {
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
-    // Upstream TCA6408A presence check (0x21) using async I2C — runs immediately after publishing intent
-    // Initialize I2C0 once and share via Mutex + I2cDevice
+    // Recover a possible half-finished I2C transaction left by MCU-only resets.
+    let (i2c_sda, i2c_scl) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
+    // Initialize I2C0 once and share via Mutex + I2cDevice.
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
-        .with_sda(p.GPIO8)
-        .with_scl(p.GPIO9)
+        .with_sda(i2c_sda)
+        .with_scl(i2c_scl)
         .into_async();
     let bus = I2C_BUS.init(Mutex::new(i2c_hw));
     // MCU 直接控制 CS/RES（V3 网表）
@@ -941,12 +1083,13 @@ async fn main(spawner: Spawner) {
         info!("lcd.init: panel ready");
     }
     info!(
-        "main.reset: release_level={}",
+        "main.reset: release_level={} reset_reason={}",
         if i2c_reset_released_high {
             "high"
         } else {
             "low"
-        }
+        },
+        reset_reason_label(reset_reason)
     );
 
     let mut boot_snapshot = BootSelfCheckSnapshot::new();
@@ -1022,20 +1165,43 @@ async fn main(spawner: Spawner) {
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
     info!(
-        "main.reset: pre-tca-probe level={}",
-        if i2c_reset.is_high() { "high" } else { "low" }
+        "main.reset: pre-tca-probe level={} reset_reason={}",
+        if i2c_reset.is_high() { "high" } else { "low" },
+        reset_reason_label(reset_reason)
     );
-    let mut front_panel_online = false;
-    let mut main_i2c = I2cDevice::new(bus);
-    let (main_ok, _) = i2c_ack_probe(&mut main_i2c, MAIN_TCA6408_ADDR).await;
-    info!(
-        "i2c.main: tca6408a={} addr=0x{:02X}",
-        if main_ok { "online" } else { "offline" },
-        MAIN_TCA6408_ADDR
-    );
-    if !main_ok {
-        log_i2c_diag_scan(bus, "main-tca-offline").await;
+    let mut hub_ctrl = None;
+    if power_boot.ready {
+        let mut hub_i2c = I2cDevice::new(bus);
+        match hub_sideband::Controller::init(&mut hub_i2c).await {
+            Ok(ctrl) => {
+                match ctrl.snapshot(&mut hub_i2c).await {
+                    Ok(s) => info!(
+                        "hub.sideband: tca6408a=online addr=0x{:02X} init=ok input=0x{:02X} p1_pwren={} p2_pwren={} p3_pwren={} p4_pwren={}",
+                        hub_sideband::TCA6408_ADDR,
+                        s.input,
+                        if s.pwren_enabled[0] { "on" } else { "off" },
+                        if s.pwren_enabled[1] { "on" } else { "off" },
+                        if s.pwren_enabled[2] { "on" } else { "off" },
+                        if s.pwren_enabled[3] { "on" } else { "off" },
+                    ),
+                    Err(_) => warn!(
+                        "hub.sideband: tca6408a=online addr=0x{:02X} init=ok read=fail",
+                        hub_sideband::TCA6408_ADDR
+                    ),
+                }
+                hub_ctrl = Some(ctrl);
+            }
+            Err(_) => warn!(
+                "hub.sideband: tca6408a=offline addr=0x{:02X}; keep outputs closed",
+                hub_sideband::TCA6408_ADDR
+            ),
+        }
+        if hub_ctrl.is_none() {
+            log_i2c_diag_scan(bus, "hub-sideband-offline").await;
+        }
     }
+
+    let mut front_panel_online = false;
     if power_boot.ready {
         boot_snapshot.set_sys(
             SysCheck::Front,
@@ -1044,8 +1210,12 @@ async fn main(spawner: Spawner) {
         );
         flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
-        let mut attempts: u32 = 0;
-        loop {
+        // Current V3 hardware cannot hard-reset or power-cycle the front-panel
+        // TCA6408A from the MCU. If bus-clear cannot recover 0x21, waiting here
+        // forever leaves the product unusable. Future hardware with a routed
+        // front-panel TCA RESET#/VCCP control should remove this degraded path
+        // and recover the expander before runtime.
+        for attempt in 0..FRONT_PANEL_BOOT_PROBE_ATTEMPTS {
             if front_panel::is_present(bus).await {
                 info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
                 info!("boot.check: name=panel state=ok fault=-");
@@ -1054,21 +1224,35 @@ async fn main(spawner: Spawner) {
                 break;
             }
 
-            if attempts == 0 || attempts.is_multiple_of(20) {
-                let waiting_fault = BootFaultCode::FrontPanelOffline;
-                warn!(
-                    "i2c.front: tca6408a=offline addr=0x{:02X}; waiting for front panel",
-                    TCA6408_ADDR
-                );
-                warn!(
-                    "boot.wait: name=panel state=pending fault={} retry={}",
-                    fault_label(waiting_fault),
-                    attempts + 1
-                );
+            warn!(
+                "i2c.front: tca6408a=offline addr=0x{:02X}; retry={}/{}",
+                TCA6408_ADDR,
+                attempt + 1,
+                FRONT_PANEL_BOOT_PROBE_ATTEMPTS
+            );
+            warn!(
+                "front.int: level={} while_panel_pending",
+                if front_int_pin.is_high() {
+                    "high"
+                } else {
+                    "low"
+                }
+            );
+            if attempt == 0 {
+                log_i2c_diag_scan(bus, "front-panel-wait").await;
             }
-            attempts = attempts.wrapping_add(1);
             flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
             Timer::after(Duration::from_millis(500)).await;
+        }
+        if !front_panel_online {
+            warn!(
+                "boot.check: name=panel state=warn fault=FrontPanelOffline recovery=blocked_no_reset_pin"
+            );
+            boot_snapshot.set_sys(
+                SysCheck::Front,
+                SelfCheckItemState::Warn,
+                BootFaultCode::FrontPanelOffline,
+            );
         }
     } else {
         boot_snapshot.set_sys(
@@ -1111,11 +1295,7 @@ async fn main(spawner: Spawner) {
     gates.allow_front_panel = front_panel_online;
 
     if front_panel_online {
-        let int_pin = Input::new(
-            p.GPIO16,
-            esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
-        );
-        front_panel::spawn(&spawner, bus, int_pin).expect("spawn front_panel task");
+        front_panel::spawn(&spawner, bus, front_int_pin).expect("spawn front_panel task");
     }
 
     if !power_boot.ready {
@@ -1211,14 +1391,72 @@ async fn main(spawner: Spawner) {
         flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
     }
 
-    if power_boot.ready {
-        // Self-check failures remain visible in logs/UI, but only total input faults
-        // are allowed to block output enable during bring-up.
-        for port_enable in port_enables.iter_mut() {
-            port_enable.set_high();
+    if power_boot.ready && hub_ctrl.is_none() {
+        for ch in 0..4usize {
+            CH_RDY[ch].store(false, Ordering::Relaxed);
+            CH_SCAN_DONE[ch].store(true, Ordering::Relaxed);
+            boot_snapshot.set_port(
+                ch,
+                SelfCheckItemState::Err,
+                BootFaultCode::HubSidebandOffline,
+            );
         }
-        gates.allow_port = [true; 4];
-        info!("boot.gate: ports=all-open reason=power_input_ok");
+        warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
+        flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+    }
+
+    if power_boot.ready {
+        let mut pwren_enabled = [false; 4];
+        let mut hub_read_failed = false;
+        if let Some(ctrl) = hub_ctrl.as_mut() {
+            let mut hub_i2c = I2cDevice::new(bus);
+            match ctrl.snapshot(&mut hub_i2c).await {
+                Ok(snapshot) => pwren_enabled = snapshot.pwren_enabled,
+                Err(_) => hub_read_failed = true,
+            }
+        }
+        if hub_read_failed {
+            warn!(
+                "hub.sideband: read failed during gate apply addr=0x{:02X}; keep outputs closed",
+                hub_sideband::TCA6408_ADDR
+            );
+            hub_ctrl = None;
+            for ch in 0..4usize {
+                CH_RDY[ch].store(false, Ordering::Relaxed);
+                CH_SCAN_DONE[ch].store(true, Ordering::Relaxed);
+                boot_snapshot.set_port(
+                    ch,
+                    SelfCheckItemState::Err,
+                    BootFaultCode::HubSidebandOffline,
+                );
+            }
+            warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
+            flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+        }
+        let upstream_powered = usb_v1ok.is_high();
+        let hub_mode = hub_power_mode_label(hub_ctrl.is_some(), upstream_powered);
+        for ch in 0..4u8 {
+            let enabled = hub_allows_output(
+                hub_ctrl.is_some(),
+                upstream_powered,
+                pwren_enabled,
+                ch as usize,
+            );
+            set_port_enable(ch, enabled, &mut port_enables);
+            gates.allow_port[ch as usize] = enabled;
+            info!(
+                "boot.gate: port{} mode={} v1ok={} pwren={} ocp=false en={}",
+                ch + 1,
+                hub_mode,
+                if upstream_powered { "high" } else { "low" },
+                if pwren_enabled[ch as usize] {
+                    "on"
+                } else {
+                    "off"
+                },
+                if enabled { "on" } else { "off" }
+            );
+        }
     }
 
     boot_snapshot.set_stage(BootStage::GateApply);
@@ -1271,13 +1509,16 @@ async fn main(spawner: Spawner) {
     let front_events = front_panel::event_receiver();
     let mut selected_port: usize = 0;
     let mut manual_enabled = [true; 4];
+    let mut ocp_latched = [false; 4];
+    let mut ocp_safe_samples = [0u8; 4];
+    let mut ocp_retry_wait = [0u8; 4];
+    let mut port_output_active = boot_snapshot.gates.allow_port;
     loop {
         while let Ok(event) = front_events.try_receive() {
             handle_front_key_event(
                 event,
                 &mut selected_port,
                 &mut manual_enabled,
-                power_boot.ready,
                 &mut port_enables,
             );
         }
@@ -1290,6 +1531,9 @@ async fn main(spawner: Spawner) {
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
+                pwren_enabled: false,
+                en_enabled: false,
+                ocp_latched: false,
             },
             PortSample {
                 connected: false,
@@ -1297,6 +1541,9 @@ async fn main(spawner: Spawner) {
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
+                pwren_enabled: false,
+                en_enabled: false,
+                ocp_latched: false,
             },
             PortSample {
                 connected: false,
@@ -1304,6 +1551,9 @@ async fn main(spawner: Spawner) {
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
+                pwren_enabled: false,
+                en_enabled: false,
+                ocp_latched: false,
             },
             PortSample {
                 connected: false,
@@ -1311,6 +1561,9 @@ async fn main(spawner: Spawner) {
                 vbus_mv: 0,
                 ich_ma: 0,
                 ui_state: UiPortState::Initializing,
+                pwren_enabled: false,
+                en_enabled: false,
+                ocp_latched: false,
             },
         ];
         let target = if PWR_SW_TARGET.load(Ordering::Relaxed) == (PowerSwitchTarget::Open as u8) {
@@ -1318,55 +1571,177 @@ async fn main(spawner: Spawner) {
         } else {
             PowerSwitchTarget::Closed
         };
+        let mut hub_runtime_failed = false;
+        let hub_snapshot = if let Some(ctrl) = hub_ctrl.as_mut() {
+            let mut hub_i2c = I2cDevice::new(bus);
+            match ctrl.snapshot(&mut hub_i2c).await {
+                Ok(snapshot) => Some(snapshot),
+                Err(_) => {
+                    hub_runtime_failed = true;
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        if hub_runtime_failed {
+            warn!(
+                "hub.sideband: runtime read failed addr=0x{:02X}; close all outputs",
+                hub_sideband::TCA6408_ADDR
+            );
+            hub_ctrl = None;
+        }
+        let sideband_online = hub_snapshot.is_some();
+        let pwren_enabled = hub_snapshot
+            .map(|snapshot| snapshot.pwren_enabled)
+            .unwrap_or([false; 4]);
+        let upstream_powered = usb_v1ok.is_high();
+        let hub_mode = hub_power_mode_label(sideband_online, upstream_powered);
+        let mut desired_en = [false; 4];
         for ch in 0u8..4u8 {
             let idx = ch as usize;
             view[idx].selected = idx == selected_port;
+            view[idx].pwren_enabled = pwren_enabled[idx];
+            view[idx].ocp_latched = ocp_latched[idx];
             if !manual_enabled[idx] {
                 view[idx].ui_state = UiPortState::Closed;
                 continue;
             }
-            // OFF takes precedence (global intent in MVP)
             if target == PowerSwitchTarget::Open {
                 view[idx].ui_state = UiPortState::Closed;
                 continue;
             }
-            // Not yet ready -> INIT
-            if !CH_RDY[idx].load(Ordering::Relaxed) {
-                // If initial scan is done but channel not ready => treat as disconnected
-                if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {
-                    view[idx].ui_state = UiPortState::Disconnected;
-                } else {
-                    view[idx].ui_state = UiPortState::Initializing;
+            if !hub_allows_output(sideband_online, upstream_powered, pwren_enabled, idx) {
+                view[idx].ui_state = UiPortState::Closed;
+                continue;
+            }
+            if ocp_latched[idx] && !port_output_active[idx] {
+                ocp_retry_wait[idx] = ocp_retry_wait[idx].saturating_add(1);
+                view[idx].ui_state = UiPortState::Overcurrent;
+                if ocp_retry_wait[idx] >= PORT_OCP_RELEASE_SAFE_SAMPLES {
+                    desired_en[idx] = true;
                 }
                 continue;
             }
-            view[idx].connected = true;
-            match sample_module_ina226(ch).await {
-                Some((v_mv, i_ma)) => {
-                    view[idx].vbus_mv = v_mv;
-                    view[idx].ich_ma = i_ma;
-                    view[idx].ui_state = UiPortState::Normal;
+            let mut keep_recovery_probe_enabled = false;
+            if CH_RDY[idx].load(Ordering::Relaxed) {
+                view[idx].connected = true;
+                match sample_module_ina226(ch).await {
+                    Some((v_mv, i_ma)) => {
+                        view[idx].vbus_mv = v_mv;
+                        view[idx].ich_ma = i_ma;
+                        let ocp_decision = port_overcurrent(v_mv, i_ma);
+                        if ocp_decision != PortOcpDecision::None {
+                            let was_latched = ocp_latched[idx];
+                            ocp_latched[idx] = true;
+                            ocp_safe_samples[idx] = 0;
+                            ocp_retry_wait[idx] = 0;
+                            set_port_enable(ch, false, &mut port_enables);
+                            port_output_active[idx] = false;
+                            view[idx].en_enabled = false;
+                            if !was_latched {
+                                warn!(
+                                    "hub.sideband: ocp latch port{} reason={} vbus={}mV i={}mA",
+                                    ch + 1,
+                                    ocp_reason_label(ocp_decision),
+                                    v_mv,
+                                    i_ma
+                                );
+                            }
+                        } else if ocp_latched[idx] && port_output_active[idx] {
+                            keep_recovery_probe_enabled = true;
+                            if port_ocp_recovery_safe(v_mv, i_ma) {
+                                ocp_safe_samples[idx] = ocp_safe_samples[idx].saturating_add(1);
+                                if ocp_safe_samples[idx] >= PORT_OCP_RELEASE_SAFE_SAMPLES {
+                                    ocp_latched[idx] = false;
+                                    ocp_safe_samples[idx] = 0;
+                                    ocp_retry_wait[idx] = 0;
+                                    keep_recovery_probe_enabled = false;
+                                    info!("hub.sideband: ocp release port{}", ch + 1);
+                                }
+                            } else {
+                                ocp_safe_samples[idx] = 0;
+                            }
+                        } else if ocp_latched[idx] {
+                            ocp_safe_samples[idx] = 0;
+                        }
+                        view[idx].ui_state = if ocp_latched[idx] {
+                            UiPortState::Overcurrent
+                        } else {
+                            UiPortState::Normal
+                        };
+                    }
+                    None => {
+                        view[idx].connected = false;
+                        view[idx].ui_state = UiPortState::Disconnected;
+                    }
                 }
-                None => {
-                    view[idx].connected = false;
-                    view[idx].ui_state = UiPortState::Disconnected;
+            } else if CH_SCAN_DONE[idx].load(Ordering::Relaxed) {
+                view[idx].ui_state = UiPortState::Disconnected;
+            } else {
+                view[idx].ui_state = UiPortState::Initializing;
+            }
+            if ocp_latched[idx] {
+                view[idx].ui_state = UiPortState::Overcurrent;
+            }
+            desired_en[idx] = !ocp_latched[idx] || keep_recovery_probe_enabled;
+            view[idx].ocp_latched = ocp_latched[idx];
+        }
+        let mut hub_write_failed = false;
+        if let Some(ctrl) = hub_ctrl.as_mut() {
+            let mut hub_i2c = I2cDevice::new(bus);
+            for ch in 0u8..4u8 {
+                if ctrl
+                    .set_overcurrent(&mut hub_i2c, ch, ocp_latched[ch as usize])
+                    .await
+                    .is_err()
+                {
+                    hub_write_failed = true;
+                    break;
                 }
             }
         }
+        if hub_write_failed {
+            warn!(
+                "hub.sideband: runtime write failed addr=0x{:02X}; close all outputs",
+                hub_sideband::TCA6408_ADDR
+            );
+            hub_ctrl = None;
+            desired_en = [false; 4];
+        }
+        for ch in 0u8..4u8 {
+            set_port_enable(ch, desired_en[ch as usize], &mut port_enables);
+            view[ch as usize].en_enabled = desired_en[ch as usize];
+            port_output_active[ch as usize] = desired_en[ch as usize];
+        }
         info!(
-            "port.telemetry: p1={} {}mV {}mA p2={} {}mV {}mA p3={} {}mV {}mA p4={} {}mV {}mA",
+            "port.telemetry: hub_mode={} v1ok={} p1={} {}mV {}mA pwren={} ocp={} en={} p2={} {}mV {}mA pwren={} ocp={} en={} p3={} {}mV {}mA pwren={} ocp={} en={} p4={} {}mV {}mA pwren={} ocp={} en={}",
+            hub_mode,
+            if upstream_powered { "high" } else { "low" },
             port_state_label(view[0].ui_state),
             view[0].vbus_mv,
             view[0].ich_ma,
+            if view[0].pwren_enabled { "on" } else { "off" },
+            if view[0].ocp_latched { "on" } else { "off" },
+            if view[0].en_enabled { "on" } else { "off" },
             port_state_label(view[1].ui_state),
             view[1].vbus_mv,
             view[1].ich_ma,
+            if view[1].pwren_enabled { "on" } else { "off" },
+            if view[1].ocp_latched { "on" } else { "off" },
+            if view[1].en_enabled { "on" } else { "off" },
             port_state_label(view[2].ui_state),
             view[2].vbus_mv,
             view[2].ich_ma,
+            if view[2].pwren_enabled { "on" } else { "off" },
+            if view[2].ocp_latched { "on" } else { "off" },
+            if view[2].en_enabled { "on" } else { "off" },
             port_state_label(view[3].ui_state),
             view[3].vbus_mv,
             view[3].ich_ma,
+            if view[3].pwren_enabled { "on" } else { "off" },
+            if view[3].ocp_latched { "on" } else { "off" },
+            if view[3].en_enabled { "on" } else { "off" },
         );
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
@@ -1376,7 +1751,6 @@ async fn main(spawner: Spawner) {
                 event,
                 &mut selected_port,
                 &mut manual_enabled,
-                power_boot.ready,
                 &mut port_enables,
             );
             apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);

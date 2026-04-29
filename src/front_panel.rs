@@ -14,7 +14,7 @@ use esp_hal::gpio::Input;
 use crate::{I2cBus, TCA6408_ADDR};
 
 const KEY_DEBOUNCE_MS: u64 = 25;
-const FALLBACK_SCAN_MS: u64 = 50;
+const FALLBACK_SCAN_MS: u64 = 500;
 const TCA_READ_RETRY_DELAY_MS: u64 = 2;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

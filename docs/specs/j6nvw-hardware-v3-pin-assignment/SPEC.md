@@ -47,9 +47,10 @@
 - `LCD_DC/LCD_MOSI/LCD_SCLK/LCD_CS/LCD_RST/LCD_BLK` 使用 V3 网表定义的 MCU GPIO。
 - `LCD_BLK` 必须按低有效背光使能处理。
 - 主板 `RESET#` 使用 `GPIO35` 主动输出确定电平：低电平复位，高电平释放。
-- 前面板 `TCA6408A@0x21` 的 `RESET#` 固定上拉，不由 MCU GPIO 控制。
+- 前面板 `TCA6408A@0x21` 的 `RESET#` 固定上拉，不由 MCU GPIO 控制；MCU-only reset 不会复位前面板 TCA。
 - display config 必须使用 `Orientation::LandscapeSwapped`，并依赖包含该映射修复的 `gc9d01-rs` 版本。
-- 前面板 `TCA6408A@0x21` 离线必须阻塞启动自检，直到按键输入扩展器可达。
+- 当前 V3 硬件无法在固件内硬复位前面板 `TCA6408A@0x21`；若 bus-clear 后只有 `0x21` 不 ACK，固件必须标记 `Warn/FrontPanelOffline` 并继续进入 dashboard/runtime，仅禁用前面板输入任务。
+- 未来硬件修订引出前面板 TCA `RESET#` 或 VCCP 控制后，应撤销当前 V3 降级路径，改为硬复位恢复并要求 `0x21` 在线。
 
 ### SHOULD
 
@@ -61,14 +62,14 @@
 - 启动时固件先初始化 SPI2 与显示 GPIO，然后初始化 GC9D01 160x50 panel。
 - `BLK` 输出低电平后背光打开。
 - framebuffer 以 160x50 逻辑尺寸渲染，driver 负责 `LandscapeSwapped` 到物理坐标的转换。
-- `TCA6408A@0x21` 是进入 dashboard 的必需启动条件；离线时 LCD 停留在系统自检页。
+- 当前 V3 硬件下，`TCA6408A@0x21` 只影响前面板按键任务；离线时记录 `Warn/FrontPanelOffline` 并继续进入 dashboard。
 
 ## 验收标准
 
 - Given V3 前面板与显示屏焊接正确，When 固件启动，Then 背光点亮且 LCD 初始化日志显示 `mcu cs/rst, landscape-swapped`。
 - Given dashboard 正常刷新，When 观察屏幕方向，Then 画面相对旧 `Landscape` 配置旋转 180 度。
 - Given 前面板 `TCA6408A@0x21` 在线，When 固件完成自检，Then 日志报告前面板 online 并继续 dashboard。
-- Given 前面板 `TCA6408A@0x21` 离线，When 固件启动自检，Then LCD 停留在 `PANEL PEND` 并持续重试，不进入 dashboard。
+- Given 前面板 `TCA6408A@0x21` 离线，When 当前 V3 硬件启动自检，Then 日志报告 `Warn/FrontPanelOffline`，不启动按键任务但继续进入 dashboard。
 
 ## 实现前置条件
 

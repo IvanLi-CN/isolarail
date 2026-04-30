@@ -46,7 +46,7 @@
 
 - 启动期关键检查必须输出 `boot.stage:*`、`boot.check:*`、`boot.summary:*` 日志。
 - 输入电源链路异常时必须保持 `IN_EN` 关闭，并停留在 fatal 自检页。
-- 当前 V3 硬件下，前面板缺失时必须在有限恢复失败后标记 `Warn/FrontPanelOffline`，禁用前面板输入任务，并继续进入 dashboard/runtime。
+- 当前 V3 硬件下，前面板缺失时必须在有限恢复失败后标记 `Warn/FrontPanelOffline`，禁用前面板输入任务，并继续 runtime；显示 CS/RES 在该状态下不可用。
 - 当前直连 I²C 板型下，端口自检失败只记录诊断，不得单独阻断该路输出；只要总输入 `OK`，自检完成后统一放行 `EN1..EN4`。
 - boot self-check 必须保留 `mux` 槽位，以兼容后续硬件版本恢复 `PCA9545A`。
 
@@ -72,7 +72,7 @@
 
 - 当前板型无 `PCA9545A`：记录 `boot.check: name=mux state=skip fault=-`，端口扫描继续进行。
 - VIN 不可用或 PG 不良：标记系统项 `Fatal`，不进入端口初始化，不放行 runtime。
-- Front panel 离线：当前 V3 硬件下标记 `Warn/FrontPanelOffline`，只禁用 panel 功能。
+- Front panel 离线：当前 V3 硬件下标记 `Warn/FrontPanelOffline`，禁用前面板输入任务，显示 CS/RES 不可用。
 - 单路端口若 `INA226`/`TMP112` 缺失：标记对应端口 `Err`，但只影响诊断与该路运行期测量，不阻断统一输出放行。
 - 端口自检以“存在性与可诊断性优先”为准，不再依赖旧的 `SC8815/SW2303` 初始化链路。
 
@@ -93,7 +93,7 @@ None
 
 - Given 板子正常上电，When 固件启动，Then LCD 先显示自检页，串口输出 `boot.stage:*` 与 `boot.check:*`，最终输出 `boot.summary: outcome=OK|DEG` 并进入 dashboard。
 - Given 当前直连 I²C 板型，When 固件启动，Then 日志记录 `boot.check: name=mux state=skip fault=-`，且端口扫描继续进行。
-- Given 前面板 `TCA6408A` 缺失，When 当前 V3 硬件启动，Then 固件标记 `Warn/FrontPanelOffline`，禁用前面板输入任务，并继续进入 dashboard 与 runtime。
+- Given 前面板 `TCA6408A` 缺失，When 当前 V3 硬件启动，Then 固件标记 `Warn/FrontPanelOffline`，禁用前面板输入任务并继续 runtime。
 - Given 单路输出模块缺少 `INA226` 或 `TMP112`，When 固件启动且总输入 `OK`，Then 该路记为 `Err`，但 `EN1..EN4` 仍在自检结束后统一放行。
 - Given 输入电源资格失败或 PG 不良，When 固件启动，Then `IN_EN` 保持关闭且 LCD 常驻 fatal 自检页。
 - Given 当前验证基线中的通道 4 模块接入，When 固件启动，Then 端口 4 按 `INA226@0x43 + TMP112@0x4B` 识别并可报告 `boot.check: name=port4 state=ok fault=-`。

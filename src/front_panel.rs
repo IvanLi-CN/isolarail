@@ -16,6 +16,14 @@ use crate::{I2cBus, TCA6408_ADDR};
 const KEY_DEBOUNCE_MS: u64 = 25;
 const FALLBACK_SCAN_MS: u64 = 500;
 const TCA_READ_RETRY_DELAY_MS: u64 = 2;
+const REG_INPUT: u8 = 0x00;
+const REG_OUTPUT: u8 = 0x01;
+const REG_POLARITY: u8 = 0x02;
+const REG_CONFIG: u8 = 0x03;
+const DISPLAY_RST_BIT: u8 = 1 << 5;
+const DISPLAY_CS_BIT: u8 = 1 << 6;
+const DISPLAY_OUTPUT_IDLE: u8 = 0xFF;
+const DISPLAY_CONFIG: u8 = 0b1001_1111; // P0..P4/P7 inputs, P5 RES + P6 CS outputs.
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum KeyEvent {
@@ -40,9 +48,61 @@ pub fn clear_events() {
 pub async fn is_present(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
     let mut i2c = I2cDevice::new(bus);
     let mut b = [0u8; 1];
-    embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[0x00], &mut b)
+    embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[REG_INPUT], &mut b)
         .await
         .is_ok()
+}
+
+pub async fn init_display_control(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE)
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    if i2c
+        .write(TCA6408_ADDR, &[REG_POLARITY, 0x00])
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    i2c.write(TCA6408_ADDR, &[REG_CONFIG, DISPLAY_CONFIG])
+        .await
+        .is_ok()
+}
+
+pub async fn pulse_display_reset(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE & !DISPLAY_RST_BIT)
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    Timer::after(Duration::from_millis(10)).await;
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE)
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    Timer::after(Duration::from_millis(120)).await;
+    true
+}
+
+pub async fn set_display_cs(
+    bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
+    asserted: bool,
+) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    let output = if asserted {
+        DISPLAY_OUTPUT_IDLE & !DISPLAY_CS_BIT
+    } else {
+        DISPLAY_OUTPUT_IDLE
+    };
+    tca_write_output(&mut i2c, output).await.is_ok()
 }
 
 pub fn spawn(
@@ -101,8 +161,12 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) {
 async fn tca_read_inputs<I2C: I2c>(i2c: &mut I2C) -> Result<u8, I2C::Error> {
     // TCA6408A Input Port register address = 0x00
     let mut b = [0u8; 1];
-    i2c.write_read(TCA6408_ADDR, &[0x00], &mut b).await?;
+    i2c.write_read(TCA6408_ADDR, &[REG_INPUT], &mut b).await?;
     Ok(b[0])
+}
+
+async fn tca_write_output<I2C: I2c>(i2c: &mut I2C, output: u8) -> Result<(), I2C::Error> {
+    i2c.write(TCA6408_ADDR, &[REG_OUTPUT, output]).await
 }
 
 async fn tca_read_inputs_retry<I2C: I2c>(i2c: &mut I2C, attempts: usize) -> Result<u8, I2C::Error> {

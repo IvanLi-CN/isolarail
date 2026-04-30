@@ -86,8 +86,6 @@ static CH_SCAN_DONE: [AtomicBool; 4] = [
     AtomicBool::new(false),
 ];
 
-// （已按要求撤销 TCA6408A 虚拟 GPIO 实现）
-
 // Global target state: open/closed (intent)
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
@@ -150,13 +148,11 @@ const MODULE_SENSOR_RETRY_MS: u64 = 50;
 const MODULE_SENSOR_RETRIES: u8 = 6;
 
 // ===== Display pin mapping (V3 netlist) =====
-// SPI2 SCLK/MOSI to panel; MISO unused. MCU directly drives DC/CS/RES/BLK.
+// SPI2 SCLK/MOSI to panel; MISO unused. MCU drives DC/BLK, front-panel TCA drives CS/RES.
 // BLK drives a panel-side P-channel gate and is therefore active-low.
 const PIN_LCD_SCLK: u8 = 12;
 const PIN_LCD_MOSI: u8 = 11;
 const PIN_LCD_DC: u8 = 10;
-const PIN_LCD_CS_GPIO: u8 = 13;
-const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
 const TCA6408_ADDR: u8 = 0x21;
@@ -391,7 +387,7 @@ fn handle_front_key_event(
     }
 }
 
-// The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
+// The front-panel TCA6408A handles key input and display CS/RES.
 
 // Embassy timer adapter for the display driver
 struct DisplayTimer;
@@ -401,32 +397,51 @@ impl Gc9d01Timer for DisplayTimer {
     }
 }
 
-// Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
-// CS is permanently held low by TCA6408A (P6), so we don't toggle CS here.
-struct SimpleSpiDev<'a, BUS> {
-    bus: BUS,
-    cs: Option<Output<'a>>,
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum DisplaySpiError {
+    Spi,
+    ChipSelect,
 }
 
-impl<'a, BUS> embedded_hal::spi::ErrorType for SimpleSpiDev<'a, BUS>
+impl embedded_hal::spi::Error for DisplaySpiError {
+    fn kind(&self) -> embedded_hal::spi::ErrorKind {
+        match self {
+            Self::Spi => embedded_hal::spi::ErrorKind::Other,
+            Self::ChipSelect => embedded_hal::spi::ErrorKind::ChipSelectFault,
+        }
+    }
+}
+
+// Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
+// CS is routed through front-panel TCA6408A P6.
+struct SimpleSpiDev<BUS> {
+    bus: BUS,
+    i2c_bus: &'static SharedI2cBus,
+}
+
+impl<BUS> embedded_hal::spi::ErrorType for SimpleSpiDev<BUS>
 where
     BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
 {
-    type Error = esp_hal::spi::Error;
+    type Error = DisplaySpiError;
 }
 
-impl<'a, BUS> Eh1SpiDevice for SimpleSpiDev<'a, BUS>
+impl<BUS> Eh1SpiDevice for SimpleSpiDev<BUS>
 where
     BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
 {
     async fn transaction(&mut self, ops: &mut [SpiOp<'_, u8>]) -> Result<(), Self::Error> {
-        if let Some(cs) = self.cs.as_mut() {
-            cs.set_low();
+        if !front_panel::set_display_cs(self.i2c_bus, true).await {
+            return Err(DisplaySpiError::ChipSelect);
         }
+        let mut result = Ok(());
         for op in ops.iter_mut() {
             match op {
                 SpiOp::Write(w) => {
-                    self.bus.write(w).await?;
+                    if self.bus.write(w).await.is_err() {
+                        result = Err(DisplaySpiError::Spi);
+                        break;
+                    }
                 }
                 SpiOp::Read(_r) => {
                     // Not used by this driver path
@@ -438,16 +453,16 @@ where
                 SpiOp::DelayNs(_ns) => {}
             }
         }
-        if let Some(cs) = self.cs.as_mut() {
-            cs.set_high();
+        if !front_panel::set_display_cs(self.i2c_bus, false).await {
+            return Err(DisplaySpiError::ChipSelect);
         }
-        Ok(())
+        result
     }
 }
 
 // Initialize SPI + GC9D01 and draw a chessboard pattern (inlined in main where pins are available)
 
-// NoopPin for RST placeholder: real reset handled via TCA6408 P5
+// NoopPin for RST placeholder: real reset is handled through TCA6408A P5 before driver init.
 pub struct NoopPin;
 impl embedded_hal::digital::ErrorType for NoopPin {
     type Error = core::convert::Infallible;
@@ -867,7 +882,7 @@ async fn flush_boot_self_check<
     D: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
     R: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
 >(
-    disp: &mut GC9D01<'_, SimpleSpiDev<'_, BUS>, D, R, DisplayTimer>,
+    disp: &mut GC9D01<'_, SimpleSpiDev<BUS>, D, R, DisplayTimer>,
     snapshot: &BootSelfCheckSnapshot,
     ports_page: bool,
 ) {
@@ -1000,10 +1015,13 @@ async fn main(spawner: Spawner) {
         .with_scl(i2c_scl)
         .into_async();
     let bus = I2C_BUS.init(Mutex::new(i2c_hw));
-    // MCU 直接控制 CS/RES（V3 网表）
-    info!("lcd.ctrl: cs,res via MCU GPIO");
+    if front_panel::init_display_control(bus).await {
+        info!("lcd.ctrl: cs,res via front-panel tca6408a p6,p5");
+    } else {
+        warn!("lcd.ctrl: front-panel tca6408a init failed; display cs/res unavailable");
+    }
 
-    // Setup SPI2 and display. CS/RES/BLK are direct MCU GPIOs.
+    // Setup SPI2 and display. DC/BLK are MCU GPIOs; CS/RES are front-panel TCA outputs.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()
@@ -1037,22 +1055,9 @@ async fn main(spawner: Spawner) {
     let mut fb_buf: [Rgb565; LOGICAL_W * LOGICAL_H] = [Rgb565::BLACK; LOGICAL_W * LOGICAL_H];
     let fb: &mut [Rgb565] = &mut fb_buf;
 
-    // 用 MCU CS 脚包一层 SpiDevice，事务内拉低/释放
-    let cs = match PIN_LCD_CS_GPIO {
-        13 => Output::new(
-            p.GPIO13,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-        _ => Output::new(
-            p.GPIO13,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-    };
     let spi_dev = SimpleSpiDev {
         bus: spi_bus,
-        cs: Some(cs),
+        i2c_bus: bus,
     };
     let cfg = DisplayConfig {
         width: LOGICAL_W as u16,
@@ -1063,20 +1068,12 @@ async fn main(spawner: Spawner) {
         dx: 15,
         dy: 0,
     };
-    let rst = match PIN_LCD_RST_GPIO {
-        14 => Output::new(
-            p.GPIO14,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-        _ => Output::new(
-            p.GPIO14,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-    };
+    if !front_panel::pulse_display_reset(bus).await {
+        warn!("lcd.reset: front-panel tca6408a pulse failed");
+    }
+    let rst = NoopPin;
     let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
-    info!("lcd.init: start panel_160x50 mode (mcu cs/rst, landscape-swapped)");
+    info!("lcd.init: start panel_160x50 mode (tca cs/res, landscape-swapped)");
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {

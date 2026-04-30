@@ -69,4 +69,5 @@
 | j6nvw | 硬件 V3 引脚与显示链路对齐 | 部分完成（2/3） | `j6nvw-hardware-v3-pin-assignment/SPEC.md` | 2026-04-27 | legacy `docs/plan/j6nvw-hw-v3-pin-assignment/**` 删除待确认 |
 | h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-04-29 | 固件与 host p1/p3/p4 控制已验证；PWREN1#/2# 硬件缺陷见 issue #18 |
 | e5nyr | 发布失败 Telegram 告警接入 | 已完成 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-04-12 | PR #12 |
+| m7gtw | CH335F EEPROM 初始化固件 | 阻塞（0 Ω 并联拓扑不可控） | `m7gtw-ch335f-eeprom-initializer/SPEC.md` | 2026-04-27 | EEPROM 可读写并 readback match，但 CH335F 仍枚举默认 `USB HUB`；下一版改用 CH442E 切换 EEPROM 连接方向 |
 <!-- markdownlint-enable MD060 -->

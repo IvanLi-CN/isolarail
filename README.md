@@ -104,6 +104,44 @@ cargo run
 cargo run --release
 ```
 
+When multiple firmware binaries are present, select the one you want explicitly:
+
+```bash
+cargo run --bin iso-usb-hub --release
+```
+
+### CH335F EEPROM Initializer
+
+The repository includes a dedicated lab firmware binary for probing and
+programming the CH335F external M24C64 EEPROM from the ESP32-S3:
+
+```bash
+make run BIN=ch335f_eeprom_init PORT=/dev/cu.usbmodem212301 ESPFLASH_ARGS='--after hard-reset'
+```
+
+The initializer uses `GPIO5` for `HUB_RESET#`, `GPIO36` for `HUB_SDA`, and
+`GPIO37` for `HUB_SCL`. It asserts `HUB_RESET#`, scans EEPROM addresses
+`0x50..0x57`, reads address `0x50`, writes only when the target image differs,
+verifies readback, releases SDA/SCL to high impedance, then releases
+`HUB_RESET#` so CH335F can attempt to reload descriptors. If no EEPROM ACK is
+observed before any write attempt, it releases `HUB_RESET#` so the hub returns
+to its default enumeration for hardware debugging. The target lab unit has
+appeared as `/dev/cu.usbmodem212301` and `/dev/cu.usbmodem2122101`; confirm the
+active port by matching ESP serial number `A0:F2:62:F1:FB:44` in
+`ioreg -p IOUSB -l -w0` before flashing.
+
+Current hardware status: Rev2.3 connects CH335F and ESP32-S3 to the same EEPROM
+bus through 0 ohm links. Reset-only isolation did not produce a reliable
+end-to-end descriptor customization path on the lab board. Treat this binary as
+a diagnostic tool for the existing board, not as the production programming
+path. The next hardware revision should switch EEPROM ownership with CH442E so
+programming mode connects the EEPROM only to ESP32-S3 and runtime mode connects
+it only to CH335F.
+
+The target image keeps `VID:PID = 0x1A86:0x8094`, sets Product String to
+`ISO USB Hub`, and includes a legacy-compatible Vendor String field set to
+`Ivan` for CH334/CH335 variants that consume it.
+
 ### Makefile helpers (recommended)
 
 To simplify common tasks and ensure defmt logs decode correctly, a `Makefile` is provided. Examples:
@@ -115,6 +153,9 @@ make build
 # Flash and monitor with defmt decoding
 make run PORT=/dev/tty.usbmodem1101 BAUD=115200
 
+# Flash and monitor the CH335F EEPROM initializer
+make run BIN=ch335f_eeprom_init PORT=/dev/cu.usbmodem212301 ESPFLASH_ARGS='--after hard-reset'
+
 # Attach only to the serial monitor (no flashing), with defmt decoding
 make attach PORT=/dev/tty.usbmodem1101 BAUD=115200
 
@@ -123,8 +164,9 @@ make ports
 ```
 
 Notes:
+
 - If you run `espflash monitor` directly and see garbled output, it is because the app logs with `defmt`.
-- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/iso-usb-hub` so logs are decoded.
+- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/<bin>` so logs are decoded.
 - Default baud is `115200`; override with `BAUD=...` if needed.
 
 ## Expected Output
@@ -145,7 +187,9 @@ Hello World from ESP32-S3! Counter: 2
 
 ```text
 ├── src/
-│   └── main.rs              # Main application with hello world logic
+│   ├── main.rs              # Main application firmware
+│   └── bin/
+│       └── ch335f_eeprom_init.rs  # CH335F external EEPROM initializer
 ├── .cargo/
 │   └── config.toml          # Cargo configuration for ESP32-S3
 └── Cargo.toml               # Project dependencies and configuration
@@ -186,14 +230,14 @@ If you encounter build errors, try:
 
 If serial logs show a panic like:
 
-```
+```text
 embassy-executor: task arena is full. You must increase the arena size
 ```
 
 Your async tasks collectively require more storage than the default 4 KiB task arena.
 This project sets a larger arena via `.cargo/config.toml`:
 
-```
+```toml
 [env]
 EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "65536"
 ```

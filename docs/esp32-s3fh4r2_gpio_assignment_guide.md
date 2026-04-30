@@ -19,7 +19,7 @@
 
 ### 专用功能引脚 (27个 MCU GPIO + 2个 TCA IO)
 
-#### SPI 屏幕接口 (4个 MCU 引脚 + 2个 TCA 控制脚) - 高性能IOMUX配置
+#### SPI 屏幕接口 (4个 MCU 引脚 + 2个 TCA 控制脚，含 MCU fallback) - 高性能IOMUX配置
 
 - **GPIO10**: DC (数据/命令控制)
 - **GPIO11**: MOSI (主设备输出，从设备输入) ⚡ IOMUX直连
@@ -27,7 +27,7 @@
 - **GPIO15**: BLK (PWM背光控制)
 - **前面板 TCA6408A P6**: CS (片选信号，低有效)
 - **前面板 TCA6408A P5**: RES (复位信号，低有效)
-- **GPIO13/GPIO14**: 默认未分配，不再连接到 CS/RES 网络
+- **GPIO13/GPIO14**: 默认不驱动；当显示控制初始化前确认前面板 TCA6408A 不 ACK 且本次为整机冷上电时，作为 CS/RES fallback
 
 **性能特点**: 最高80MHz时钟频率，最低延迟，支持半双工和全双工模式
 
@@ -151,8 +151,8 @@
 | **GPIO10** | 15 | SPI_DC | 数据/命令控制 | SPI屏幕控制信号 |
 | **GPIO11** | 16 | SPI_MOSI | 主设备输出，从设备输入 | ⚡ IOMUX直连，高性能 |
 | **GPIO12** | 17 | SPI_SCLK | SPI时钟 | ⚡ IOMUX直连，最高80MHz |
-| **GPIO13** | 18 | 默认未分配 | 不再分配给 SPI_CS | 保持 MCU 默认状态 |
-| **GPIO14** | 19 | 默认未分配 | 不再分配给 SPI_RES | 保持 MCU 默认状态 |
+| **GPIO13** | 18 | SPI_CS fallback | 前面板 TCA 初始化前不 ACK 且整机冷上电时驱动 SPI_CS | 默认不驱动，fallback 时低有效 |
+| **GPIO14** | 19 | SPI_RES fallback | 前面板 TCA 初始化前不 ACK 且整机冷上电时驱动 SPI_RES | 默认不驱动，fallback 时低有效 |
 | **GPIO15** | 21 | SPI_BLK | 背光控制 | 低有效；驱动前面板 P 沟道背光门极 |
 | **GPIO16** | 22 | I2C_INT | I2C设备中断引脚 | 中断处理 |
 | **GPIO17** | 23 | PSTOP_CTL1 | SC8815 通道1 启停控制 | 高电平启用（板上反相，PSTOP 低有效） |

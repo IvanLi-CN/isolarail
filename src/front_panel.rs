@@ -22,7 +22,9 @@ const REG_POLARITY: u8 = 0x02;
 const REG_CONFIG: u8 = 0x03;
 const DISPLAY_RST_BIT: u8 = 1 << 5;
 const DISPLAY_CS_BIT: u8 = 1 << 6;
-const DISPLAY_OUTPUT_IDLE: u8 = 0xFF;
+const DISPLAY_OUTPUT_SAFE: u8 = !DISPLAY_RST_BIT;
+const DISPLAY_OUTPUT_RESET_RELEASED: u8 = 0xFF;
+const DISPLAY_OUTPUT_ENABLED: u8 = !DISPLAY_CS_BIT;
 const DISPLAY_CONFIG: u8 = 0b1001_1111; // P0..P4/P7 inputs, P5 RES + P6 CS outputs.
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -30,6 +32,13 @@ pub enum KeyEvent {
     Left,
     Right,
     Center,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum DisplayControlInit {
+    Ready,
+    NotPresent,
+    PartialFailure,
 }
 
 static KEY_EVENTS: Channel<CriticalSectionRawMutex, KeyEvent, 8> = Channel::new();
@@ -53,56 +62,53 @@ pub async fn is_present(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) ->
         .is_ok()
 }
 
-pub async fn init_display_control(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
+pub async fn init_display_control(
+    bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
+) -> DisplayControlInit {
     let mut i2c = I2cDevice::new(bus);
-    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE)
+    let mut input = [0u8; 1];
+    if i2c
+        .write_read(TCA6408_ADDR, &[REG_INPUT], &mut input)
         .await
         .is_err()
     {
-        return false;
+        return DisplayControlInit::NotPresent;
     }
     if i2c
         .write(TCA6408_ADDR, &[REG_POLARITY, 0x00])
         .await
         .is_err()
     {
-        return false;
+        return DisplayControlInit::PartialFailure;
     }
-    i2c.write(TCA6408_ADDR, &[REG_CONFIG, DISPLAY_CONFIG])
-        .await
-        .is_ok()
-}
-
-pub async fn pulse_display_reset(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
-    let mut i2c = I2cDevice::new(bus);
-    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE & !DISPLAY_RST_BIT)
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_SAFE)
         .await
         .is_err()
     {
-        return false;
+        return DisplayControlInit::PartialFailure;
+    }
+    if i2c
+        .write(TCA6408_ADDR, &[REG_CONFIG, DISPLAY_CONFIG])
+        .await
+        .is_err()
+    {
+        return DisplayControlInit::PartialFailure;
     }
     Timer::after(Duration::from_millis(10)).await;
-    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_IDLE)
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_RESET_RELEASED)
         .await
         .is_err()
     {
-        return false;
+        return DisplayControlInit::PartialFailure;
     }
     Timer::after(Duration::from_millis(120)).await;
-    true
-}
-
-pub async fn set_display_cs(
-    bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
-    asserted: bool,
-) -> bool {
-    let mut i2c = I2cDevice::new(bus);
-    let output = if asserted {
-        DISPLAY_OUTPUT_IDLE & !DISPLAY_CS_BIT
-    } else {
-        DISPLAY_OUTPUT_IDLE
-    };
-    tca_write_output(&mut i2c, output).await.is_ok()
+    if tca_write_output(&mut i2c, DISPLAY_OUTPUT_ENABLED)
+        .await
+        .is_err()
+    {
+        return DisplayControlInit::PartialFailure;
+    }
+    DisplayControlInit::Ready
 }
 
 pub fn spawn(

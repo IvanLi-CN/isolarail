@@ -5,7 +5,7 @@
 - Boot self-check 状态模型、阶段日志、LCD 自检页和 runtime 门控已经落地。
 - 当前直连 I2C 板型保留 `mux` 槽位，但不再依赖 `PCA9545A`。
 - 输入电源不安全仍是 fatal；单路端口传感器异常按 degraded 记录。
-- 当前 V3 硬件下，前面板 `TCA6408A@0x21` 离线会在有限恢复失败后降级继续运行，禁用前面板按键任务且显示 CS/RES 不可用。
+- 当前 V3 硬件下，前面板 `TCA6408A@0x21` 离线会在有限恢复失败后降级继续运行，禁用前面板按键任务；显示控制初始化前 `0x21` 不 ACK且本次为整机冷上电时，显示 CS/RES 改用 MCU `GPIO13/GPIO14` fallback；若任一显示控制初始化尝试进入 partial failure，则 MCU fallback 被阻断；若早期为 `Unavailable` 且后续前面板探测恢复在线，固件重配 TCA 并重试 LCD 初始化。
 
 ## Coverage
 

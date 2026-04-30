@@ -148,7 +148,8 @@ const MODULE_SENSOR_RETRY_MS: u64 = 50;
 const MODULE_SENSOR_RETRIES: u8 = 6;
 
 // ===== Display pin mapping (V3 netlist) =====
-// SPI2 SCLK/MOSI to panel; MISO unused. MCU drives DC/BLK, front-panel TCA drives CS/RES.
+// SPI2 SCLK/MOSI to panel; MISO unused. MCU drives DC/BLK. Front-panel TCA
+// normally drives CS/RES; GPIO13/14 are fallback only when that TCA is offline.
 // BLK drives a panel-side P-channel gate and is therefore active-low.
 const PIN_LCD_SCLK: u8 = 12;
 const PIN_LCD_MOSI: u8 = 11;
@@ -157,6 +158,8 @@ const PIN_LCD_BLK_GPIO: u8 = 15;
 
 const TCA6408_ADDR: u8 = 0x21;
 const I2C_RECOVERY_CLOCKS: u8 = 18;
+const FRONT_PANEL_DISPLAY_CTRL_ATTEMPTS: u8 = 40;
+const FRONT_PANEL_DISPLAY_CTRL_RETRY_MS: u64 = 50;
 const FRONT_PANEL_BOOT_PROBE_ATTEMPTS: u8 = 3;
 const PORT_OCP_LOW_VBUS_MV: u32 = 3000;
 const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
@@ -387,7 +390,21 @@ fn handle_front_key_event(
     }
 }
 
-// The front-panel TCA6408A handles key input and display CS/RES.
+// The front-panel TCA6408A is the preferred display CS/RES controller. GPIO13/14
+// remain available as a fallback because the V3 mainboard still wires them to
+// the same display nets.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum DisplayControlPath {
+    FrontPanelTca,
+    McuFallback,
+    Unavailable,
+}
+
+fn display_fallback_allowed(reason: Option<esp_hal::rtc_cntl::SocResetReason>) -> bool {
+    use esp_hal::rtc_cntl::SocResetReason;
+
+    matches!(reason, Some(SocResetReason::ChipPowerOn))
+}
 
 // Embassy timer adapter for the display driver
 struct DisplayTimer;
@@ -397,33 +414,24 @@ impl Gc9d01Timer for DisplayTimer {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum DisplaySpiError {
-    Spi,
-    ChipSelect,
-}
-
-impl embedded_hal::spi::Error for DisplaySpiError {
-    fn kind(&self) -> embedded_hal::spi::ErrorKind {
-        match self {
-            Self::Spi => embedded_hal::spi::ErrorKind::Other,
-            Self::ChipSelect => embedded_hal::spi::ErrorKind::ChipSelectFault,
-        }
-    }
-}
-
 // Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
-// CS is routed through front-panel TCA6408A P6.
+// In TCA mode CS is held enabled by the front-panel TCA. In fallback mode this
+// wrapper drives the original MCU GPIO13 CS pin per SPI transaction.
 struct SimpleSpiDev<BUS> {
     bus: BUS,
-    i2c_bus: &'static SharedI2cBus,
+    cs: DisplayCsPin,
+}
+
+struct DisplayCsPin {
+    pin: Flex<'static>,
+    path: DisplayControlPath,
 }
 
 impl<BUS> embedded_hal::spi::ErrorType for SimpleSpiDev<BUS>
 where
     BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
 {
-    type Error = DisplaySpiError;
+    type Error = esp_hal::spi::Error;
 }
 
 impl<BUS> Eh1SpiDevice for SimpleSpiDev<BUS>
@@ -431,48 +439,101 @@ where
     BUS: Eh1SpiBus<Error = esp_hal::spi::Error>,
 {
     async fn transaction(&mut self, ops: &mut [SpiOp<'_, u8>]) -> Result<(), Self::Error> {
-        if !front_panel::set_display_cs(self.i2c_bus, true).await {
-            return Err(DisplaySpiError::ChipSelect);
+        if matches!(self.cs.path, DisplayControlPath::McuFallback) {
+            self.cs.pin.set_low();
         }
+
         let mut result = Ok(());
         for op in ops.iter_mut() {
-            match op {
-                SpiOp::Write(w) => {
-                    if self.bus.write(w).await.is_err() {
-                        result = Err(DisplaySpiError::Spi);
-                        break;
-                    }
-                }
+            result = match op {
+                SpiOp::Write(w) => self.bus.write(w).await,
                 SpiOp::Read(_r) => {
                     // Not used by this driver path
                     // If needed, implement via self.bus.read
                     // For safety, return Ok without action
+                    Ok(())
                 }
-                SpiOp::Transfer(_r, _w) => {}
-                SpiOp::TransferInPlace(_b) => {}
-                SpiOp::DelayNs(_ns) => {}
+                SpiOp::Transfer(_r, _w) => Ok(()),
+                SpiOp::TransferInPlace(_b) => Ok(()),
+                SpiOp::DelayNs(_ns) => Ok(()),
+            };
+            if result.is_err() {
+                break;
             }
         }
-        if !front_panel::set_display_cs(self.i2c_bus, false).await {
-            return Err(DisplaySpiError::ChipSelect);
+
+        if matches!(self.cs.path, DisplayControlPath::McuFallback) {
+            self.cs.pin.set_high();
         }
+
         result
     }
 }
 
 // Initialize SPI + GC9D01 and draw a chessboard pattern (inlined in main where pins are available)
 
-// NoopPin for RST placeholder: real reset is handled through TCA6408A P5 before driver init.
-pub struct NoopPin;
-impl embedded_hal::digital::ErrorType for NoopPin {
+struct DisplayResetPin {
+    pin: Flex<'static>,
+    path: DisplayControlPath,
+}
+
+impl embedded_hal::digital::ErrorType for DisplayResetPin {
     type Error = core::convert::Infallible;
 }
-impl embedded_hal::digital::OutputPin for NoopPin {
+
+impl embedded_hal::digital::OutputPin for DisplayResetPin {
     fn set_low(&mut self) -> Result<(), Self::Error> {
+        if matches!(self.path, DisplayControlPath::McuFallback) {
+            self.pin.set_low();
+        }
         Ok(())
     }
+
     fn set_high(&mut self) -> Result<(), Self::Error> {
+        if matches!(self.path, DisplayControlPath::McuFallback) {
+            self.pin.set_high();
+        }
         Ok(())
+    }
+}
+
+async fn init_front_panel_display_control(
+    bus: &'static SharedI2cBus,
+) -> front_panel::DisplayControlInit {
+    let mut last_result = front_panel::DisplayControlInit::NotPresent;
+    let mut partial_seen = false;
+    for attempt in 1..=FRONT_PANEL_DISPLAY_CTRL_ATTEMPTS {
+        last_result = front_panel::init_display_control(bus).await;
+        match last_result {
+            front_panel::DisplayControlInit::Ready => {
+                info!(
+                    "lcd.ctrl: cs,res via front-panel tca6408a p6=cs,p5=res attempt={}",
+                    attempt
+                );
+                return front_panel::DisplayControlInit::Ready;
+            }
+            front_panel::DisplayControlInit::NotPresent => {
+                if attempt == 1 || attempt == FRONT_PANEL_DISPLAY_CTRL_ATTEMPTS {
+                    warn!(
+                        "lcd.ctrl: front-panel tca6408a not ready for display cs/res attempt={}/{}",
+                        attempt, FRONT_PANEL_DISPLAY_CTRL_ATTEMPTS
+                    );
+                }
+            }
+            front_panel::DisplayControlInit::PartialFailure => {
+                partial_seen = true;
+                warn!(
+                    "lcd.ctrl: front-panel tca6408a partial display init failure attempt={}/{}",
+                    attempt, FRONT_PANEL_DISPLAY_CTRL_ATTEMPTS
+                );
+            }
+        }
+        Timer::after(Duration::from_millis(FRONT_PANEL_DISPLAY_CTRL_RETRY_MS)).await;
+    }
+    if partial_seen {
+        front_panel::DisplayControlInit::PartialFailure
+    } else {
+        last_result
     }
 }
 
@@ -882,10 +943,14 @@ async fn flush_boot_self_check<
     D: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
     R: embedded_hal::digital::OutputPin<Error = core::convert::Infallible>,
 >(
+    display_ready: bool,
     disp: &mut GC9D01<'_, SimpleSpiDev<BUS>, D, R, DisplayTimer>,
     snapshot: &BootSelfCheckSnapshot,
     ports_page: bool,
 ) {
+    if !display_ready {
+        return;
+    }
     draw_boot_self_check_frame(disp, snapshot, ports_page);
     let _ = disp.flush().await;
 }
@@ -1015,13 +1080,31 @@ async fn main(spawner: Spawner) {
         .with_scl(i2c_scl)
         .into_async();
     let bus = I2C_BUS.init(Mutex::new(i2c_hw));
-    if front_panel::init_display_control(bus).await {
-        info!("lcd.ctrl: cs,res via front-panel tca6408a p6,p5");
-    } else {
-        warn!("lcd.ctrl: front-panel tca6408a init failed; display cs/res unavailable");
-    }
+    let display_ctrl_init = init_front_panel_display_control(bus).await;
+    let display_control_path = match display_ctrl_init {
+        front_panel::DisplayControlInit::Ready => DisplayControlPath::FrontPanelTca,
+        front_panel::DisplayControlInit::NotPresent if display_fallback_allowed(reset_reason) => {
+            warn!("lcd.ctrl: front-panel tca6408a not present during display init");
+            warn!("lcd.ctrl: fallback to mcu gpio13=cs gpio14=res");
+            DisplayControlPath::McuFallback
+        }
+        front_panel::DisplayControlInit::NotPresent => {
+            warn!("lcd.ctrl: front-panel tca6408a not present during display init");
+            warn!(
+                "lcd.ctrl: mcu fallback blocked reset_reason={} risk=shared_net_contention",
+                reset_reason_label(reset_reason)
+            );
+            DisplayControlPath::Unavailable
+        }
+        front_panel::DisplayControlInit::PartialFailure => {
+            warn!("lcd.ctrl: front-panel tca6408a partial display init failure");
+            warn!("lcd.ctrl: mcu fallback blocked risk=partial_tca_output_state");
+            DisplayControlPath::Unavailable
+        }
+    };
 
-    // Setup SPI2 and display. DC/BLK are MCU GPIOs; CS/RES are front-panel TCA outputs.
+    // Setup SPI2 and display. DC/BLK are MCU GPIOs; CS/RES use front-panel TCA
+    // when available, otherwise the original MCU GPIO13/14 nets.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()
@@ -1050,6 +1133,31 @@ async fn main(spawner: Spawner) {
     };
     blk.set_low();
 
+    let mut lcd_cs = Flex::new(p.GPIO13);
+    lcd_cs.apply_output_config(&OutputConfig::default());
+    lcd_cs.set_high();
+    lcd_cs.set_output_enable(matches!(
+        display_control_path,
+        DisplayControlPath::McuFallback
+    ));
+
+    let mut lcd_rst = Flex::new(p.GPIO14);
+    lcd_rst.apply_output_config(&OutputConfig::default());
+    lcd_rst.set_high();
+    lcd_rst.set_output_enable(matches!(
+        display_control_path,
+        DisplayControlPath::McuFallback
+    ));
+
+    info!(
+        "lcd.ctrl: active_path={}",
+        match display_control_path {
+            DisplayControlPath::FrontPanelTca => "front-panel-tca",
+            DisplayControlPath::McuFallback => "mcu-gpio13-gpio14",
+            DisplayControlPath::Unavailable => "unavailable",
+        }
+    );
+
     const LOGICAL_W: usize = 160;
     const LOGICAL_H: usize = 50;
     let mut fb_buf: [Rgb565; LOGICAL_W * LOGICAL_H] = [Rgb565::BLACK; LOGICAL_W * LOGICAL_H];
@@ -1057,7 +1165,10 @@ async fn main(spawner: Spawner) {
 
     let spi_dev = SimpleSpiDev {
         bus: spi_bus,
-        i2c_bus: bus,
+        cs: DisplayCsPin {
+            pin: lcd_cs,
+            path: display_control_path,
+        },
     };
     let cfg = DisplayConfig {
         width: LOGICAL_W as u16,
@@ -1068,15 +1179,26 @@ async fn main(spawner: Spawner) {
         dx: 15,
         dy: 0,
     };
-    if !front_panel::pulse_display_reset(bus).await {
-        warn!("lcd.reset: front-panel tca6408a pulse failed");
-    }
-    let rst = NoopPin;
+    let rst = DisplayResetPin {
+        pin: lcd_rst,
+        path: display_control_path,
+    };
     let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
-    info!("lcd.init: start panel_160x50 mode (tca cs/res, landscape-swapped)");
-    if let Err(_e) = disp.init().await {
-        warn!("lcd.init: failed (fallback)");
+    info!(
+        "lcd.init: start panel_160x50 mode ({}, landscape-swapped)",
+        match display_control_path {
+            DisplayControlPath::FrontPanelTca => "tca cs/res",
+            DisplayControlPath::McuFallback => "mcu cs/res fallback",
+            DisplayControlPath::Unavailable => "cs/res unavailable",
+        }
+    );
+    let mut display_ready = false;
+    if matches!(display_control_path, DisplayControlPath::Unavailable) {
+        warn!("lcd.init: skipped cs/res unavailable");
+    } else if let Err(_e) = disp.init().await {
+        warn!("lcd.init: failed");
     } else {
+        display_ready = true;
         info!("lcd.init: panel ready");
     }
     info!(
@@ -1092,7 +1214,7 @@ async fn main(spawner: Spawner) {
     let mut boot_snapshot = BootSelfCheckSnapshot::new();
     boot_snapshot.set_stage(BootStage::SelfCheck);
     info!("boot.stage: stage=self-check");
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     // Record global bus reference for channel views.
     unsafe {
@@ -1106,7 +1228,7 @@ async fn main(spawner: Spawner) {
         SelfCheckItemState::Skipped,
         BootFaultCode::None,
     );
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     // Spawn power input task: handles INA init/qualification/VIN_ON/periodic status
     power_in::spawn(
@@ -1159,7 +1281,7 @@ async fn main(spawner: Spawner) {
         if power_boot.pg_good { "good" } else { "bad" }
     );
     boot_snapshot.set_sys(SysCheck::Vin, power_boot.state, power_boot.fault);
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     info!(
         "main.reset: pre-tca-probe level={} reset_reason={}",
@@ -1205,7 +1327,7 @@ async fn main(spawner: Spawner) {
             SelfCheckItemState::Pending,
             BootFaultCode::None,
         );
-        flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+        flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
         // Current V3 hardware cannot hard-reset or power-cycle the front-panel
         // TCA6408A from the MCU. If bus-clear cannot recover 0x21, waiting here
@@ -1215,6 +1337,22 @@ async fn main(spawner: Spawner) {
         for attempt in 0..FRONT_PANEL_BOOT_PROBE_ATTEMPTS {
             if front_panel::is_present(bus).await {
                 info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+                if matches!(display_control_path, DisplayControlPath::McuFallback) {
+                    info!("lcd.ctrl: keep mcu gpio13/gpio14 fallback for this boot");
+                } else if matches!(display_control_path, DisplayControlPath::Unavailable)
+                    && matches!(
+                        init_front_panel_display_control(bus).await,
+                        front_panel::DisplayControlInit::Ready
+                    )
+                {
+                    info!("lcd.init: retry after front-panel tca recovery");
+                    if let Err(_e) = disp.init().await {
+                        warn!("lcd.init: recovery retry failed");
+                    } else {
+                        display_ready = true;
+                        info!("lcd.init: panel ready after recovery");
+                    }
+                }
                 info!("boot.check: name=panel state=ok fault=-");
                 boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
                 front_panel_online = true;
@@ -1238,7 +1376,7 @@ async fn main(spawner: Spawner) {
             if attempt == 0 {
                 log_i2c_diag_scan(bus, "front-panel-wait").await;
             }
-            flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+            flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
             Timer::after(Duration::from_millis(500)).await;
         }
         if !front_panel_online {
@@ -1258,7 +1396,7 @@ async fn main(spawner: Spawner) {
             power_boot.fault,
         );
     }
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     let fan_ready = if power_boot.ready {
         if fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
@@ -1284,7 +1422,7 @@ async fn main(spawner: Spawner) {
     } else {
         boot_snapshot.set_sys(SysCheck::Fan, SelfCheckItemState::Skipped, power_boot.fault);
     }
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     let mut gates = GateDecision::new();
     gates.allow_runtime_tasks = power_boot.ready;
@@ -1385,7 +1523,7 @@ async fn main(spawner: Spawner) {
         }
 
         CH_SCAN_DONE[ch as usize].store(true, Ordering::Relaxed);
-        flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+        flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, true).await;
     }
 
     if power_boot.ready && hub_ctrl.is_none() {
@@ -1399,7 +1537,7 @@ async fn main(spawner: Spawner) {
             );
         }
         warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
-        flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+        flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, true).await;
     }
 
     if power_boot.ready {
@@ -1428,7 +1566,7 @@ async fn main(spawner: Spawner) {
                 );
             }
             warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
-            flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+            flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, true).await;
         }
         let upstream_powered = usb_v1ok.is_high();
         let hub_mode = hub_power_mode_label(hub_ctrl.is_some(), upstream_powered);
@@ -1478,20 +1616,20 @@ async fn main(spawner: Spawner) {
             "off"
         }
     );
-    flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+    flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
 
     if boot_snapshot.outcome == BootOutcome::Fatal {
         loop {
-            flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
+            flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, false).await;
             Timer::after(Duration::from_millis(700)).await;
-            flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
+            flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, true).await;
             Timer::after(Duration::from_millis(700)).await;
         }
     }
 
     if boot_snapshot.gates.show_sticky_self_check {
         for step in 0..4u8 {
-            flush_boot_self_check(&mut disp, &boot_snapshot, (step & 1) != 0).await;
+            flush_boot_self_check(display_ready, &mut disp, &boot_snapshot, (step & 1) != 0).await;
             Timer::after(Duration::from_millis(700)).await;
         }
     }
@@ -1740,9 +1878,10 @@ async fn main(spawner: Spawner) {
             if view[3].ocp_latched { "on" } else { "off" },
             if view[3].en_enabled { "on" } else { "off" },
         );
-        // Draw and flush
-        draw_dashboard_frame(&mut disp, &view);
-        let _ = disp.flush().await;
+        if display_ready {
+            draw_dashboard_frame(&mut disp, &view);
+            let _ = disp.flush().await;
+        }
         if let Ok(event) = with_timeout(Duration::from_millis(500), front_events.receive()).await {
             handle_front_key_event(
                 event,
@@ -1751,8 +1890,10 @@ async fn main(spawner: Spawner) {
                 &mut port_enables,
             );
             apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);
-            draw_dashboard_frame(&mut disp, &view);
-            let _ = disp.flush().await;
+            if display_ready {
+                draw_dashboard_frame(&mut disp, &view);
+                let _ = disp.flush().await;
+            }
         }
     }
 }

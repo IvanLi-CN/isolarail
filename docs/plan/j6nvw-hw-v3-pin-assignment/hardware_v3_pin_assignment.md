@@ -43,8 +43,8 @@
 | Display (SPI) | LCD_MOSI | 11 | MCU → LCD | - | SPI MOSI（IOMUX 建议） |
 | Display (SPI) | LCD_SCLK | 12 | MCU → LCD | - | SPI SCLK（IOMUX 建议） |
 | Display (SPI) | LCD_BLK | 15 | MCU → LCD | PWM | 背光（如为 PWM 调光） |
-| GPIO default | GPIO13 | 13 | default | - | 不再分配给 LCD_CS 网络 |
-| GPIO default | GPIO14 | 14 | default | - | 不再分配给 LCD_RST/RES 网络 |
+| Display fallback | GPIO13 | 13 | default high-Z | active-low | 前面板 TCA 初始化前不 ACK 且整机冷上电时兜底驱动 LCD_CS |
+| Display fallback | GPIO14 | 14 | default high-Z | active-low | 前面板 TCA 初始化前不 ACK 且整机冷上电时兜底驱动 LCD_RST/RES |
 | System | EN | - | - | - | CHIP_PU / EN（复位） |
 | System | GPIO0 | 0 | button → MCU | TBD | BOOT 按键（Strapping，引脚用途需谨慎） |
 

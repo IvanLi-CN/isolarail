@@ -160,12 +160,28 @@ const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
 const TCA6408_ADDR: u8 = 0x21;
+const INPUT_INA226_ADDR: u8 = 0x44;
+const PCA9545_ADDR: u8 = 0x70;
 const I2C_RECOVERY_CLOCKS: u8 = 18;
 const FRONT_PANEL_BOOT_PROBE_ATTEMPTS: u8 = 3;
 const PORT_OCP_LOW_VBUS_MV: u32 = 3000;
 const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
 const PORT_OCP_HIGH_CURRENT_MA: u32 = 5300;
 const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
+const FRONT_DIAG_FRONT_MASK: u8 = 1 << 0;
+const FRONT_DIAG_HUB_MASK: u8 = 1 << 1;
+const FRONT_DIAG_INPUT_INA_MASK: u8 = 1 << 2;
+const FRONT_DIAG_MUX_MASK: u8 = 1 << 3;
+
+#[derive(Copy, Clone)]
+struct I2cRecoveryReport {
+    sda_released: bool,
+    scl_released: bool,
+    sda_initial: bool,
+    scl_initial: bool,
+    sda_final: bool,
+    scl_final: bool,
+}
 
 fn module_addr_pair(ch: u8) -> (u8, u8) {
     let idx = (ch & 0x03) as usize;
@@ -240,10 +256,103 @@ async fn log_i2c_diag_scan(bus: &'static SharedI2cBus, reason: &'static str) {
     info!("i2c.diag: end reason={}", reason);
 }
 
+async fn log_front_i2c_peer_matrix(
+    bus: &'static SharedI2cBus,
+    reason: &'static str,
+    attempt: u8,
+) -> u8 {
+    let mut online_mask = 0u8;
+    for (addr, label, mask) in [
+        (TCA6408_ADDR, "front_tca", FRONT_DIAG_FRONT_MASK),
+        (hub_sideband::TCA6408_ADDR, "hub_tca", FRONT_DIAG_HUB_MASK),
+        (INPUT_INA226_ADDR, "input_ina226", FRONT_DIAG_INPUT_INA_MASK),
+        (PCA9545_ADDR, "pca9545", FRONT_DIAG_MUX_MASK),
+    ] {
+        let mut i2c = I2cDevice::new(bus);
+        let (ok, method) = i2c_ack_probe(&mut i2c, addr).await;
+        if ok {
+            online_mask |= mask;
+        }
+        info!(
+            "i2c.front_diag: reason={} attempt={} label={} addr=0x{:02X} online={} via={}",
+            reason,
+            attempt,
+            label,
+            addr,
+            if ok { "yes" } else { "no" },
+            method
+        );
+    }
+    online_mask
+}
+
+async fn probe_front_panel_tca(
+    bus: &'static SharedI2cBus,
+    attempt: u8,
+    front_int_high: bool,
+) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    let mut input = [0u8; 1];
+    if embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[0x00], &mut input)
+        .await
+        .is_ok()
+    {
+        info!(
+            "i2c.front_probe: attempt={} phase=input-read result=ok addr=0x{:02X} input=0x{:02X} int={}",
+            attempt,
+            TCA6408_ADDR,
+            input[0],
+            if front_int_high { "high" } else { "low" }
+        );
+        return true;
+    }
+
+    warn!(
+        "i2c.front_probe: attempt={} phase=input-read result=fail addr=0x{:02X} int={}",
+        attempt,
+        TCA6408_ADDR,
+        if front_int_high { "high" } else { "low" }
+    );
+
+    let mut i2c = I2cDevice::new(bus);
+    let (ok, method) = i2c_ack_probe(&mut i2c, TCA6408_ADDR).await;
+    warn!(
+        "i2c.front_probe: attempt={} phase=ack-fallback result={} addr=0x{:02X} via={} int={}",
+        attempt,
+        if ok { "ack" } else { "nack" },
+        TCA6408_ADDR,
+        method,
+        if front_int_high { "high" } else { "low" }
+    );
+    false
+}
+
+fn log_front_panel_failure_classification(report: I2cRecoveryReport, peer_mask: u8) {
+    let peer_online = (peer_mask & !FRONT_DIAG_FRONT_MASK) != 0;
+    let classification = if !report.sda_final || !report.scl_final {
+        "bus_stuck_after_clear"
+    } else if peer_online {
+        "front_tca_only_offline"
+    } else {
+        "shared_i2c_offline_or_power"
+    };
+    warn!(
+        "i2c.front_diag: classification={} sda_released={} scl_released={} sda_initial={} scl_initial={} sda_final={} scl_final={} peer_mask=0x{:02X}",
+        classification,
+        if report.sda_released { "high" } else { "low" },
+        if report.scl_released { "high" } else { "low" },
+        if report.sda_initial { "high" } else { "low" },
+        if report.scl_initial { "high" } else { "low" },
+        if report.sda_final { "high" } else { "low" },
+        if report.scl_final { "high" } else { "low" },
+        peer_mask
+    );
+}
+
 async fn recover_i2c_bus(
     sda_pin: esp_hal::peripherals::GPIO8<'static>,
     scl_pin: esp_hal::peripherals::GPIO9<'static>,
-) -> (Flex<'static>, Flex<'static>) {
+) -> (Flex<'static>, Flex<'static>, I2cRecoveryReport) {
     let mut sda = Flex::new(sda_pin);
     let mut scl = Flex::new(scl_pin);
     let output_config = OutputConfig::default()
@@ -253,10 +362,19 @@ async fn recover_i2c_bus(
 
     sda.apply_input_config(&input_config);
     scl.apply_input_config(&input_config);
-    sda.apply_output_config(&output_config);
-    scl.apply_output_config(&output_config);
     sda.set_input_enable(true);
     scl.set_input_enable(true);
+    Timer::after(Duration::from_micros(10)).await;
+    let sda_released = sda.is_high();
+    let scl_released = scl.is_high();
+    info!(
+        "i2c.recover: phase=release sda={} scl={}",
+        if sda_released { "high" } else { "low" },
+        if scl_released { "high" } else { "low" }
+    );
+
+    sda.apply_output_config(&output_config);
+    scl.apply_output_config(&output_config);
     sda.set_high();
     scl.set_high();
     sda.set_output_enable(true);
@@ -287,7 +405,15 @@ async fn recover_i2c_bus(
         if sda.is_high() { "high" } else { "low" },
         if scl.is_high() { "high" } else { "low" }
     );
-    (sda, scl)
+    let report = I2cRecoveryReport {
+        sda_released,
+        scl_released,
+        sda_initial,
+        scl_initial,
+        sda_final: sda.is_high(),
+        scl_final: scl.is_high(),
+    };
+    (sda, scl, report)
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -992,7 +1118,7 @@ async fn main(spawner: Spawner) {
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
     // Recover a possible half-finished I2C transaction left by MCU-only resets.
-    let (i2c_sda, i2c_scl) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
+    let (i2c_sda, i2c_scl, i2c_recovery) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
     // Initialize I2C0 once and share via Mutex + I2cDevice.
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
@@ -1202,6 +1328,7 @@ async fn main(spawner: Spawner) {
     }
 
     let mut front_panel_online = false;
+    let mut front_panel_peer_mask = 0u8;
     if power_boot.ready {
         boot_snapshot.set_sys(
             SysCheck::Front,
@@ -1216,7 +1343,9 @@ async fn main(spawner: Spawner) {
         // front-panel TCA RESET#/VCCP control should remove this degraded path
         // and recover the expander before runtime.
         for attempt in 0..FRONT_PANEL_BOOT_PROBE_ATTEMPTS {
-            if front_panel::is_present(bus).await {
+            let attempt_no = attempt + 1;
+            let front_int_high = front_int_pin.is_high();
+            if probe_front_panel_tca(bus, attempt_no, front_int_high).await {
                 info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
                 info!("boot.check: name=panel state=ok fault=-");
                 boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
@@ -1226,25 +1355,30 @@ async fn main(spawner: Spawner) {
 
             warn!(
                 "i2c.front: tca6408a=offline addr=0x{:02X}; retry={}/{}",
-                TCA6408_ADDR,
-                attempt + 1,
-                FRONT_PANEL_BOOT_PROBE_ATTEMPTS
+                TCA6408_ADDR, attempt_no, FRONT_PANEL_BOOT_PROBE_ATTEMPTS
             );
             warn!(
                 "front.int: level={} while_panel_pending",
-                if front_int_pin.is_high() {
-                    "high"
-                } else {
-                    "low"
-                }
+                if front_int_high { "high" } else { "low" }
             );
             if attempt == 0 {
+                front_panel_peer_mask =
+                    log_front_i2c_peer_matrix(bus, "front-panel-wait", attempt_no).await;
                 log_i2c_diag_scan(bus, "front-panel-wait").await;
             }
             flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
             Timer::after(Duration::from_millis(500)).await;
         }
         if !front_panel_online {
+            if front_panel_peer_mask == 0 {
+                front_panel_peer_mask = log_front_i2c_peer_matrix(
+                    bus,
+                    "front-panel-final",
+                    FRONT_PANEL_BOOT_PROBE_ATTEMPTS,
+                )
+                .await;
+            }
+            log_front_panel_failure_classification(i2c_recovery, front_panel_peer_mask);
             warn!(
                 "boot.check: name=panel state=warn fault=FrontPanelOffline recovery=blocked_no_reset_pin"
             );

@@ -147,8 +147,8 @@ const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 const INA226_SHUNT_LSB_V: f32 = 2.5e-6;
 
-// Direct-bus V3 IP6557 modules are expected to be strapped to unique addresses.
-// Channel 4 is the current validation target and is populated as INA226@0x43 + TMP112@0x4B.
+// V3 IP6557 modules are strapped to unique addresses. OUT1/OUT2 share SDA0/SCL0
+// with hub sideband; OUT3/OUT4 share SDA1/SCL1 with front/input sensors.
 const MODULE_INA226_ADDRS: [u8; 4] = [0x40, 0x41, 0x42, 0x43];
 const MODULE_TMP112_ADDRS: [u8; 4] = [0x48, 0x49, 0x4A, 0x4B];
 const MODULE_SENSOR_RETRY_MS: u64 = 50;
@@ -191,6 +191,18 @@ fn module_addr_pair(ch: u8) -> (u8, u8) {
     (MODULE_INA226_ADDRS[idx], MODULE_TMP112_ADDRS[idx])
 }
 
+fn module_i2c_bus(
+    ch: u8,
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+) -> (&'static SharedI2cBus, &'static str) {
+    if ch < 2 {
+        (hub_bus, "SDA0/SCL0")
+    } else {
+        (sensor_bus, "SDA1/SCL1")
+    }
+}
+
 async fn i2c_ack_probe<I2C: embedded_hal_async::i2c::I2c>(
     i2c: &mut I2C,
     addr: u8,
@@ -217,9 +229,13 @@ async fn i2c_ack_probe<I2C: embedded_hal_async::i2c::I2c>(
     (false, "no")
 }
 
-async fn sample_module_ina226(ch: u8) -> Option<(u32, u32)> {
-    let bus = unsafe { SENSOR_I2C_BUS_REF.expect("sensor I2C bus not initialized") };
-    let i2c = I2cDevice::new(bus);
+async fn sample_module_ina226(
+    ch: u8,
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+) -> Option<(u32, u32)> {
+    let (module_bus, _) = module_i2c_bus(ch, sensor_bus, hub_bus);
+    let i2c = I2cDevice::new(module_bus);
     let mut dev = ina226::INA226::new(None);
     let (ina_addr, _) = module_addr_pair(ch);
     dev.set_ina_address(ina_addr);
@@ -528,8 +544,6 @@ fn handle_front_key_event(
     }
 }
 
-// The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
-
 // Embassy timer adapter for the display driver
 struct DisplayTimer;
 impl Gc9d01Timer for DisplayTimer {
@@ -582,9 +596,6 @@ where
     }
 }
 
-// Initialize SPI + GC9D01 and draw a chessboard pattern (inlined in main where pins are available)
-
-// NoopPin for RST placeholder: real reset handled via TCA6408 P5
 pub struct NoopPin;
 impl embedded_hal::digital::ErrorType for NoopPin {
     type Error = core::convert::Infallible;
@@ -1072,20 +1083,18 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // Mainboard RESET# is MCU-driven. The front-panel TCA6408A reset pin is a
-    // local fixed pull-up on the front-panel PCB and is not controlled here.
-    let mut i2c_reset = Output::new(
+    // Mainboard RESET# is MCU-driven and also releases the front-panel TCA6408A.
+    // The LCD panel RES/CS pins are controlled by that front-panel TCA after it is online.
+    let mut board_reset = Output::new(
         p.GPIO35,
         Level::Low,
         esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
-    )
-    .into_flex();
-    i2c_reset.set_input_enable(true);
+    );
     info!("main.reset: gpio=GPIO35 mode=push-pull pulse=10ms release_wait=50ms");
     Timer::after(Duration::from_millis(10)).await;
-    i2c_reset.set_high();
+    board_reset.set_high();
     Timer::after(Duration::from_millis(50)).await;
-    let i2c_reset_released_high = i2c_reset.is_high();
+    let board_reset_released_high = board_reset.is_set_high();
 
     // IN_CE default off: high turns on the NMOS that pulls TPS2490 EN low.
     let in_ce = Output::new(
@@ -1135,7 +1144,7 @@ async fn main(spawner: Spawner) {
 
     // Recover a possible half-finished sensor/front-panel I2C transaction left by MCU-only resets.
     let (i2c_sda, i2c_scl, i2c_recovery) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
-    // Initialize I2C0 on SDA1/SCL1 for input INA226, front panel, and output-module sensors.
+    // Initialize I2C0 on SDA1/SCL1 for input INA226, front panel, and OUT3/OUT4 sensors.
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
         .with_sda(i2c_sda)
@@ -1143,7 +1152,7 @@ async fn main(spawner: Spawner) {
         .into_async();
     let bus = SENSOR_I2C_BUS.init(Mutex::new(i2c_hw));
 
-    // Initialize I2C1 on SDA0/SCL0 for the mainboard CH335F sideband expander.
+    // Initialize I2C1 on SDA0/SCL0 for the mainboard CH335F sideband expander and OUT1/OUT2 sensors.
     let hub_i2c_hw = I2c::new(p.I2C1, I2cConfig::default())
         .unwrap()
         .with_sda(p.GPIO14)
@@ -1151,10 +1160,19 @@ async fn main(spawner: Spawner) {
         .into_async();
     let hub_bus = HUB_I2C_BUS.init(Mutex::new(hub_i2c_hw));
 
-    info!("lcd.ctrl: cs=none rst=board-reset");
+    info!("lcd.ctrl: cs=front-tca-p6 rst=front-tca-p5 board_reset=GPIO35");
 
-    // Setup SPI2 and display. Latest mainboard exposes DC/MOSI/SCLK/BLK; CS is not MCU-driven,
-    // and LCD reset follows the board-level RESET# net.
+    let display_control_state = front_panel::init_display_control(bus).await;
+    match display_control_state {
+        Ok(state) => info!(
+            "lcd.ctrl: front-tca configured output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+            state.output, state.config
+        ),
+        Err(_) => warn!("lcd.ctrl: front-tca display control failed"),
+    }
+
+    // Setup SPI2 and display. Latest mainboard exposes DC/MOSI/SCLK/BLK directly;
+    // LCD CS/RES are driven by the front-panel TCA6408A P6/P5.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()
@@ -1203,15 +1221,21 @@ async fn main(spawner: Spawner) {
     };
     let rst = NoopPin;
     let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
-    info!("lcd.init: start panel_160x50 mode (mcu cs/rst, landscape-swapped)");
+    info!("lcd.init: start panel_160x50 mode (cs=front-tca-p6 rst=front-tca-p5 landscape-swapped)");
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {
         info!("lcd.init: panel ready");
     }
+    if let Ok(state) = display_control_state {
+        info!(
+            "lcd.ctrl: verified output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+            state.output, state.config
+        );
+    }
     info!(
         "main.reset: release_level={} reset_reason={}",
-        if i2c_reset_released_high {
+        if board_reset_released_high {
             "high"
         } else {
             "low"
@@ -1293,7 +1317,11 @@ async fn main(spawner: Spawner) {
 
     info!(
         "main.reset: pre-tca-probe level={} reset_reason={}",
-        if i2c_reset.is_high() { "high" } else { "low" },
+        if board_reset_released_high {
+            "high"
+        } else {
+            "low"
+        },
         reset_reason_label(reset_reason)
     );
     let mut hub_ctrl = None;
@@ -1452,7 +1480,8 @@ async fn main(spawner: Spawner) {
             continue;
         }
 
-        let mut i2c_scan = I2cDevice::new(bus);
+        let (module_bus, module_bus_label) = module_i2c_bus(ch, bus, hub_bus);
+        let mut i2c_scan = I2cDevice::new(module_bus);
         let (ina_addr, tmp_addr) = module_addr_pair(ch);
         boot_snapshot.set_port(
             ch as usize,
@@ -1490,8 +1519,9 @@ async fn main(spawner: Spawner) {
         }
 
         info!(
-            "i2c.scan: ch={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={}",
+            "i2c.scan: ch={} bus={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={}",
             ch,
+            module_bus_label,
             ina_addr,
             if ina_ok { "online" } else { "offline" },
             ina_method,
@@ -1762,7 +1792,7 @@ async fn main(spawner: Spawner) {
             let mut keep_recovery_probe_enabled = false;
             if CH_RDY[idx].load(Ordering::Relaxed) {
                 view[idx].connected = true;
-                match sample_module_ina226(ch).await {
+                match sample_module_ina226(ch, bus, hub_bus).await {
                     Some((v_mv, i_ma)) => {
                         view[idx].vbus_mv = v_mv;
                         view[idx].ich_ma = i_ma;

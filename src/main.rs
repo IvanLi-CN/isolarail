@@ -539,7 +539,7 @@ impl Gc9d01Timer for DisplayTimer {
 }
 
 // Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
-// CS is permanently held low by TCA6408A (P6), so we don't toggle CS here.
+// Latest mainboard has no MCU LCD CS pin; transactions run without CS toggling.
 struct SimpleSpiDev<'a, BUS> {
     bus: BUS,
     cs: Option<Output<'a>>,
@@ -1153,7 +1153,8 @@ async fn main(spawner: Spawner) {
 
     info!("lcd.ctrl: cs=none rst=board-reset");
 
-    // Setup SPI2 and display. CS/RES/BLK are direct MCU GPIOs.
+    // Setup SPI2 and display. Latest mainboard exposes DC/MOSI/SCLK/BLK; CS is not MCU-driven,
+    // and LCD reset follows the board-level RESET# net.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()

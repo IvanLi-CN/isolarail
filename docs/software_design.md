@@ -55,6 +55,9 @@
   - `SDA1/SCL1 = GPIO8/GPIO9`：输入 INA226、前面板、输出模块传感器；
   - `SDA0/SCL0 = GPIO14/GPIO13`：主板 `TCA6408A@0x20` hub-sideband。
 - LCD：显示初始化成功后，先进入 boot self-check 页，不再把 dashboard 首帧当作“系统一定正常”的信号。
+  - 当前 V3 主板只由 MCU 直接驱动 `DC/MOSI/SCLK/BLK`；
+  - `GPIO13/GPIO14` 是 `SCL0/SDA0`，不得作为 LCD `CS/RST` 使用；
+  - LCD `RST` 跟随板级 `RESET#`，固件显示驱动使用无 CS 事务和 no-op reset pin。
 
 初始化期建议日志（示例）：
 

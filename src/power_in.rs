@@ -79,25 +79,44 @@ fn pg_label(is_good: bool) -> &'static str {
     }
 }
 
+fn input_switch_label(in_ce_high: bool) -> &'static str {
+    if in_ce_high {
+        "open"
+    } else {
+        "closed"
+    }
+}
+
+fn hold_input_switch_open(in_ce: &mut Output<'_>) {
+    // V3 IN_CE drives an NMOS that pulls TPS2490 EN low; high means forced off.
+    in_ce.set_high();
+}
+
+fn close_input_switch(in_ce: &mut Output<'_>) {
+    in_ce.set_low();
+}
+
 fn log_input_command(
     phase: &'static str,
-    in_en: &Output<'_>,
+    in_ce: &Output<'_>,
     in_pg: &Input<'_>,
     vin_adc_mv: Option<u16>,
 ) {
     match vin_adc_mv {
         Some(adc_mv) => info!(
-            "pwr.in:cmd phase={} in_en={} pg={} vin_adc={}mV vin_est={}V",
+            "pwr.in:cmd phase={} in_ce={} switch={} pg={} vin_adc={}mV vin_est={}V",
             phase,
-            pin_level_label(in_en.is_set_high()),
+            pin_level_label(in_ce.is_set_high()),
+            input_switch_label(in_ce.is_set_high()),
             pg_label(in_pg.is_high()),
             adc_mv,
             adc_mv as f32 / 1000.0 * VIN_ADC_DIVIDER_RATIO
         ),
         None => info!(
-            "pwr.in:cmd phase={} in_en={} pg={} vin_adc=n/a",
+            "pwr.in:cmd phase={} in_ce={} switch={} pg={} vin_adc=n/a",
             phase,
-            pin_level_label(in_en.is_set_high()),
+            pin_level_label(in_ce.is_set_high()),
+            input_switch_label(in_ce.is_set_high()),
             pg_label(in_pg.is_high())
         ),
     }
@@ -124,7 +143,7 @@ pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, BootstrapS
 pub fn spawn(
     spawner: &Spawner,
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
-    in_en: Output<'static>,
+    in_ce: Output<'static>,
     in_pg: Input<'static>,
     vin_adc: VinAdc,
     vin_adc_pin: VinAdcPin,
@@ -133,7 +152,7 @@ pub fn spawn(
 ) -> Result<(), SpawnError> {
     spawner.spawn(task(
         bus,
-        in_en,
+        in_ce,
         in_pg,
         vin_adc,
         vin_adc_pin,
@@ -145,7 +164,7 @@ pub fn spawn(
 #[task]
 async fn task(
     bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
-    mut in_en: Output<'static>,
+    mut in_ce: Output<'static>,
     in_pg: Input<'static>,
     mut vin_adc: VinAdc,
     mut vin_adc_pin: VinAdcPin,
@@ -153,10 +172,10 @@ async fn task(
     limits: Limits,
 ) {
     // Ensure power path is held open until qualification passes.
-    in_en.set_low();
+    hold_input_switch_open(&mut in_ce);
     log_input_command(
         "hold-open",
-        &in_en,
+        &in_ce,
         &in_pg,
         read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
     );
@@ -194,10 +213,10 @@ async fn task(
 
     let qualified = qualify_startup(&mut ina, shunt_res_ohms, limits).await;
     if !qualified {
-        in_en.set_low();
+        hold_input_switch_open(&mut in_ce);
         log_input_command(
             "qual-failed",
-            &in_en,
+            &in_ce,
             &in_pg,
             read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
         );
@@ -223,27 +242,27 @@ async fn task(
         }
     }
 
-    in_en.set_high();
+    close_input_switch(&mut in_ce);
     log_input_command(
-        "drive-high",
-        &in_en,
+        "close",
+        &in_ce,
         &in_pg,
         read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
     );
     Timer::after(Duration::from_millis(10)).await;
     log_input_command(
         "settle",
-        &in_en,
+        &in_ce,
         &in_pg,
         read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
     );
 
     let mut vin_on_state = wait_vin_on(&mut ina, &in_pg, limits, 50, 40).await;
     if !vin_on_state.vin_on {
-        in_en.set_low();
+        hold_input_switch_open(&mut in_ce);
         log_input_command(
             "pg-timeout-open",
-            &in_en,
+            &in_ce,
             &in_pg,
             read_vin_adc_mv(&mut vin_adc, &mut vin_adc_pin),
         );

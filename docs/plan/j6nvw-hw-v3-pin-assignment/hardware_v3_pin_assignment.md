@@ -24,7 +24,7 @@
 | I2C | I2C_SCL | 9 | MCU →/← I2C | - | 上行 I2C SCL |
 | I2C | I2C_INT | 16 | I2C → MCU | active-low (OD) | PCA9545A INT 汇总（开漏，外部上拉） |
 | I2C | I2C_RESET | 35 | MCU → I2C | active-low | 复位 I2C 外设（网表 `RESET#`，建议 OD 驱动；低电平复位） |
-| Power in | IN_EN | 41 | MCU → Power path | active-high | TPS2490/NMOS 使能（高=导通） |
+| Power in | IN_CE | 41 | MCU → Power path | active-low effective | 驱动 NMOS 下拉 TPS2490 EN；高=强制关断，低=允许导通 |
 | Power in | IN_PG | 42 | Power path → MCU | active-high (OD) | TPS2490 PG（开漏，外部上拉） |
 | USB power module | EN1 | 17 | MCU → OUT1 | active-high | OUT1 `EN` 直连控制（高=使能） |
 | USB power module | EN2 | 18 | MCU → OUT2 | active-high | OUT2 `EN` 直连控制（高=使能） |

@@ -114,7 +114,7 @@ const PIN_I2C_INT: u8 = 16;
 const PIN_I2C_RESET: u8 = 35; // mainboard active-low reset net; front-panel TCA reset is local pull-up
 
 #[allow(dead_code)]
-const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
+const PIN_IN_CE: u8 = 41; // high = force TPS2490 EN low/off, low = allow/on
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
@@ -1075,8 +1075,12 @@ async fn main(spawner: Spawner) {
     Timer::after(Duration::from_millis(50)).await;
     let i2c_reset_released_high = i2c_reset.is_high();
 
-    // IN_EN default off
-    let in_en = Output::new(p.GPIO41, Level::Low, esp_hal::gpio::OutputConfig::default());
+    // IN_CE default off: high turns on the NMOS that pulls TPS2490 EN low.
+    let in_ce = Output::new(
+        p.GPIO41,
+        Level::High,
+        esp_hal::gpio::OutputConfig::default(),
+    );
     // PG input
     let in_pg = Input::new(
         p.GPIO42,
@@ -1241,7 +1245,7 @@ async fn main(spawner: Spawner) {
     power_in::spawn(
         &spawner,
         bus,
-        in_en,
+        in_ce,
         in_pg,
         vin_adc,
         vin_adc_pin,

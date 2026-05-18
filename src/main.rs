@@ -1023,10 +1023,10 @@ async fn flush_boot_self_check<
     let _ = disp.flush().await;
 }
 
-async fn ack_scan_vin_off() {
+async fn ack_scan_vin_off(sensor_bus: &'static SharedI2cBus, hub_bus: &'static SharedI2cBus) {
     for ch in 0u8..4u8 {
-        let mut i2c_scan =
-            I2cDevice::new(unsafe { SENSOR_I2C_BUS_REF.expect("sensor I2C bus not initialized") });
+        let (module_bus, module_bus_label) = module_i2c_bus(ch, sensor_bus, hub_bus);
+        let mut i2c_scan = I2cDevice::new(module_bus);
         let (ina_addr, tmp_addr) = module_addr_pair(ch);
         let mut ina_ok = false;
         let mut ina_method = "no";
@@ -1055,8 +1055,9 @@ async fn ack_scan_vin_off() {
             Timer::after(Duration::from_millis(MODULE_SENSOR_RETRY_MS)).await;
         }
         info!(
-            "i2c.scan: ch={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={} vin_on=false",
+            "i2c.scan: ch={} bus={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={} vin_on=false",
             ch,
+            module_bus_label,
             ina_addr,
             if ina_ok { "yes" } else { "no" },
             ina_method,
@@ -1162,7 +1163,7 @@ async fn main(spawner: Spawner) {
 
     info!("lcd.ctrl: cs=front-tca-p6 rst=front-tca-p5 board_reset=GPIO35");
 
-    let display_control_state = front_panel::init_display_control(bus).await;
+    let mut display_control_state = front_panel::init_display_control(bus).await;
     match display_control_state {
         Ok(state) => info!(
             "lcd.ctrl: front-tca configured output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
@@ -1376,6 +1377,23 @@ async fn main(spawner: Spawner) {
             let front_int_high = front_int_pin.is_high();
             if probe_front_panel_tca(bus, attempt_no, front_int_high).await {
                 info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+                if display_control_state.is_err() {
+                    display_control_state = front_panel::init_display_control(bus).await;
+                    match display_control_state {
+                        Ok(state) => {
+                            info!(
+                                "lcd.ctrl: recovered output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+                                state.output, state.config
+                            );
+                            if let Err(_e) = disp.init().await {
+                                warn!("lcd.init: retry failed after front-tca recovery");
+                            } else {
+                                info!("lcd.init: retry ok after front-tca recovery");
+                            }
+                        }
+                        Err(_) => warn!("lcd.ctrl: recovery failed after front-tca online"),
+                    }
+                }
                 info!("boot.check: name=panel state=ok fault=-");
                 boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
                 front_panel_online = true;
@@ -1464,7 +1482,7 @@ async fn main(spawner: Spawner) {
 
     if !power_boot.ready {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
-        ack_scan_vin_off().await;
+        ack_scan_vin_off(bus, hub_bus).await;
         for (ch, done) in CH_SCAN_DONE.iter().enumerate() {
             boot_snapshot.set_port(ch, SelfCheckItemState::Skipped, power_boot.fault);
             done.store(true, Ordering::Relaxed);

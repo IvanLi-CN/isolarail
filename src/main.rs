@@ -69,8 +69,9 @@ defmt::timestamp!("{=u64} ms", {
 // Type alias for the async I2C bus and a global container to share it
 type I2cBus = I2c<'static, esp_hal::Async>;
 type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
-static I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
-static mut I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
+static SENSOR_I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
+static HUB_I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
+static mut SENSOR_I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
 // Latch channel readiness for UI without blocking on Signal::wait
 static CH_RDY: [AtomicBool; 4] = [
     AtomicBool::new(false),
@@ -109,12 +110,16 @@ const PIN_I2C_SDA: u8 = 8;
 #[allow(dead_code)]
 const PIN_I2C_SCL: u8 = 9;
 #[allow(dead_code)]
+const PIN_HUB_I2C_SDA: u8 = 14;
+#[allow(dead_code)]
+const PIN_HUB_I2C_SCL: u8 = 13;
+#[allow(dead_code)]
 const PIN_I2C_INT: u8 = 16;
 #[allow(dead_code)]
 const PIN_I2C_RESET: u8 = 35; // mainboard active-low reset net; front-panel TCA reset is local pull-up
 
 #[allow(dead_code)]
-const PIN_IN_EN: u8 = 41; // TPS2490 enable (high = on)
+const PIN_IN_CE: u8 = 41; // high = force TPS2490 EN low/off, low = allow/on
 #[allow(dead_code)]
 const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
@@ -142,34 +147,60 @@ const VIN_MAX_V: f32 = 24.0;
 const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
 const INA226_SHUNT_LSB_V: f32 = 2.5e-6;
 
-// Direct-bus V3 IP6557 modules are expected to be strapped to unique addresses.
-// Channel 4 is the current validation target and is populated as INA226@0x43 + TMP112@0x4B.
+// V3 IP6557 modules are strapped to unique addresses. OUT1/OUT2 share SDA0/SCL0
+// with hub sideband; OUT3/OUT4 share SDA1/SCL1 with front/input sensors.
 const MODULE_INA226_ADDRS: [u8; 4] = [0x40, 0x41, 0x42, 0x43];
 const MODULE_TMP112_ADDRS: [u8; 4] = [0x48, 0x49, 0x4A, 0x4B];
 const MODULE_SENSOR_RETRY_MS: u64 = 50;
 const MODULE_SENSOR_RETRIES: u8 = 6;
 
 // ===== Display pin mapping (V3 netlist) =====
-// SPI2 SCLK/MOSI to panel; MISO unused. MCU directly drives DC/CS/RES/BLK.
+// SPI2 SCLK/MOSI to panel; MISO unused. Latest mainboard routes GPIO13/14 to hub I2C.
 // BLK drives a panel-side P-channel gate and is therefore active-low.
 const PIN_LCD_SCLK: u8 = 12;
 const PIN_LCD_MOSI: u8 = 11;
 const PIN_LCD_DC: u8 = 10;
-const PIN_LCD_CS_GPIO: u8 = 13;
-const PIN_LCD_RST_GPIO: u8 = 14;
 const PIN_LCD_BLK_GPIO: u8 = 15;
 
 const TCA6408_ADDR: u8 = 0x21;
+const INPUT_INA226_ADDR: u8 = 0x44;
+const PCA9545_ADDR: u8 = 0x70;
 const I2C_RECOVERY_CLOCKS: u8 = 18;
 const FRONT_PANEL_BOOT_PROBE_ATTEMPTS: u8 = 3;
 const PORT_OCP_LOW_VBUS_MV: u32 = 3000;
 const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
 const PORT_OCP_HIGH_CURRENT_MA: u32 = 5300;
 const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
+const FRONT_DIAG_FRONT_MASK: u8 = 1 << 0;
+const FRONT_DIAG_HUB_MASK: u8 = 1 << 1;
+const FRONT_DIAG_INPUT_INA_MASK: u8 = 1 << 2;
+const FRONT_DIAG_MUX_MASK: u8 = 1 << 3;
+
+#[derive(Copy, Clone)]
+struct I2cRecoveryReport {
+    sda_released: bool,
+    scl_released: bool,
+    sda_initial: bool,
+    scl_initial: bool,
+    sda_final: bool,
+    scl_final: bool,
+}
 
 fn module_addr_pair(ch: u8) -> (u8, u8) {
     let idx = (ch & 0x03) as usize;
     (MODULE_INA226_ADDRS[idx], MODULE_TMP112_ADDRS[idx])
+}
+
+fn module_i2c_bus(
+    ch: u8,
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+) -> (&'static SharedI2cBus, &'static str) {
+    if ch < 2 {
+        (hub_bus, "SDA0/SCL0")
+    } else {
+        (sensor_bus, "SDA1/SCL1")
+    }
 }
 
 async fn i2c_ack_probe<I2C: embedded_hal_async::i2c::I2c>(
@@ -198,9 +229,13 @@ async fn i2c_ack_probe<I2C: embedded_hal_async::i2c::I2c>(
     (false, "no")
 }
 
-async fn sample_module_ina226(ch: u8) -> Option<(u32, u32)> {
-    let bus = unsafe { I2C_BUS_REF.expect("I2C bus not initialized") };
-    let i2c = I2cDevice::new(bus);
+async fn sample_module_ina226(
+    ch: u8,
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+) -> Option<(u32, u32)> {
+    let (module_bus, _) = module_i2c_bus(ch, sensor_bus, hub_bus);
+    let i2c = I2cDevice::new(module_bus);
     let mut dev = ina226::INA226::new(None);
     let (ina_addr, _) = module_addr_pair(ch);
     dev.set_ina_address(ina_addr);
@@ -240,10 +275,111 @@ async fn log_i2c_diag_scan(bus: &'static SharedI2cBus, reason: &'static str) {
     info!("i2c.diag: end reason={}", reason);
 }
 
+async fn log_front_i2c_peer_matrix(
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+    reason: &'static str,
+    attempt: u8,
+) -> u8 {
+    let mut online_mask = 0u8;
+    for (addr, label, mask, bus) in [
+        (TCA6408_ADDR, "front_tca", FRONT_DIAG_FRONT_MASK),
+        (INPUT_INA226_ADDR, "input_ina226", FRONT_DIAG_INPUT_INA_MASK),
+        (PCA9545_ADDR, "pca9545", FRONT_DIAG_MUX_MASK),
+    ]
+    .map(|(addr, label, mask)| (addr, label, mask, sensor_bus))
+    .into_iter()
+    .chain(core::iter::once((
+        hub_sideband::TCA6408_ADDR,
+        "hub_tca",
+        FRONT_DIAG_HUB_MASK,
+        hub_bus,
+    ))) {
+        let mut i2c = I2cDevice::new(bus);
+        let (ok, method) = i2c_ack_probe(&mut i2c, addr).await;
+        if ok {
+            online_mask |= mask;
+        }
+        info!(
+            "i2c.front_diag: reason={} attempt={} label={} addr=0x{:02X} online={} via={}",
+            reason,
+            attempt,
+            label,
+            addr,
+            if ok { "yes" } else { "no" },
+            method
+        );
+    }
+    online_mask
+}
+
+async fn probe_front_panel_tca(
+    bus: &'static SharedI2cBus,
+    attempt: u8,
+    front_int_high: bool,
+) -> bool {
+    let mut i2c = I2cDevice::new(bus);
+    let mut input = [0u8; 1];
+    if embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[0x00], &mut input)
+        .await
+        .is_ok()
+    {
+        info!(
+            "i2c.front_probe: attempt={} phase=input-read result=ok addr=0x{:02X} input=0x{:02X} int={}",
+            attempt,
+            TCA6408_ADDR,
+            input[0],
+            if front_int_high { "high" } else { "low" }
+        );
+        return true;
+    }
+
+    warn!(
+        "i2c.front_probe: attempt={} phase=input-read result=fail addr=0x{:02X} int={}",
+        attempt,
+        TCA6408_ADDR,
+        if front_int_high { "high" } else { "low" }
+    );
+
+    let mut i2c = I2cDevice::new(bus);
+    let (ok, method) = i2c_ack_probe(&mut i2c, TCA6408_ADDR).await;
+    warn!(
+        "i2c.front_probe: attempt={} phase=ack-fallback result={} addr=0x{:02X} via={} int={}",
+        attempt,
+        if ok { "ack" } else { "nack" },
+        TCA6408_ADDR,
+        method,
+        if front_int_high { "high" } else { "low" }
+    );
+    false
+}
+
+fn log_front_panel_failure_classification(report: I2cRecoveryReport, peer_mask: u8) {
+    let peer_online = (peer_mask & !FRONT_DIAG_FRONT_MASK) != 0;
+    let classification = if !report.sda_final || !report.scl_final {
+        "bus_stuck_after_clear"
+    } else if peer_online {
+        "front_tca_only_offline"
+    } else {
+        "shared_i2c_offline_or_power"
+    };
+    warn!(
+        "i2c.front_diag: classification={} sda_released={} scl_released={} sda_initial={} scl_initial={} sda_final={} scl_final={} peer_mask=0x{:02X}",
+        classification,
+        if report.sda_released { "high" } else { "low" },
+        if report.scl_released { "high" } else { "low" },
+        if report.sda_initial { "high" } else { "low" },
+        if report.scl_initial { "high" } else { "low" },
+        if report.sda_final { "high" } else { "low" },
+        if report.scl_final { "high" } else { "low" },
+        peer_mask
+    );
+}
+
 async fn recover_i2c_bus(
     sda_pin: esp_hal::peripherals::GPIO8<'static>,
     scl_pin: esp_hal::peripherals::GPIO9<'static>,
-) -> (Flex<'static>, Flex<'static>) {
+) -> (Flex<'static>, Flex<'static>, I2cRecoveryReport) {
     let mut sda = Flex::new(sda_pin);
     let mut scl = Flex::new(scl_pin);
     let output_config = OutputConfig::default()
@@ -253,10 +389,19 @@ async fn recover_i2c_bus(
 
     sda.apply_input_config(&input_config);
     scl.apply_input_config(&input_config);
-    sda.apply_output_config(&output_config);
-    scl.apply_output_config(&output_config);
     sda.set_input_enable(true);
     scl.set_input_enable(true);
+    Timer::after(Duration::from_micros(10)).await;
+    let sda_released = sda.is_high();
+    let scl_released = scl.is_high();
+    info!(
+        "i2c.recover: phase=release sda={} scl={}",
+        if sda_released { "high" } else { "low" },
+        if scl_released { "high" } else { "low" }
+    );
+
+    sda.apply_output_config(&output_config);
+    scl.apply_output_config(&output_config);
     sda.set_high();
     scl.set_high();
     sda.set_output_enable(true);
@@ -287,7 +432,15 @@ async fn recover_i2c_bus(
         if sda.is_high() { "high" } else { "low" },
         if scl.is_high() { "high" } else { "low" }
     );
-    (sda, scl)
+    let report = I2cRecoveryReport {
+        sda_released,
+        scl_released,
+        sda_initial,
+        scl_initial,
+        sda_final: sda.is_high(),
+        scl_final: scl.is_high(),
+    };
+    (sda, scl, report)
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -391,8 +544,6 @@ fn handle_front_key_event(
     }
 }
 
-// The front-panel TCA6408A is used for key input only; display CS/RES are MCU GPIOs.
-
 // Embassy timer adapter for the display driver
 struct DisplayTimer;
 impl Gc9d01Timer for DisplayTimer {
@@ -402,7 +553,7 @@ impl Gc9d01Timer for DisplayTimer {
 }
 
 // Minimal Eh1-async SpiDevice wrapper over esp-hal async SPI bus.
-// CS is permanently held low by TCA6408A (P6), so we don't toggle CS here.
+// Latest mainboard has no MCU LCD CS pin; transactions run without CS toggling.
 struct SimpleSpiDev<'a, BUS> {
     bus: BUS,
     cs: Option<Output<'a>>,
@@ -445,9 +596,6 @@ where
     }
 }
 
-// Initialize SPI + GC9D01 and draw a chessboard pattern (inlined in main where pins are available)
-
-// NoopPin for RST placeholder: real reset handled via TCA6408 P5
 pub struct NoopPin;
 impl embedded_hal::digital::ErrorType for NoopPin {
     type Error = core::convert::Infallible;
@@ -875,9 +1023,10 @@ async fn flush_boot_self_check<
     let _ = disp.flush().await;
 }
 
-async fn ack_scan_vin_off() {
+async fn ack_scan_vin_off(sensor_bus: &'static SharedI2cBus, hub_bus: &'static SharedI2cBus) {
     for ch in 0u8..4u8 {
-        let mut i2c_scan = I2cDevice::new(unsafe { I2C_BUS_REF.expect("I2C bus not initialized") });
+        let (module_bus, module_bus_label) = module_i2c_bus(ch, sensor_bus, hub_bus);
+        let mut i2c_scan = I2cDevice::new(module_bus);
         let (ina_addr, tmp_addr) = module_addr_pair(ch);
         let mut ina_ok = false;
         let mut ina_method = "no";
@@ -906,8 +1055,9 @@ async fn ack_scan_vin_off() {
             Timer::after(Duration::from_millis(MODULE_SENSOR_RETRY_MS)).await;
         }
         info!(
-            "i2c.scan: ch={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={} vin_on=false",
+            "i2c.scan: ch={} bus={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={} vin_on=false",
             ch,
+            module_bus_label,
             ina_addr,
             if ina_ok { "yes" } else { "no" },
             ina_method,
@@ -934,23 +1084,25 @@ async fn main(spawner: Spawner) {
     info!("init.time: embassy-timer=ok");
 
     // GPIO prepare
-    // Mainboard RESET# is MCU-driven. The front-panel TCA6408A reset pin is a
-    // local fixed pull-up on the front-panel PCB and is not controlled here.
-    let mut i2c_reset = Output::new(
+    // Mainboard RESET# is MCU-driven and also releases the front-panel TCA6408A.
+    // The LCD panel RES/CS pins are controlled by that front-panel TCA after it is online.
+    let mut board_reset = Output::new(
         p.GPIO35,
         Level::Low,
         esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
-    )
-    .into_flex();
-    i2c_reset.set_input_enable(true);
+    );
     info!("main.reset: gpio=GPIO35 mode=push-pull pulse=10ms release_wait=50ms");
     Timer::after(Duration::from_millis(10)).await;
-    i2c_reset.set_high();
+    board_reset.set_high();
     Timer::after(Duration::from_millis(50)).await;
-    let i2c_reset_released_high = i2c_reset.is_high();
+    let board_reset_released_high = board_reset.is_set_high();
 
-    // IN_EN default off
-    let in_en = Output::new(p.GPIO41, Level::Low, esp_hal::gpio::OutputConfig::default());
+    // IN_CE default off: high turns on the NMOS that pulls TPS2490 EN low.
+    let in_ce = Output::new(
+        p.GPIO41,
+        Level::High,
+        esp_hal::gpio::OutputConfig::default(),
+    );
     // PG input
     let in_pg = Input::new(
         p.GPIO42,
@@ -986,24 +1138,42 @@ async fn main(spawner: Spawner) {
         port_enable.set_low();
     }
 
-    info!("init.hw: chip=ESP32-S3 i2c=ok sda=GPIO8 scl=GPIO9");
+    info!("init.hw: chip=ESP32-S3 sensor_i2c=sdaGPIO8/sclGPIO9 hub_i2c=sdaGPIO14/sclGPIO13");
 
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
 
-    // Recover a possible half-finished I2C transaction left by MCU-only resets.
-    let (i2c_sda, i2c_scl) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
-    // Initialize I2C0 once and share via Mutex + I2cDevice.
+    // Recover a possible half-finished sensor/front-panel I2C transaction left by MCU-only resets.
+    let (i2c_sda, i2c_scl, i2c_recovery) = recover_i2c_bus(p.GPIO8, p.GPIO9).await;
+    // Initialize I2C0 on SDA1/SCL1 for input INA226, front panel, and OUT3/OUT4 sensors.
     let i2c_hw = I2c::new(p.I2C0, I2cConfig::default())
         .unwrap()
         .with_sda(i2c_sda)
         .with_scl(i2c_scl)
         .into_async();
-    let bus = I2C_BUS.init(Mutex::new(i2c_hw));
-    // MCU 直接控制 CS/RES（V3 网表）
-    info!("lcd.ctrl: cs,res via MCU GPIO");
+    let bus = SENSOR_I2C_BUS.init(Mutex::new(i2c_hw));
 
-    // Setup SPI2 and display. CS/RES/BLK are direct MCU GPIOs.
+    // Initialize I2C1 on SDA0/SCL0 for the mainboard CH335F sideband expander and OUT1/OUT2 sensors.
+    let hub_i2c_hw = I2c::new(p.I2C1, I2cConfig::default())
+        .unwrap()
+        .with_sda(p.GPIO14)
+        .with_scl(p.GPIO13)
+        .into_async();
+    let hub_bus = HUB_I2C_BUS.init(Mutex::new(hub_i2c_hw));
+
+    info!("lcd.ctrl: cs=front-tca-p6 rst=front-tca-p5 board_reset=GPIO35");
+
+    let mut display_control_state = front_panel::init_display_control(bus).await;
+    match display_control_state {
+        Ok(state) => info!(
+            "lcd.ctrl: front-tca configured output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+            state.output, state.config
+        ),
+        Err(_) => warn!("lcd.ctrl: front-tca display control failed"),
+    }
+
+    // Setup SPI2 and display. Latest mainboard exposes DC/MOSI/SCLK/BLK directly;
+    // LCD CS/RES are driven by the front-panel TCA6408A P6/P5.
     let spi_bus = Spi::new(
         p.SPI2,
         SpiConfig::default()
@@ -1037,22 +1207,9 @@ async fn main(spawner: Spawner) {
     let mut fb_buf: [Rgb565; LOGICAL_W * LOGICAL_H] = [Rgb565::BLACK; LOGICAL_W * LOGICAL_H];
     let fb: &mut [Rgb565] = &mut fb_buf;
 
-    // 用 MCU CS 脚包一层 SpiDevice，事务内拉低/释放
-    let cs = match PIN_LCD_CS_GPIO {
-        13 => Output::new(
-            p.GPIO13,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-        _ => Output::new(
-            p.GPIO13,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-    };
     let spi_dev = SimpleSpiDev {
         bus: spi_bus,
-        cs: Some(cs),
+        cs: None,
     };
     let cfg = DisplayConfig {
         width: LOGICAL_W as u16,
@@ -1063,28 +1220,23 @@ async fn main(spawner: Spawner) {
         dx: 15,
         dy: 0,
     };
-    let rst = match PIN_LCD_RST_GPIO {
-        14 => Output::new(
-            p.GPIO14,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-        _ => Output::new(
-            p.GPIO14,
-            Level::High,
-            esp_hal::gpio::OutputConfig::default(),
-        ),
-    };
+    let rst = NoopPin;
     let mut disp: GC9D01<_, _, _, DisplayTimer> = GC9D01::new(cfg, spi_dev, dc, rst, fb);
-    info!("lcd.init: start panel_160x50 mode (mcu cs/rst, landscape-swapped)");
+    info!("lcd.init: start panel_160x50 mode (cs=front-tca-p6 rst=front-tca-p5 landscape-swapped)");
     if let Err(_e) = disp.init().await {
         warn!("lcd.init: failed (fallback)");
     } else {
         info!("lcd.init: panel ready");
     }
+    if let Ok(state) = display_control_state {
+        info!(
+            "lcd.ctrl: verified output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+            state.output, state.config
+        );
+    }
     info!(
         "main.reset: release_level={} reset_reason={}",
-        if i2c_reset_released_high {
+        if board_reset_released_high {
             "high"
         } else {
             "low"
@@ -1099,7 +1251,7 @@ async fn main(spawner: Spawner) {
 
     // Record global bus reference for channel views.
     unsafe {
-        I2C_BUS_REF = Some(bus);
+        SENSOR_I2C_BUS_REF = Some(bus);
     }
 
     info!("i2c.topo: direct shared bus; mux probe skipped");
@@ -1115,7 +1267,7 @@ async fn main(spawner: Spawner) {
     power_in::spawn(
         &spawner,
         bus,
-        in_en,
+        in_ce,
         in_pg,
         vin_adc,
         vin_adc_pin,
@@ -1166,12 +1318,16 @@ async fn main(spawner: Spawner) {
 
     info!(
         "main.reset: pre-tca-probe level={} reset_reason={}",
-        if i2c_reset.is_high() { "high" } else { "low" },
+        if board_reset_released_high {
+            "high"
+        } else {
+            "low"
+        },
         reset_reason_label(reset_reason)
     );
     let mut hub_ctrl = None;
     if power_boot.ready {
-        let mut hub_i2c = I2cDevice::new(bus);
+        let mut hub_i2c = I2cDevice::new(hub_bus);
         match hub_sideband::Controller::init(&mut hub_i2c).await {
             Ok(ctrl) => {
                 match ctrl.snapshot(&mut hub_i2c).await {
@@ -1197,11 +1353,12 @@ async fn main(spawner: Spawner) {
             ),
         }
         if hub_ctrl.is_none() {
-            log_i2c_diag_scan(bus, "hub-sideband-offline").await;
+            log_i2c_diag_scan(hub_bus, "hub-sideband-offline").await;
         }
     }
 
     let mut front_panel_online = false;
+    let mut front_panel_peer_mask = 0u8;
     if power_boot.ready {
         boot_snapshot.set_sys(
             SysCheck::Front,
@@ -1216,8 +1373,27 @@ async fn main(spawner: Spawner) {
         // front-panel TCA RESET#/VCCP control should remove this degraded path
         // and recover the expander before runtime.
         for attempt in 0..FRONT_PANEL_BOOT_PROBE_ATTEMPTS {
-            if front_panel::is_present(bus).await {
+            let attempt_no = attempt + 1;
+            let front_int_high = front_int_pin.is_high();
+            if probe_front_panel_tca(bus, attempt_no, front_int_high).await {
                 info!("i2c.front: tca6408a=online addr=0x{:02X}", TCA6408_ADDR);
+                if display_control_state.is_err() {
+                    display_control_state = front_panel::init_display_control(bus).await;
+                    match display_control_state {
+                        Ok(state) => {
+                            info!(
+                                "lcd.ctrl: recovered output=0x{:02X} config=0x{:02X} cs_p6=low_output res_p5=high_output",
+                                state.output, state.config
+                            );
+                            if let Err(_e) = disp.init().await {
+                                warn!("lcd.init: retry failed after front-tca recovery");
+                            } else {
+                                info!("lcd.init: retry ok after front-tca recovery");
+                            }
+                        }
+                        Err(_) => warn!("lcd.ctrl: recovery failed after front-tca online"),
+                    }
+                }
                 info!("boot.check: name=panel state=ok fault=-");
                 boot_snapshot.set_sys(SysCheck::Front, SelfCheckItemState::Ok, BootFaultCode::None);
                 front_panel_online = true;
@@ -1226,25 +1402,31 @@ async fn main(spawner: Spawner) {
 
             warn!(
                 "i2c.front: tca6408a=offline addr=0x{:02X}; retry={}/{}",
-                TCA6408_ADDR,
-                attempt + 1,
-                FRONT_PANEL_BOOT_PROBE_ATTEMPTS
+                TCA6408_ADDR, attempt_no, FRONT_PANEL_BOOT_PROBE_ATTEMPTS
             );
             warn!(
                 "front.int: level={} while_panel_pending",
-                if front_int_pin.is_high() {
-                    "high"
-                } else {
-                    "low"
-                }
+                if front_int_high { "high" } else { "low" }
             );
             if attempt == 0 {
+                front_panel_peer_mask =
+                    log_front_i2c_peer_matrix(bus, hub_bus, "front-panel-wait", attempt_no).await;
                 log_i2c_diag_scan(bus, "front-panel-wait").await;
             }
             flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
             Timer::after(Duration::from_millis(500)).await;
         }
         if !front_panel_online {
+            if front_panel_peer_mask == 0 {
+                front_panel_peer_mask = log_front_i2c_peer_matrix(
+                    bus,
+                    hub_bus,
+                    "front-panel-final",
+                    FRONT_PANEL_BOOT_PROBE_ATTEMPTS,
+                )
+                .await;
+            }
+            log_front_panel_failure_classification(i2c_recovery, front_panel_peer_mask);
             warn!(
                 "boot.check: name=panel state=warn fault=FrontPanelOffline recovery=blocked_no_reset_pin"
             );
@@ -1300,7 +1482,7 @@ async fn main(spawner: Spawner) {
 
     if !power_boot.ready {
         warn!("pwr.in: vin_on=false; skip module init; do ack-scan only");
-        ack_scan_vin_off().await;
+        ack_scan_vin_off(bus, hub_bus).await;
         for (ch, done) in CH_SCAN_DONE.iter().enumerate() {
             boot_snapshot.set_port(ch, SelfCheckItemState::Skipped, power_boot.fault);
             done.store(true, Ordering::Relaxed);
@@ -1316,7 +1498,8 @@ async fn main(spawner: Spawner) {
             continue;
         }
 
-        let mut i2c_scan = I2cDevice::new(bus);
+        let (module_bus, module_bus_label) = module_i2c_bus(ch, bus, hub_bus);
+        let mut i2c_scan = I2cDevice::new(module_bus);
         let (ina_addr, tmp_addr) = module_addr_pair(ch);
         boot_snapshot.set_port(
             ch as usize,
@@ -1354,8 +1537,9 @@ async fn main(spawner: Spawner) {
         }
 
         info!(
-            "i2c.scan: ch={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={}",
+            "i2c.scan: ch={} bus={} ina226@0x{:02X}={} via={} tries={} tmp112@0x{:02X}={} via={} tries={}",
             ch,
+            module_bus_label,
             ina_addr,
             if ina_ok { "online" } else { "offline" },
             ina_method,
@@ -1409,7 +1593,7 @@ async fn main(spawner: Spawner) {
         let mut pwren_enabled = [false; 4];
         let mut hub_read_failed = false;
         if let Some(ctrl) = hub_ctrl.as_mut() {
-            let mut hub_i2c = I2cDevice::new(bus);
+            let mut hub_i2c = I2cDevice::new(hub_bus);
             match ctrl.snapshot(&mut hub_i2c).await {
                 Ok(snapshot) => pwren_enabled = snapshot.pwren_enabled,
                 Err(_) => hub_read_failed = true,
@@ -1573,7 +1757,7 @@ async fn main(spawner: Spawner) {
         };
         let mut hub_runtime_failed = false;
         let hub_snapshot = if let Some(ctrl) = hub_ctrl.as_mut() {
-            let mut hub_i2c = I2cDevice::new(bus);
+            let mut hub_i2c = I2cDevice::new(hub_bus);
             match ctrl.snapshot(&mut hub_i2c).await {
                 Ok(snapshot) => Some(snapshot),
                 Err(_) => {
@@ -1626,7 +1810,7 @@ async fn main(spawner: Spawner) {
             let mut keep_recovery_probe_enabled = false;
             if CH_RDY[idx].load(Ordering::Relaxed) {
                 view[idx].connected = true;
-                match sample_module_ina226(ch).await {
+                match sample_module_ina226(ch, bus, hub_bus).await {
                     Some((v_mv, i_ma)) => {
                         view[idx].vbus_mv = v_mv;
                         view[idx].ich_ma = i_ma;
@@ -1689,7 +1873,7 @@ async fn main(spawner: Spawner) {
         }
         let mut hub_write_failed = false;
         if let Some(ctrl) = hub_ctrl.as_mut() {
-            let mut hub_i2c = I2cDevice::new(bus);
+            let mut hub_i2c = I2cDevice::new(hub_bus);
             for ch in 0u8..4u8 {
                 if ctrl
                     .set_overcurrent(&mut hub_i2c, ch, ocp_latched[ch as usize])

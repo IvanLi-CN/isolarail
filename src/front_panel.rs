@@ -13,9 +13,26 @@ use esp_hal::gpio::Input;
 
 use crate::{I2cBus, TCA6408_ADDR};
 
+type FrontI2cDevice = I2cDevice<'static, CriticalSectionRawMutex, I2cBus>;
+type FrontI2cError = <FrontI2cDevice as embedded_hal_async::i2c::ErrorType>::Error;
+
 const KEY_DEBOUNCE_MS: u64 = 25;
 const FALLBACK_SCAN_MS: u64 = 500;
 const TCA_READ_RETRY_DELAY_MS: u64 = 2;
+const REG_OUTPUT: u8 = 0x01;
+const REG_POLARITY: u8 = 0x02;
+const REG_CONFIG: u8 = 0x03;
+const LCD_RES: u8 = 1 << 5;
+const LCD_CS: u8 = 1 << 6;
+const LCD_OUTPUT_CONFIG: u8 = !(LCD_RES | LCD_CS);
+const LCD_OUTPUT_RELEASED: u8 = !LCD_CS;
+const LCD_OUTPUT_RESET: u8 = LCD_OUTPUT_RELEASED & !LCD_RES;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct DisplayControlState {
+    pub output: u8,
+    pub config: u8,
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum KeyEvent {
@@ -35,14 +52,24 @@ pub fn clear_events() {
     KEY_EVENTS.clear();
 }
 
-/// Probe TCA6408A presence by reading its input register once.
-/// Returns true when device ACKs and read succeeds.
-pub async fn is_present(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> bool {
+pub async fn init_display_control(
+    bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>,
+) -> Result<DisplayControlState, FrontI2cError> {
     let mut i2c = I2cDevice::new(bus);
-    let mut b = [0u8; 1];
-    embedded_hal_async::i2c::I2c::write_read(&mut i2c, TCA6408_ADDR, &[0x00], &mut b)
-        .await
-        .is_ok()
+    i2c.write(TCA6408_ADDR, &[REG_OUTPUT, LCD_OUTPUT_RELEASED])
+        .await?;
+    i2c.write(TCA6408_ADDR, &[REG_POLARITY, 0x00]).await?;
+    i2c.write(TCA6408_ADDR, &[REG_CONFIG, LCD_OUTPUT_CONFIG])
+        .await?;
+    i2c.write(TCA6408_ADDR, &[REG_OUTPUT, LCD_OUTPUT_RESET])
+        .await?;
+    Timer::after(Duration::from_millis(10)).await;
+    i2c.write(TCA6408_ADDR, &[REG_OUTPUT, LCD_OUTPUT_RELEASED])
+        .await?;
+    Timer::after(Duration::from_millis(120)).await;
+    let output = tca_read_reg(&mut i2c, REG_OUTPUT).await?;
+    let config = tca_read_reg(&mut i2c, REG_CONFIG).await?;
+    Ok(DisplayControlState { output, config })
 }
 
 pub fn spawn(
@@ -100,8 +127,12 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) {
 
 async fn tca_read_inputs<I2C: I2c>(i2c: &mut I2C) -> Result<u8, I2C::Error> {
     // TCA6408A Input Port register address = 0x00
+    tca_read_reg(i2c, 0x00).await
+}
+
+async fn tca_read_reg<I2C: I2c>(i2c: &mut I2C, reg: u8) -> Result<u8, I2C::Error> {
     let mut b = [0u8; 1];
-    i2c.write_read(TCA6408_ADDR, &[0x00], &mut b).await?;
+    i2c.write_read(TCA6408_ADDR, &[reg], &mut b).await?;
     Ok(b[0])
 }
 

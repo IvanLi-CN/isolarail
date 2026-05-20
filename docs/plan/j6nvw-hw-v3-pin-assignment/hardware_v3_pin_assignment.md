@@ -36,9 +36,9 @@
 | USB hub | HUB_SCL | 46 | MCU ↔ HUB | digital I/O | CH335F `LED3/SCL` 复用控制信号（Strapping 引脚，硬件已分配） |
 | USB hub | HUB_SDA | 45 | MCU ↔ HUB | digital I/O | CH335F `LED4/SDA` 复用控制信号（Strapping 引脚，硬件已分配） |
 | UI | BUZZER | 7 | MCU → buzzer | PWM | 无源蜂鸣器（PWM 输出） |
-| UI | FAN_PWM | 1 | MCU → fan ctrl | PWM | 风扇调压 PWM（参考 `docs/pwm_fan_control_circuit_design.md`） |
-| UI | FAN_EN | 2 | MCU → fan | active-high | 风扇使能 |
-| UI | FAN_TACH | 6 | fan → MCU | pulse in | 风扇测速输入（PCNT） |
+| UI | FAN_PWM | 1 | MCU → fan buck FB ctrl | PWM | 25 kHz PWM，经 `VCTRL/R18` 注入 `TPS62933` FB；速度越高硬件 duty 越低 |
+| UI | FAN_EN | 2 | MCU → fan buck | active-high | `TPS62933` 使能，高电平打开 `FAN_VCC` |
+| UI | FAN_TACH | 6 | fan → MCU | pulse in | `FAN_TOUCH` 转速输入（PCNT，4.7 kΩ 上拉到 3V3） |
 | UI | VIN_ADC | 4 | VIN sense → MCU | ADC | 输入电压采样（分压网络） |
 | UI | ISO_OK | 21 | ISO chip → MCU | digital in | ISOUSB211DPR 隔离 OK（需外部上拉） |
 | Display (SPI) | LCD_DC | 10 | MCU → LCD | - | 数据/命令选择 |

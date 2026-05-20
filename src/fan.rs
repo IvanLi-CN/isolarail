@@ -17,7 +17,7 @@ extern "C" {
 }
 
 // GPIO mapping per docs/esp32-s3fh4r2_gpio_assignment_guide.md
-// - GPIO1:  FAN_PWM (LEDC 25 kHz, 三线风扇DC调速，经LDO/PWM调压)
+// - GPIO1:  FAN_PWM (LEDC 25 kHz, 三线风扇DC调速，经TPS62933 FB注入调压)
 // - GPIO2:  FAN_EN  (数字使能，高=开)
 // - GPIO6:  FAN_TACH (PCNT测速)
 
@@ -128,7 +128,7 @@ async fn task(
         lst.duty().map(|d| d as u32).unwrap_or(0)
     );
 
-    // Create channel on GPIO1（DC 调速：需要推挽输出，给 LDO/PWM 控制脚提供完整电平）
+    // Create channel on GPIO1（DC 调速：需要推挽输出，给 buck FB 控制脚提供完整电平）
     let mut ch0 = ledc.channel(channel::Number::Channel0, pwm_pin);
     if ch0
         .configure(channel::config::Config {

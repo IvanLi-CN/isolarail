@@ -9,9 +9,6 @@ export type CompanionBridge = {
   agentBaseUrl: string;
 };
 
-const LOCAL_USB_PORT_START = 51200;
-const LOCAL_USB_PORT_END = 51299;
-
 export function resolveAgentBaseUrl(
   bootstrapUrl: string,
   payloadAgentBaseUrl: string,
@@ -35,15 +32,8 @@ export function resolveAgentBaseUrl(
 }
 
 export async function tryBootstrapCompanionBridge(): Promise<CompanionBridge | null> {
-  const sameOrigin = await fetchCompanionBridgeBootstrap("/api/v1/bootstrap");
-  if (sameOrigin) {
-    return sameOrigin;
-  }
-
-  for (let port = LOCAL_USB_PORT_START; port <= LOCAL_USB_PORT_END; port += 1) {
-    const agent = await fetchCompanionBridgeBootstrap(
-      `http://127.0.0.1:${port}/api/v1/bootstrap`,
-    );
+  for (const url of companionBootstrapUrls()) {
+    const agent = await fetchCompanionBridgeBootstrap(url);
     if (agent) {
       return agent;
     }
@@ -70,6 +60,25 @@ export async function agentFetch(
     headers,
     cache: "no-store",
   });
+}
+
+export function companionBootstrapUrls(): string[] {
+  const explicitOrigins =
+    (import.meta.env.VITE_ISOHUB_DEVD_ORIGINS as string | undefined) ?? "";
+  const origins = explicitOrigins
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  if (origins.length === 0) {
+    return ["/api/v1/bootstrap"];
+  }
+  return origins.map((origin) =>
+    new URL("/api/v1/bootstrap", ensureTrailingSlash(origin)).toString(),
+  );
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
 async function fetchCompanionBridgeBootstrap(

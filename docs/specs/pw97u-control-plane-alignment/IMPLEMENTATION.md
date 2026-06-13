@@ -13,7 +13,7 @@
 - 规格已补齐文档真相边界：`pw97u-control-plane-alignment/SPEC.md` 负责 owner-facing 命名，`j6nvw-hardware-v3-pin-assignment/SPEC.md` 负责 V3 pin-level / display / reset 事实，`docs/hardware_connection_overview.md` 已提升为当前 V3 硬件总览，而 `docs/esp32-s3fh4r2_gpio_assignment_guide.md` 已降级为历史 GPIO 参考。
 - 规格现已把 `docs/ch335f_tca6408a_appnote.md`、`docs/i2c_gpio_expanders_comparison.md`、`docs/power_management_and_startup_control.md`、`docs/pwm_fan_control_circuit_design.md`、`docs/development_notes.md` 明确归类为 reference-only 硬件资料，防止旧器件名或候选器件覆盖当前 V3 控制面真相。
 - 规格已补上硬件命名覆盖边界与 reference-only 料号策略：`TPS82130SILR`、`RT9043GB`、`TCA6408APWR`、`TCA6408ARSVR`、`TCA9535RTWR` 等名称现在被明确限制在历史方案、选型比较或局部电路说明语境中。
-- 规格已明确 daemon 默认 IPC 机制：`isohub-devd serve` 在 Unix 使用 Unix domain socket，在 Windows 使用 named pipe；`bridge-http` 只作为显式 browser bridge 存在。
+- 规格已明确 daemon 默认 IPC 机制：`isohub-devd serve` 在 Unix 使用 Unix domain socket，在 Windows 使用 named pipe；`isohub-devd web` 只作为显式 Web companion 存在。
 - 项目入口文档已完成第一轮 current-truth 收敛：`README.md`、`INSTALL.md`、`docs/hardware_connection_overview.md` 与 `docs/esp32-s3fh4r2_gpio_assignment_guide.md` 已对齐 `isohub` / `isohub-devd` / `port1..port4` / V3 口径，并移除把旧 `SC8815 + SW2303`、`PSTOP*`、`GPIO38` 当作当前实现事实的写法。
 - 后续实现需要以该命名矩阵为唯一真相源。
 - 设备端、本地 companion tools 与 web app 的实际代码迁移与对齐仍在进行中。
@@ -24,7 +24,7 @@
 - 固件已把 `http_api_v1` 提升为共享四路 HTTP dispatcher：除了 canonical route parse 与 payload render 之外，现在还能产出只读响应或 `PortPower` / `PortReplug` action plan，后续 transport 层可直接复用这套 `ApiOutcome` / `ApiPendingAction` 契约，而不必再从旧双口 `src/net/http.rs` 拼接语义。
 - 固件已新增共享 `runtime_control` 层，把四路 `port.power_set` / `port.replug` / Wi‑Fi runtime snapshot 更新与 replug holdoff tick 收口为可复用 helper；当前 USB JSONL 已复用这套动作语义，后续 HTTP transport 只需搬运 `ApiPendingAction`，不再重复实现一套端口控制状态机。
 - 活动 USB JSONL `wifi.get` 已进一步对齐 companion/web 的实际消费形状：现在会返回 EEPROM `storage="eeprom"`、`address="0x50"`、已保存的 `ssid`、`psk_configured` 与运行态 `state/ipv4/is_static`，不再让 Wi‑Fi 读取路径停留在 `ssid/address` 永远缺失的半残状态。
-- Web 开发环境已改为通过 Vite 同源代理访问本地 `isohub-devd`，避免浏览器跨源直连 `127.0.0.1:51200` 时的 bootstrap/CORS 失败。
+- Web 开发环境已改为通过 Vite 同源代理访问显式配置的本地 `isohub-devd web` origins；前端不再扫描 localhost 端口，配置应优先放 mDNS URL，再放 IP/localhost fallback。
 - web 设备页路由现已按 spec 收口到 `Dashboard / Hardware / Info`：`/devices/:deviceId` 为 dashboard，`/devices/:deviceId/hardware` 为 hardware，`/devices/:deviceId/info` 为 info，同时保留 `/overview` 与 `/details` 的兼容重定向，避免旧本地链接直接失效。
 - companion 实现应以本项目命名 `isohub-devd` / `isohub` 为目标；当前 owner-facing 门户是 `isohub` CLI，`devd` 只承担后台单例；参考项目 `isolapurr` 仅用于架构对齐，不进入本项目 owner-facing 命名。
 - companion workspace 需要与仓根 Xtensa 固件配置隔离，避免本地 CLI / daemon 构建继承固件 target/toolchain。

@@ -52,7 +52,8 @@
 - 设备固件必须提供 `/api/v1/health`、`/api/v1/info`、`/api/v1/ports`、`/api/v1/ports/{portId}`、`/api/v1/ports/{portId}/power`、`/api/v1/ports/{portId}/actions/replug`、`GET /api/v1/wifi`、`POST /api/v1/reboot` 的 HTTP 接口。
 - 设备 profile 必须以 `port1..port4` 为唯一 owner-facing 端口模型。
 - Wi-Fi 凭据和网络配置必须写入主板 `M24C64@0x50`，并带 magic/version 与完整性校验。
-- `isohub-devd serve` 默认只开放本地 IPC；`isohub-devd bridge-http` 才允许 localhost bridge。
+- `isohub-devd serve` 默认只开放本地 IPC；`isohub-devd web` 才允许 localhost Web companion。
+- Web runtime 不得扫描 localhost 端口；Local USB companion origin 必须由同源 bootstrap 或显式配置的 mDNS/IP origin 列表提供。
 - 普通用户当前默认通过 `isohub` CLI 操作设备；若未来引入 desktop 程序，它也必须负责按需启动并复用全局单例 `isohub-devd`，而不是要求用户先手动启动 daemon。
 - `isohub` 必须区分 `--hardware <saved-id>` 与 `--device <temporary-id>` 选择器语义。
 - web runtime 必须统一仲裁 `Wi-Fi/LAN`、`Web Serial`、`Local USB bridge` 三个通道，避免重复设备。
@@ -110,7 +111,7 @@
 | Root JS tooling manifest | `isohub-dev-tools` | repo root `package.json` | repo tooling 元数据，不是产品名 |
 | Developer entrypoint | `just` | README, INSTALL, contributor docs, local development commands | 不把 `bun` 作为默认开发入口 |
 | Daemon IPC mode | `isohub-devd serve` | local daemon default mode | 只开放原生系统 IPC |
-| Explicit browser bridge mode | `isohub-devd bridge-http` | localhost HTTP bridge | 仅开发/浏览器路径显式启用 |
+| Explicit Web companion mode | `isohub-devd web` | localhost Web companion | 仅开发/浏览器路径显式启用；发布本机 `_isohub-devd._tcp.local.` |
 | Owner-facing port ids | `port1` `port2` `port3` `port4` | HTTP / USB / CLI / web / shared schema | 全部一致 |
 | Port labels | `Port 1` `Port 2` `Port 3` `Port 4` | UI copy, logs, diagnostics export | 不再用 `USB-A` / `USB-C` |
 | Board baseline | `V3` | current deliverable hardware baseline | 指当前软件落地基线板 |
@@ -221,8 +222,8 @@
 
 - 设备身份：`firmware.name="iso-usb-hub"`，hostname 为 `isohub-<shortid>`，HTTP `info`、USB `info`、devd、CLI 与 web domain 共享同一 identity shape。
 - 端口模型：`port1..port4` 每路包含 power/data/ocp/pwren/en/telemetry/runtime channel state；断路、初始化、过流、手动关闭必须区分显示。
-- companion 进程拓扑：`isohub-devd` 作为本机全局单例后台进程存在；当前 `isohub` CLI 是默认 owner-facing 门户，负责发现已运行实例、按需自启 `serve` 模式 daemon，并通过本地 IPC 复用同一实例；未来若引入 desktop 程序，也必须复用这套单例语义；`bridge-http` 仅在 Web 路径显式需要时开启。
-- 原生 IPC 机制：`isohub-devd serve` 在 Unix 平台必须使用 Unix domain socket，在 Windows 必须使用 named pipe；`bridge-http` 只是显式附加的 localhost browser bridge，不能替代默认 IPC。
+- companion 进程拓扑：`isohub-devd` 作为本机全局单例后台进程存在；当前 `isohub` CLI 是默认 owner-facing 门户，负责发现已运行实例、按需自启 `serve` 模式 daemon，并通过本地 IPC 复用同一实例；未来若引入 desktop 程序，也必须复用这套单例语义；`web` 仅在 Web 路径显式需要时开启。
+- 原生 IPC 机制：`isohub-devd serve` 在 Unix 平台必须使用 Unix domain socket，在 Windows 必须使用 named pipe；`isohub-devd web` 只是显式附加的 localhost Web companion，不能替代默认 IPC。
 - 通道仲裁：当多个通道同时可用时，采用“最后成功通道优先”；当前通道失效时自动提升另一条可用通道，不新建重复设备。
 - Wi-Fi 写策略：LAN HTTP 路径只读；`wifi.set` / `wifi.clear` 必须要求 `Web Serial` 或 `Local USB bridge` 当前可用。
 - `port.replug`：关闭对应 `ENx`，等待受控恢复窗口后重新打开；成功证据为设备侧动作完成与 companion/runtime 观察到的状态更新。

@@ -25,7 +25,7 @@ Compatibility redirects remain in place for legacy local links:
 ## `isohub-devd` modes
 
 - `isohub-devd serve`: default daemon mode, local IPC only.
-- `isohub-devd bridge-http`: opt-in localhost HTTP bridge for browser surfaces.
+- `isohub-devd web`: opt-in localhost Web companion for browser surfaces.
 
 For normal local operation, users go through `isohub` CLI. It is responsible for discovering or auto-starting the `serve` singleton. Direct manual `devd` use is a development and diagnostics path, not the normal user portal.
 
@@ -53,32 +53,33 @@ Notes:
 - If you need to keep Local USB work pinned to one serial device, run the companion commands as `USB_PORT=/dev/cu.usbmodem... just ...`.
 - Override the IPC endpoint only when necessary with `ISOHUB_DEVD_ENDPOINT=<path-or-pipe>`.
 
-## Local development with Web bridge
+## Local development with Web companion
 
-The browser cannot consume native IPC directly. For Local USB and companion-backed storage flows in `web/`, start the HTTP bridge explicitly in a separate terminal:
+The browser cannot consume native IPC directly. For Local USB and companion-backed storage flows in `web/`, start the Web companion explicitly in a separate terminal:
 
 ```bash
-just devd-http-bridge
+BIND=127.0.0.1:51200 just devd-web
 ```
 
 Then start the Vite dev server:
 
 ```bash
-just web-dev
+DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
 ```
 
 Development behavior:
 
-- Vite proxies `/api/v1/*` to `http://127.0.0.1:51200` by default.
+- Vite proxies `/api/v1/*` to the first explicit `DEVD_ORIGINS` entry.
 - This keeps the browser on a same-origin API path during development, so Local USB flows do not require `--allow-dev-cors`.
-- Override the proxy target with `DEVD_ORIGIN=http://127.0.0.1:<port> just web-dev` if the bridge is not using `51200`.
+- Put the mDNS URL first and an IP or localhost URL second, for example `DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200`.
+- The Web app never scans localhost ports; every fallback origin must be explicitly configured.
 - Disable the proxy only for deliberate diagnostics with `ISOHUB_DEV_PROXY=0`.
 
 If `Local USB` still reports the service as unavailable:
 
-- Confirm the explicit `bridge-http` process is running and `http://127.0.0.1:51200/api/v1/bootstrap` returns JSON.
+- Confirm the explicit `isohub-devd web` process is running and one configured origin returns `/api/v1/bootstrap` JSON.
 - Confirm the Vite server was started after the proxy config change.
-- Do not treat `bridge-http` as the default daemon mode. It is an explicit browser bridge layered alongside the native IPC path.
+- Do not treat `web` as the default daemon mode. It is an explicit browser companion layered alongside the native IPC path.
 
 ## Review tips
 

@@ -1,7 +1,7 @@
 pub async fn serve_http_bridge(config: DevdConfig) -> anyhow::Result<()> {
     if !config.bind.ip().is_loopback() {
         return Err(anyhow!(
-            "isohub-devd refuses non-loopback binds because /api/v1/bootstrap returns a local bearer token"
+            "isohub-devd web refuses non-loopback binds because /api/v1/bootstrap returns a local bearer token"
         ));
     }
     let listener = TcpListener::bind(config.bind)
@@ -9,9 +9,24 @@ pub async fn serve_http_bridge(config: DevdConfig) -> anyhow::Result<()> {
         .with_context(|| format!("bind {}", config.bind))?;
     let port = listener.local_addr()?.port();
     let state = AppState::new(format!("http://127.0.0.1:{port}"));
+    let mdns_advertiser = match crate::advertise_web_mdns(config.mdns_name.as_str(), port) {
+        Ok(advertiser) => {
+            tracing::info!(
+                "isohub-devd web mDNS published service={} port={}",
+                crate::WEB_MDNS_SERVICE_TYPE,
+                port
+            );
+            Some(advertiser)
+        }
+        Err(err) => {
+            tracing::warn!("isohub-devd web mDNS publish failed: {}", err);
+            None
+        }
+    };
 
     let router = router(state, config.web_root, config.allow_dev_cors);
-    tracing::info!("isohub-devd HTTP bridge listening on http://127.0.0.1:{port}");
+    tracing::info!("isohub-devd web listening on http://127.0.0.1:{port}");
+    let _mdns_advertiser = mdns_advertiser;
     axum::serve(listener, router).await?;
     Ok(())
 }
@@ -98,7 +113,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Value> {
         app: BootstrapApp {
             name: "isohub-devd",
             version: release_version(),
-            mode: "devd",
+            mode: "web",
         },
     }))
 }

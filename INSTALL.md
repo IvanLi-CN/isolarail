@@ -51,17 +51,17 @@ Notes:
 
 ## Local browser development
 
-When the browser needs Local USB or companion-backed storage, start the explicit HTTP bridge separately:
+When the browser needs Local USB or companion-backed storage, start the explicit Web companion separately:
 
 ```bash
-just devd-http-bridge
-just web-dev
+BIND=127.0.0.1:51200 ALLOW_DEV_CORS=1 just devd-web
+DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
 ```
 
 This is distinct from normal daemon mode:
 
 - `just devd-serve`: native IPC only
-- `just devd-http-bridge`: localhost HTTP bridge for browser development
+- `just devd-web`: localhost Web companion for browser development and same-origin Web hosting
 - Both commands invoke the Rust `isohub-devd` binary directly from `tools/isohub-companion/`.
 
 Normal local device operation still goes through `isohub`; direct `devd` startup is only for development and diagnostics.

@@ -38,9 +38,11 @@ devd-serve:
     ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- serve; \
   fi
 
-devd-http-bridge:
+devd-web:
   cd tools/isohub-companion && \
-  ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- bridge-http --bind "${BIND:-127.0.0.1:51200}"
+  extra_args=(); \
+  if [[ "${ALLOW_DEV_CORS:-}" == "1" ]]; then extra_args+=(--allow-dev-cors); fi; \
+  ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- web --bind "${BIND:-127.0.0.1:51200}" --mdns-name "${MDNS_NAME:-isohub-devd}" "${extra_args[@]}"
 
 devd-help:
   cd tools/isohub-companion && ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- --help
@@ -149,7 +151,7 @@ web-install:
   bun install --cwd web
 
 web-dev:
-  ISOHUB_DEVD_ORIGIN="${DEVD_ORIGIN:-http://127.0.0.1:51200}" bun run --cwd web dev
+  ISOHUB_DEVD_ORIGINS="${DEVD_ORIGINS:-}" bun run --cwd web dev
 
 web-storybook:
   bun run --cwd web storybook

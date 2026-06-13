@@ -10,6 +10,8 @@
 
 ## 2026-06-13
 
+- 将显式浏览器 companion 模式从 `bridge-http` 重命名为 `isohub-devd web`；Web companion 现在必须通过同源 bootstrap 或显式配置的 mDNS/IP origin 列表连接，不再允许前端扫描 localhost 端口。
+- `isohub-devd web` 负责发布本机 `_isohub-devd._tcp.local.` mDNS/DNS-SD 服务，供 Web 配置优先使用 mDNS URL，并以显式 IP/localhost origin 作为 fallback。
 - 扩展控制面对齐 spec 的命名真相范围，把软件包名、二进制名、开发者入口 `just`、V3 硬件基线、板级子系统名与 BOM/netlist 别名策略统一冻结。
 - 明确 `ESP32-S3`、`CH335F`、`M24C64@0x50`、`Mainboard TCA6408A@0x20`、`Front-panel TCA6408A@0x21`、`Input INA226@0x44` 与 `port1..port4` 的 canonical 命名边界。
 - 继续把 reference-only 硬件资料从 current-truth 文档中剥离：`docs/ch335f_tca6408a_appnote.md`、`docs/i2c_gpio_expanders_comparison.md`、`docs/power_management_and_startup_control.md`、`docs/pwm_fan_control_circuit_design.md`、`docs/development_notes.md` 现已被明确标注为参考输入，不再拥有命名裁决权。

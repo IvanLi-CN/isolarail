@@ -7,6 +7,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use directories::ProjectDirs;
+use mdns_sd::{ServiceDaemon, ServiceInfo};
 use rand::{Rng as _, distributions::Alphanumeric};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -31,6 +32,8 @@ use tower_http::{
 };
 
 pub const DEFAULT_BIND: &str = "127.0.0.1:51200";
+pub const DEFAULT_WEB_MDNS_NAME: &str = "isohub-devd";
+pub const WEB_MDNS_SERVICE_TYPE: &str = "_isohub-devd._tcp.local.";
 pub const DEFAULT_IPC_FILE_NAME: &str = "devd.sock";
 pub const DEFAULT_WINDOWS_PIPE_NAME: &str = r"\\.\pipe\isohub-devd";
 const STORAGE_FILE_NAME: &str = "devices.json";
@@ -56,16 +59,71 @@ pub struct DevdConfig {
     pub bind: SocketAddr,
     pub web_root: Option<PathBuf>,
     pub allow_dev_cors: bool,
+    pub mdns_name: String,
 }
 
 impl DevdConfig {
-    pub fn new(bind: SocketAddr, web_root: Option<PathBuf>, allow_dev_cors: bool) -> Self {
+    pub fn new(
+        bind: SocketAddr,
+        web_root: Option<PathBuf>,
+        allow_dev_cors: bool,
+        mdns_name: impl Into<String>,
+    ) -> Self {
         Self {
             bind,
             web_root,
             allow_dev_cors,
+            mdns_name: mdns_name.into(),
         }
     }
+}
+
+pub struct WebMdnsAdvertiser {
+    mdns: ServiceDaemon,
+    fullname: String,
+}
+
+impl Drop for WebMdnsAdvertiser {
+    fn drop(&mut self) {
+        if let Err(err) = self.mdns.unregister(&self.fullname) {
+            tracing::warn!(
+                "isohub-devd web mDNS unregister failed (service={}): {}",
+                self.fullname,
+                err
+            );
+        }
+    }
+}
+
+pub fn build_web_mdns_service_info(
+    instance_name: &str,
+    port: u16,
+) -> anyhow::Result<ServiceInfo> {
+    let properties = [
+        ("app", "isohub-devd"),
+        ("mode", "web"),
+        ("version", release_version()),
+        ("api", "/api/v1/bootstrap"),
+    ];
+    let host_name = format!("{instance_name}.local.");
+    Ok(ServiceInfo::new(
+        WEB_MDNS_SERVICE_TYPE,
+        instance_name,
+        host_name.as_str(),
+        "",
+        port,
+        &properties[..],
+    )?
+    .enable_addr_auto())
+}
+
+pub fn advertise_web_mdns(instance_name: &str, port: u16) -> anyhow::Result<WebMdnsAdvertiser> {
+    let mdns = ServiceDaemon::new().context("create mDNS daemon")?;
+    let service_info = build_web_mdns_service_info(instance_name, port)?;
+    let fullname = service_info.get_fullname().to_string();
+    mdns.register(service_info)
+        .with_context(|| format!("register mDNS service {fullname}"))?;
+    Ok(WebMdnsAdvertiser { mdns, fullname })
 }
 
 #[derive(Debug, Clone)]
@@ -1149,5 +1207,19 @@ mod tests {
         assert_eq!(binary.len(), 1);
         assert_eq!(binary[0].kind, SerialCdcTraceKind::Defmt);
         assert!(binary[0].payload.contains("ff 00 91 92 00"));
+    }
+
+    #[test]
+    fn web_mdns_service_info_uses_expected_shape() {
+        let info =
+            build_web_mdns_service_info("isohub-devd", 51200).expect("service info should build");
+
+        assert_eq!(info.get_fullname(), "isohub-devd._isohub-devd._tcp.local.");
+        assert_eq!(info.get_hostname(), "isohub-devd.local.");
+        assert_eq!(info.get_port(), 51200);
+        assert_eq!(info.get_property_val_str("app"), Some("isohub-devd"));
+        assert_eq!(info.get_property_val_str("mode"), Some("web"));
+        assert_eq!(info.get_property_val_str("api"), Some("/api/v1/bootstrap"));
+        assert_eq!(info.get_property_val_str("version"), Some(release_version()));
     }
 }

@@ -94,19 +94,19 @@ Selector rules:
 `isohub-devd` has two distinct modes:
 
 - `serve`: native IPC only, default daemon mode
-- `bridge-http`: explicit localhost HTTP bridge for browser development only
+- `web`: explicit localhost Web companion for browser development and same-origin Web hosting
 
 Manual daemon startup is a development and diagnostics path, not the normal user workflow.
 
 ```bash
 just devd-serve
-just devd-http-bridge
+just devd-web
 ```
 
 Important:
 
 - `just devd-serve` starts the native IPC daemon path only.
-- `just devd-http-bridge` is the opt-in browser bridge. It is not the default daemon mode.
+- `just devd-web` is the opt-in browser Web companion. It is not the default daemon mode.
 - Both repo-root `just` commands invoke the Rust `isohub-devd` binary directly from `tools/isohub-companion/`.
 - On Unix, IPC uses the runtime socket returned by `default_ipc_endpoint()`.
 - On Windows, IPC uses `\\.\pipe\isohub-devd`.
@@ -125,15 +125,11 @@ just web-storybook
 For browser development that needs Local USB or companion-backed storage:
 
 ```bash
-just devd-http-bridge
-just web-dev
+BIND=127.0.0.1:51200 ALLOW_DEV_CORS=1 just devd-web
+DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
 ```
 
-The Vite dev server proxies `/api/v1/*` to `http://127.0.0.1:51200` by default. Override only when needed:
-
-```bash
-DEVD_ORIGIN=http://127.0.0.1:51201 just web-dev
-```
+The Web app never scans localhost ports. `DEVD_ORIGINS` is an explicit ordered list: put the mDNS URL first, then an IP or localhost fallback. `ALLOW_DEV_CORS=1` is only needed when the Vite page directly tries multiple configured origins; same-origin `--web-root` hosting does not need it.
 
 ## Toolchain
 

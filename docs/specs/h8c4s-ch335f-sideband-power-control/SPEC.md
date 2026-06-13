@@ -46,7 +46,7 @@
 
 - P0/P2/P4/P6 必须保持输入，用于读取低有效 `PWREN1#..4#`。
 - P1/P3/P5/P7 必须按“输出低=OVCUR asserted，输入高阻=OVCUR released”处理。
-- `TCA6408A@0x20` 离线时四路 `EN` 必须保持关闭。
+- `TCA6408A@0x20` 离线时进入 degraded manual mode：允许 owner 显式开启的端口保持输出，不能注入 `OVCUR#`，必须在 telemetry 中保持 sideband fault 可见。
 - `GPIO21/V1OK` 为低时必须进入 standalone 模式，允许产品在未连接上游电脑时独立输出。
 - 过流判定默认：`vbus < 3.0 V && current > 0.1 A`，或 `current > 5.3 A`。
 - 命中过流必须立即关闭对应 `ENx` 并拉低对应 `OVCUR#`。
@@ -61,7 +61,7 @@
 - 启动时在 VIN ready 后初始化 `TCA6408A@0x20`：输出寄存器先写 `0xFF`，极性寄存器写 `0x00`，方向寄存器写 `0xFF`，默认全部高阻释放。
 - 若主板 TCA 在线且 `V1OK=low`，启动门控进入 standalone 模式，端口输出不因 `PWREN#` 为高而关闭。
 - 若主板 TCA 在线且 `V1OK=high`，启动门控进入 upstream-managed 模式，仅对 CH335F 已使能且未过流的端口拉高 `ENx`。
-- 若主板 TCA 离线，四路端口保持关闭，boot self-check 记录 degraded 端口故障。
+- 若主板 TCA 离线，boot self-check 记录 degraded 端口故障；runtime 允许 owner 显式开启端口输出，但不得伪装为 sideband healthy。
 - 运行期每 500 ms 复用现有 INA226 采样；安全读数更新 dashboard，过流读数进入 `Overcurrent` UI 状态。
 - 过流 latch 清除条件为恢复探测期间输出带电时连续 4 个安全采样周期；读取失败或输出关闭后的 0V/0mA 不清除 latch。
 

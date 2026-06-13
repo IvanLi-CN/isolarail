@@ -4,6 +4,9 @@
 
 - 将本规格中的控制面命名继续对齐到当前项目口径：不再把 `host` 侧表述混入本项目软件包命名，也不把与当前四路 Hub 无关的旧双口 `USB-C` 控制语义写成当前规格目标。
 - 明确本规格只约束固件内的 CH335F sideband 门控与上游侧联动事实，不承担 `isohub` / `isohub-devd` owner-facing 控制面产品化。
+- 真机验证发现当前板卡可报告 `isolated_usb_fault=true`，但 owner 仍需要显式 POWER ON
+  端口；固件将 sideband helper 离线路径调整为 degraded manual mode，保留 fault telemetry
+  同时允许手动输出。
 
 ## 关键演进
 

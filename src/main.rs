@@ -885,7 +885,7 @@ fn hub_allows_output(
     pwren_enabled: [bool; 4],
     idx: usize,
 ) -> bool {
-    sideband_online && (!upstream_powered || pwren_enabled[idx])
+    !sideband_online || !upstream_powered || pwren_enabled[idx]
 }
 
 fn apply_dashboard_control_state(
@@ -1789,16 +1789,11 @@ async fn main(spawner: Spawner) {
     }
 
     if power_boot.ready && hub_ctrl.is_none() {
-        for ch in 0..4usize {
-            CH_RDY[ch].store(false, Ordering::Relaxed);
-            CH_SCAN_DONE[ch].store(true, Ordering::Relaxed);
-            boot_snapshot.set_port(
-                ch,
-                SelfCheckItemState::Err,
-                BootFaultCode::HubSidebandOffline,
-            );
-        }
-        warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
+        boot_snapshot.latch_fault(BootFaultCode::HubSidebandOffline);
+        warn!(
+            "boot.check: name=hub-sideband state=err fault={}",
+            fault_label(BootFaultCode::HubSidebandOffline)
+        );
         flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
     }
 
@@ -1818,16 +1813,11 @@ async fn main(spawner: Spawner) {
                 hub_sideband::TCA6408_ADDR
             );
             hub_ctrl = None;
-            for ch in 0..4usize {
-                CH_RDY[ch].store(false, Ordering::Relaxed);
-                CH_SCAN_DONE[ch].store(true, Ordering::Relaxed);
-                boot_snapshot.set_port(
-                    ch,
-                    SelfCheckItemState::Err,
-                    BootFaultCode::HubSidebandOffline,
-                );
-            }
-            warn!("boot.check: name=hub-sideband state=err fault=HubSidebandOffline");
+            boot_snapshot.latch_fault(BootFaultCode::HubSidebandOffline);
+            warn!(
+                "boot.check: name=hub-sideband state=err fault={}",
+                fault_label(BootFaultCode::HubSidebandOffline)
+            );
             flush_boot_self_check(&mut disp, &boot_snapshot, true).await;
         }
         let upstream_powered = usb_v1ok.is_high();

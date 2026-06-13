@@ -2136,6 +2136,9 @@ async fn main(spawner: Spawner) {
         for ch in 0u8..4u8 {
             set_port_enable(ch, desired_en[ch as usize], &mut port_enables);
             view[ch as usize].en_enabled = desired_en[ch as usize];
+            if view[ch as usize].en_enabled && view[ch as usize].ui_state == UiPortState::Closed {
+                view[ch as usize].ui_state = UiPortState::Initializing;
+            }
             port_output_active[ch as usize] = desired_en[ch as usize];
         }
         info!(

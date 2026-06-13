@@ -16,17 +16,23 @@ use embassy_time::{with_timeout, Duration, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
+use esp_hal::efuse::Efuse;
 use esp_hal::gpio::{DriveMode, Flex, Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
 use esp_hal::system;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::usb_serial_jtag::UsbSerialJtag;
 use esp_println as _;
 // Shared I2C bus infrastructure
 mod boot_diag;
+mod device_contract;
+mod device_identity;
+mod http_api_v1;
 mod hub_sideband;
 mod power_in;
+mod usb_jsonl;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
@@ -35,6 +41,8 @@ use embassy_sync::mutex::Mutex;
 use static_cell::StaticCell;
 mod fan;
 mod front_panel;
+mod provisioning;
+mod runtime_control;
 use boot_diag::{
     fault_label, outcome_label, state_label, BootFaultCode, BootOutcome, BootSelfCheckSnapshot,
     BootStage, GateDecision, SelfCheckItemState, SysCheck,
@@ -54,8 +62,21 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 // esp-hal Output has inherent set_low/set_high; no trait import needed
+use crate::device_contract::{
+    HubSnapshot as UsbHubSnapshot, PortSnapshot as UsbPortSnapshot,
+    PortTelemetryStatus as UsbPortTelemetryStatus, RuntimeSnapshot as UsbRuntimeSnapshot,
+    WifiSnapshot as UsbWifiSnapshot, WifiState as UsbWifiState,
+};
+use crate::runtime_control::{
+    apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, tick_replug_countdowns,
+    PortControlAction,
+};
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
 use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
+use provisioning::{
+    clear_wifi_credentials, load_wifi_credentials, store_wifi_credentials, WifiCredentials,
+};
+use usb_jsonl::{UsbAction, UsbJsonlState};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -144,7 +165,10 @@ const SHUNT_RESISTANCE_OHMS: f32 = 0.005;
 // 量产应恢复到 9.0V 以避免 5–8V 区间误判上电（请在合入前复位该值）。
 const VIN_MIN_V: f32 = 4.5;
 const VIN_MAX_V: f32 = 24.0;
-const I_IDLE_MAX_A: f32 = 0.010; // 10 mA
+// Current V3 bench baseline draws about 22-23 mA before IN_EN closes.
+// Keep a small margin above that so qualification reflects real hardware,
+// while still rejecting clearly abnormal startup load.
+const I_IDLE_MAX_A: f32 = 0.030; // 30 mA
 const INA226_SHUNT_LSB_V: f32 = 2.5e-6;
 
 // V3 IP6557 modules are strapped to unique addresses. OUT1/OUT2 share SDA0/SCL0
@@ -171,6 +195,7 @@ const PORT_OCP_LOW_VBUS_MV: u32 = 3000;
 const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
 const PORT_OCP_HIGH_CURRENT_MA: u32 = 5300;
 const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
+const USB_REPLUG_HOLDOFF_TICKS: u8 = 2;
 const FRONT_DIAG_FRONT_MASK: u8 = 1 << 0;
 const FRONT_DIAG_HUB_MASK: u8 = 1 << 1;
 const FRONT_DIAG_INPUT_INA_MASK: u8 = 1 << 2;
@@ -659,11 +684,196 @@ fn port_state_label(state: UiPortState) -> &'static str {
     }
 }
 
+fn usb_port_status(state: UiPortState, connected: bool) -> UsbPortTelemetryStatus {
+    match state {
+        UiPortState::Normal => UsbPortTelemetryStatus::Ok,
+        UiPortState::Overcurrent => UsbPortTelemetryStatus::Overcurrent,
+        UiPortState::Disconnected if connected => UsbPortTelemetryStatus::Error,
+        UiPortState::Disconnected => UsbPortTelemetryStatus::NotInserted,
+        UiPortState::Closed | UiPortState::Initializing => UsbPortTelemetryStatus::NotInserted,
+    }
+}
+
+fn usb_runtime_snapshot(
+    mac: [u8; 6],
+    uptime_ms: u64,
+    upstream_powered: bool,
+    sideband_online: bool,
+    wifi: UsbWifiSnapshot,
+    view: &[PortSample; 4],
+    replug_countdown: &[u8; 4],
+) -> UsbRuntimeSnapshot {
+    let ports = [
+        UsbPortSnapshot {
+            label: "Port 1",
+            status: usb_port_status(view[0].ui_state, view[0].connected),
+            voltage_mv: view[0].vbus_mv,
+            current_ma: view[0].ich_ma,
+            power_enabled: view[0].en_enabled,
+            data_connected: view[0].connected,
+            replugging: replug_countdown[0] > 0,
+            busy: false,
+            overcurrent: view[0].ocp_latched,
+        },
+        UsbPortSnapshot {
+            label: "Port 2",
+            status: usb_port_status(view[1].ui_state, view[1].connected),
+            voltage_mv: view[1].vbus_mv,
+            current_ma: view[1].ich_ma,
+            power_enabled: view[1].en_enabled,
+            data_connected: view[1].connected,
+            replugging: replug_countdown[1] > 0,
+            busy: false,
+            overcurrent: view[1].ocp_latched,
+        },
+        UsbPortSnapshot {
+            label: "Port 3",
+            status: usb_port_status(view[2].ui_state, view[2].connected),
+            voltage_mv: view[2].vbus_mv,
+            current_ma: view[2].ich_ma,
+            power_enabled: view[2].en_enabled,
+            data_connected: view[2].connected,
+            replugging: replug_countdown[2] > 0,
+            busy: false,
+            overcurrent: view[2].ocp_latched,
+        },
+        UsbPortSnapshot {
+            label: "Port 4",
+            status: usb_port_status(view[3].ui_state, view[3].connected),
+            voltage_mv: view[3].vbus_mv,
+            current_ma: view[3].ich_ma,
+            power_enabled: view[3].en_enabled,
+            data_connected: view[3].connected,
+            replugging: replug_countdown[3] > 0,
+            busy: false,
+            overcurrent: view[3].ocp_latched,
+        },
+    ];
+
+    UsbRuntimeSnapshot {
+        mac,
+        uptime_ms,
+        wifi,
+        hub: UsbHubSnapshot {
+            upstream_connected: upstream_powered,
+            isolated_usb_fault: !sideband_online,
+            isolated_downstream_connected: sideband_online,
+            isolated_usb_ready: sideband_online && upstream_powered,
+        },
+        ports,
+    }
+}
+
+fn usb_write_line(serial: &mut UsbSerialJtag<'static, esp_hal::Blocking>, line: &str) {
+    let _ = serial.write(line.as_bytes());
+    let _ = serial.write(b"\n");
+    serial.flush_tx();
+}
+
+fn service_usb_jsonl(
+    serial: &mut UsbSerialJtag<'static, esp_hal::Blocking>,
+    state: &mut UsbJsonlState<1024>,
+    snapshot: UsbRuntimeSnapshot,
+    version: &str,
+    manual_enabled: &mut [bool; 4],
+    port_enables: &mut [Output<'static>; 4],
+    ocp_latched: &mut [bool; 4],
+    ocp_safe_samples: &mut [u8; 4],
+    ocp_retry_wait: &mut [u8; 4],
+    replug_countdown: &mut [u8; 4],
+    wifi: &mut UsbWifiSnapshot,
+) -> Option<UsbAction> {
+    let mut bytes = [0u8; 128];
+    let mut count = 0usize;
+    let mut last_action = None;
+    while count < bytes.len() {
+        match serial.read_byte() {
+            Ok(byte) => {
+                bytes[count] = byte;
+                count += 1;
+            }
+            Err(_) => break,
+        }
+    }
+
+    for byte in bytes.iter().take(count) {
+        match state.push_byte(*byte) {
+            Ok(Some(line)) => match usb_jsonl::handle_request(line.as_str(), snapshot, version) {
+                Ok(response) => {
+                    if let Some(log) = response.log.as_ref() {
+                        usb_write_line(serial, log.as_str());
+                    }
+                    usb_write_line(serial, response.response.as_str());
+                    match response.action {
+                        UsbAction::None => {}
+                        UsbAction::Reboot => {
+                            usb_write_line(
+                                serial,
+                                "{\"type\":\"log\",\"level\":\"warn\",\"target\":\"usb_jsonl\",\"message\":\"software reset now\"}",
+                            );
+                            system::software_reset();
+                        }
+                        UsbAction::PortPowerSet { index, enabled } => {
+                            let _ = apply_port_action(
+                                PortControlAction::PowerSet { index, enabled },
+                                manual_enabled,
+                                ocp_latched,
+                                ocp_safe_samples,
+                                ocp_retry_wait,
+                                replug_countdown,
+                                USB_REPLUG_HOLDOFF_TICKS,
+                                |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
+                            );
+                        }
+                        UsbAction::WifiSet {
+                            psk_configured,
+                            ref ssid,
+                            ..
+                        } => {
+                            let _ = apply_wifi_set_snapshot(wifi, ssid.as_str(), psk_configured);
+                        }
+                        UsbAction::WifiClear => {
+                            apply_wifi_clear_snapshot(wifi);
+                        }
+                        UsbAction::PortReplug { index } => {
+                            let _ = apply_port_action(
+                                PortControlAction::Replug { index },
+                                manual_enabled,
+                                ocp_latched,
+                                ocp_safe_samples,
+                                ocp_retry_wait,
+                                replug_countdown,
+                                USB_REPLUG_HOLDOFF_TICKS,
+                                |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
+                            );
+                        }
+                    }
+                    last_action = Some(response.action);
+                }
+                Err(error) => {
+                    usb_write_line(
+                        serial,
+                        usb_jsonl::render_protocol_error(None, error).as_str(),
+                    );
+                }
+            },
+            Ok(None) => {}
+            Err(error) => {
+                usb_write_line(
+                    serial,
+                    usb_jsonl::render_protocol_error(None, error).as_str(),
+                );
+            }
+        }
+    }
+    last_action
+}
+
 fn hub_power_mode_label(sideband_online: bool, upstream_powered: bool) -> &'static str {
     if !sideband_online {
         "offline"
     } else if upstream_powered {
-        "host"
+        "upstream"
     } else {
         "standalone"
     }
@@ -1076,6 +1286,9 @@ async fn ack_scan_vin_off(sensor_bus: &'static SharedI2cBus, hub_bus: &'static S
 async fn main(spawner: Spawner) {
     let p = esp_hal::init(esp_hal::Config::default());
     let reset_reason = system::reset_reason();
+    let usb_mac = Efuse::read_base_mac_address();
+    let mut usb_serial = UsbSerialJtag::new(p.USB_DEVICE);
+    let mut usb_jsonl = UsbJsonlState::<1024>::new();
     info!("app.start");
 
     // Initialize the embassy time driver
@@ -1696,6 +1909,37 @@ async fn main(spawner: Spawner) {
     let mut ocp_latched = [false; 4];
     let mut ocp_safe_samples = [0u8; 4];
     let mut ocp_retry_wait = [0u8; 4];
+    let mut replug_countdown = [0u8; 4];
+    let stored_wifi_credentials = {
+        let mut i2c = I2cDevice::new(bus);
+        match load_wifi_credentials(&mut i2c).await {
+            Ok(credentials) => credentials,
+            Err(error) => {
+                warn!(
+                    "wifi.provisioning: load failed invalid_record={}",
+                    matches!(error, provisioning::ProvisioningError::InvalidRecord)
+                );
+                None
+            }
+        }
+    };
+    let mut usb_wifi = match stored_wifi_credentials {
+        Some(credentials) => UsbWifiSnapshot {
+            configured: true,
+            psk_configured: credentials.psk_configured(),
+            state: UsbWifiState::Idle,
+            ipv4: None,
+            is_static: credentials.static_ipv4().is_some(),
+            ssid: {
+                let mut ssid = [0u8; 32];
+                let bytes = credentials.ssid().as_bytes();
+                ssid[..bytes.len()].copy_from_slice(bytes);
+                ssid
+            },
+            ssid_len: credentials.ssid().len() as u8,
+        },
+        None => UsbWifiSnapshot::disconnected(),
+    };
     let mut port_output_active = boot_snapshot.gates.allow_port;
     loop {
         while let Ok(event) = front_events.try_receive() {
@@ -1780,6 +2024,7 @@ async fn main(spawner: Spawner) {
             .map(|snapshot| snapshot.pwren_enabled)
             .unwrap_or([false; 4]);
         let upstream_powered = usb_v1ok.is_high();
+        tick_replug_countdowns(&mut manual_enabled, &mut replug_countdown);
         let hub_mode = hub_power_mode_label(sideband_online, upstream_powered);
         let mut desired_en = [false; 4];
         for ch in 0u8..4u8 {
@@ -1787,6 +2032,11 @@ async fn main(spawner: Spawner) {
             view[idx].selected = idx == selected_port;
             view[idx].pwren_enabled = pwren_enabled[idx];
             view[idx].ocp_latched = ocp_latched[idx];
+            if replug_countdown[idx] > 0 {
+                view[idx].ui_state = UiPortState::Closed;
+                desired_en[idx] = false;
+                continue;
+            }
             if !manual_enabled[idx] {
                 view[idx].ui_state = UiPortState::Closed;
                 continue;
@@ -1927,6 +2177,68 @@ async fn main(spawner: Spawner) {
             if view[3].ocp_latched { "on" } else { "off" },
             if view[3].en_enabled { "on" } else { "off" },
         );
+        let runtime_snapshot = usb_runtime_snapshot(
+            usb_mac,
+            esp_hal::time::Instant::now()
+                .duration_since_epoch()
+                .as_millis(),
+            upstream_powered,
+            sideband_online,
+            usb_wifi,
+            &view,
+            &replug_countdown,
+        );
+        let usb_action = service_usb_jsonl(
+            &mut usb_serial,
+            &mut usb_jsonl,
+            runtime_snapshot,
+            env!("CARGO_PKG_VERSION"),
+            &mut manual_enabled,
+            &mut port_enables,
+            &mut ocp_latched,
+            &mut ocp_safe_samples,
+            &mut ocp_retry_wait,
+            &mut replug_countdown,
+            &mut usb_wifi,
+        );
+        match usb_action {
+            Some(UsbAction::WifiSet { ssid, psk, .. }) => {
+                match WifiCredentials::new(ssid.as_str(), psk.as_str()) {
+                    Ok(credentials) => {
+                        let mut i2c = I2cDevice::new(bus);
+                        match store_wifi_credentials(&mut i2c, &credentials).await {
+                            Ok(()) => {
+                                info!("wifi.provisioning: stored ssid_len={}", ssid.len());
+                            }
+                            Err(error) => {
+                                warn!(
+                                    "wifi.provisioning: store failed invalid_input={}",
+                                    matches!(error, provisioning::ProvisioningError::InvalidInput)
+                                );
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        warn!("wifi.provisioning: rejected invalid credentials");
+                    }
+                }
+            }
+            Some(UsbAction::WifiClear) => {
+                let mut i2c = I2cDevice::new(bus);
+                match clear_wifi_credentials(&mut i2c).await {
+                    Ok(()) => {
+                        info!("wifi.provisioning: cleared");
+                    }
+                    Err(error) => {
+                        warn!(
+                            "wifi.provisioning: clear failed invalid_record={}",
+                            matches!(error, provisioning::ProvisioningError::InvalidRecord)
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
         let _ = disp.flush().await;

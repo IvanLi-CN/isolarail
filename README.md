@@ -1,219 +1,169 @@
-# ESP32-S3 Hello World
+# iso-usb-hub
 
-A simple hello world project for ESP32-S3 using esp-hal and Embassy async framework.
+Four-port USB hub control plane for the current V3 hardware baseline:
+`ESP32-S3 + CH335F + M24C64@0x50 + EN1..EN4 + PWREN#/OVCUR# + LCD/front panel`.
 
-## Features
+Owner-facing naming is fixed as:
 
-- **ESP32-S3 Support**: Built specifically for ESP32-S3 microcontroller
-- **Embassy Async**: Uses Embassy async framework for efficient task management
-- **Serial Output**: Prints hello world messages via esp-println
-- **Periodic Tasks**: Demonstrates async task spawning and timing
+- firmware identity: `iso-usb-hub`
+- local CLI: `isohub`
+- local daemon: `isohub-devd`
 
-## Hardware Requirements
+## Developer entrypoints
 
-- **ESP32-S3 Development Board**: Any ESP32-S3 based board
-- **USB Connection**: For programming and serial output
+Use `just` as the only normal developer entrypoint.
 
-## Installation Prerequisites
-
-### Method 1: Using espup (Recommended)
+### Firmware
 
 ```bash
-# Install espup
-cargo install espup
-
-# Install ESP32 toolchain
-espup install
-
-# Source the environment (add to your shell profile)
-source ~/export-esp.sh
-
-# Install espflash
-cargo install espflash
-```
-
-### Method 2: Manual Installation (if espup fails)
-
-If you encounter network issues with espup, you can try:
-
-1. **Download espup manually**:
-
-   ```bash
-   # For macOS ARM64
-   curl -L https://github.com/esp-rs/espup/releases/latest/download/espup-aarch64-apple-darwin -o ~/.cargo/bin/espup
-   chmod +x ~/.cargo/bin/espup
-
-   # For macOS Intel
-   curl -L https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-apple-darwin -o ~/.cargo/bin/espup
-   chmod +x ~/.cargo/bin/espup
-   ```
-
-2. **Run espup install**:
-
-   ```bash
-   espup install
-   source ~/export-esp.sh
-   ```
-
-### Method 3: Alternative Installation
-
-If all else fails, you can try using the ESP-IDF toolchain directly:
-
-```bash
-# Install ESP-IDF prerequisites
-brew install cmake ninja dfu-util
-
-# Clone ESP-IDF
-git clone --recursive https://github.com/espressif/esp-idf.git ~/esp-idf
-cd ~/esp-idf
-./install.sh esp32s3
-
-# Source ESP-IDF environment
-source ~/esp-idf/export.sh
-```
-
-### Verify Installation
-
-After installation, verify that the ESP32-S3 target is available:
-
-```bash
-rustup target list | grep esp32s3
-```
-
-You should see `xtensa-esp32s3-none-elf` in the list.
-
-## Building and Flashing
-
-### Building
-
-```bash
-# Build the project
-cargo build
-
-# Build in release mode
-cargo build --release
-```
-
-### Flashing and Monitoring
-
-```bash
-# Flash and monitor serial output
-cargo run
-
-# Flash release build
-cargo run --release
-```
-
-### Makefile helpers (recommended)
-
-To simplify common tasks and ensure defmt logs decode correctly, a `Makefile` is provided. Examples:
-
-```bash
-# Build (release by default)
-make build
-
-# Flash and monitor with defmt decoding
-make run PORT=/dev/tty.usbmodem1101 BAUD=115200
-
-# Attach only to the serial monitor (no flashing), with defmt decoding
-make attach PORT=/dev/tty.usbmodem1101 BAUD=115200
-
-# List detected serial ports
-make ports
+just firmware-check
+just firmware-build
+PORT=/dev/tty.usbmodem1101 BAUD=115200 just firmware-run
+PORT=/dev/tty.usbmodem1101 BAUD=115200 just firmware-attach
+just firmware-ports
 ```
 
 Notes:
-- If you run `espflash monitor` directly and see garbled output, it is because the app logs with `defmt`.
-- Use `make attach` which passes `--log-format defmt` and `--elf target/xtensa-esp32s3-none-elf/<profile>/iso-usb-hub` so logs are decoded.
-- Default baud is `115200`; override with `BAUD=...` if needed.
 
-## Expected Output
+- `just firmware-run` flashes and opens the defmt monitor.
+- `just firmware-attach` only attaches the monitor and expects an existing build.
+- No hardware command should be run against an unrelated board.
 
-Once flashed and running, you should see output similar to:
+### Local companion tools
 
-```text
-ESP32-S3 Hello World Starting!
-Main task started, spawning hello task...
-Hello World from ESP32-S3! Counter: 0
-Main task heartbeat
-Hello World from ESP32-S3! Counter: 1
-Hello World from ESP32-S3! Counter: 2
-...
+`isohub` is the normal local USB entrypoint. It discovers or auto-starts the native-IPC `isohub-devd serve` singleton when needed.
+
+Important:
+
+- Use the `just` entrypoints for companion development from the repo root.
+- If you run companion Cargo commands manually, run them from `tools/isohub-companion/`.
+- Do not rely on `cargo --manifest-path tools/isohub-companion/Cargo.toml ...` from the repo root; the root Xtensa default target can leak into that invocation.
+
+```bash
+just tools-build
+just tools-test
+just isohub --help
+just devd-help
 ```
 
-## Project Structure
+Common device commands:
 
-```text
-├── src/
-│   └── main.rs              # Main application with hello world logic
-├── .cargo/
-│   └── config.toml          # Cargo configuration for ESP32-S3
-└── Cargo.toml               # Project dependencies and configuration
+```bash
+just discover
+just devices
+just hardware-available
+
+SELECTOR='--device <device-id>' just status
+SELECTOR='--device <device-id>' just ports
+SELECTOR='--device <device-id>' just wifi-show
+
+SELECTOR='--device <device-id>' PORT=port1 ENABLED=true just port-power
+SELECTOR='--device <device-id>' PORT=port1 just port-replug
+SELECTOR='--device <device-id>' just reset
+
+SELECTOR='--device <device-id>' SSID='Lab WiFi' PSK='secret' just wifi-set
+SELECTOR='--device <device-id>' just wifi-clear
+
+SELECTOR='--device <device-id>' TAIL=200 just monitor
+SELECTOR='--device <device-id>' just diagnostics-export
 ```
 
-## Documentation
+Notes:
 
-- Hardware connection overview: [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
+- `just monitor` reads the recent Local USB serial activity timeline from `isohub-devd`.
+- `just diagnostics-export` exports a companion-aggregated diagnostics snapshot built from the current `status`, `ports`, `wifi`, and recent serial session traces for the selected device.
 
-## Dependencies
+To restrict companion discovery and Local USB operations to one specific serial device during development, pass `USB_PORT`:
 
-- `esp-hal`: Hardware abstraction layer for ESP32 series
-- `esp-hal-embassy`: Embassy integration for esp-hal
-- `embassy-executor`: Async task executor
-- `embassy-time`: Async time utilities
-- `esp-println`: Serial output for ESP32
-- `esp-backtrace`: Panic handler and backtrace support
-
-## Troubleshooting
-
-### Target Not Found
-
-If you get "target not found" errors, make sure you've:
-
-1. Installed espup: `cargo install espup`
-2. Run espup install: `espup install`
-3. Sourced the environment: `source ~/export-esp.sh`
-
-### Build Errors
-
-If you encounter build errors, try:
-
-1. Clean the project: `cargo clean`
-2. Update dependencies: `cargo update`
-3. Check that the ESP toolchain is properly installed
-
-### Panic: `embassy-executor: task arena is full`
-
-If serial logs show a panic like:
-
-```
-embassy-executor: task arena is full. You must increase the arena size
+```bash
+USB_PORT=/dev/cu.usbmodem2123101 just discover
+USB_PORT=/dev/cu.usbmodem2123101 just devd-serve
+USB_PORT=/dev/cu.usbmodem2123101 just isohub --help
 ```
 
-Your async tasks collectively require more storage than the default 4 KiB task arena.
-This project sets a larger arena via `.cargo/config.toml`:
+`USB_PORT` is forwarded to `ISOHUB_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
 
+Selector rules:
+
+- Use `SELECTOR='--device <device-id>'` for a currently connected temporary USB target.
+- Use `SELECTOR='--hardware <saved-id>'` for a saved hardware profile.
+- `just wifi-set` and `just wifi-clear` require `--device` or a USB-backed `--hardware` selector. `--url` and Wi-Fi/LAN saved hardware stay read-only for Wi-Fi writes.
+
+### devd modes
+
+`isohub-devd` has two distinct modes:
+
+- `serve`: native IPC only, default daemon mode
+- `bridge-http`: explicit localhost HTTP bridge for browser development only
+
+Manual daemon startup is a development and diagnostics path, not the normal user workflow.
+
+```bash
+just devd-serve
+just devd-http-bridge
 ```
-[env]
-EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "65536"
+
+Important:
+
+- `just devd-serve` starts the native IPC daemon path only.
+- `just devd-http-bridge` is the opt-in browser bridge. It is not the default daemon mode.
+- Both repo-root `just` commands invoke the Rust `isohub-devd` binary directly from `tools/isohub-companion/`.
+- On Unix, IPC uses the runtime socket returned by `default_ipc_endpoint()`.
+- On Windows, IPC uses `\\.\pipe\isohub-devd`.
+
+### Web
+
+```bash
+just web-install
+just web-check
+just web-lint
+just web-build
+just web-test-unit
+just web-storybook
 ```
 
-You can tune this value (in bytes) to match your workload. Alternatively, you may enable
-`embassy-executor` feature flags like `task-arena-size-32768` in `Cargo.toml` if you prefer
-feature-based configuration.
+For browser development that needs Local USB or companion-backed storage:
 
-## CI
+```bash
+just devd-http-bridge
+just web-dev
+```
 
-This repository's GitHub Actions use the official `esp-rs/xtensa-toolchain` action to install the ESP Xtensa Rust toolchain.
+The Vite dev server proxies `/api/v1/*` to `http://127.0.0.1:51200` by default. Override only when needed:
 
-- Target: `xtensa-esp32s3-none-elf`
-- Toolchain: `+esp` (installed via the action)
-- Workflows: see `.github/workflows/`
+```bash
+DEVD_ORIGIN=http://127.0.0.1:51201 just web-dev
+```
 
-## License
+## Toolchain
 
-This project is licensed under the MIT License.
+The firmware build expects the `esp` Rust toolchain:
 
-## Development Notes
+```bash
+cargo install espup
+espup install
+source ~/export-esp.sh
+cargo install espflash
+```
 
-- Power input qualification (VIN): during active development the firmware relaxes the undervoltage floor to `VIN_MIN_V = 4.5 V` to allow 5 V bench/USB supplies for fan testing and bring-up. This intentionally bypasses the production undervoltage guardrail. Restore the 9.0 V minimum before release and re-verify input sequencing. See `docs/software_design.md` §2 for details.
+## Validation status
+
+The following software-only checks are currently expected to pass in a correctly prepared dev environment:
+
+- `just --list`
+- `just tools-build`
+- `just tools-test`
+- `just web-check`
+- `just web-build`
+- `just web-test-unit`
+- `just isohub --help`
+- `just devd-help`
+- `just firmware-check`
+
+## Reference docs
+
+- [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
+- [docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md](docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md)
+- [docs/software_design.md](docs/software_design.md)
+- [web/README.md](web/README.md)
+- [docs/specs/README.md](docs/specs/README.md)

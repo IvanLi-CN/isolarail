@@ -1,0 +1,47 @@
+{
+  "name": "web",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 45173 --strictPort",
+    "build": "tsc -b && vite build && bun scripts/copy-404.ts",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "test:unit": "bun test ./src",
+    "storybook": "storybook dev -p 46006",
+    "build-storybook": "storybook build",
+    "test:storybook": "bun scripts/test-storybook.ts",
+    "test:e2e": "playwright test",
+    "preview": "vite preview --host 127.0.0.1 --port 45175 --strictPort"
+  },
+  "dependencies": {
+    "esptool-js": "^0.6.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^7.12.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
+    "@playwright/test": "^1.57.0",
+    "@storybook/addon-essentials": "8.6.14",
+    "@storybook/react-vite": "8.6.14",
+    "@storybook/test": "8.6.14",
+    "@storybook/test-runner": "^0.24.2",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "daisyui": "^5.5.14",
+    "http-server": "^14.1.1",
+    "storybook": "8.6.14",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.3"
+  }
+}

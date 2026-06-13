@@ -1,0 +1,145 @@
+@config "../tailwind.config.js";
+@plugin "daisyui";
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+:root {
+  --bg: #f6f7fb;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --border: #e5e7eb;
+  --text: #111827;
+  --muted: #6b7280;
+  --primary: #5c6ac4;
+  --primary-2: #6b78d6;
+  --primary-text: #ffffff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+  --shadow: rgba(17, 24, 39, 0.08);
+  --overlay: rgba(15, 23, 42, 0.32);
+
+  --sidebar-bg: rgba(248, 250, 252, 0.85);
+
+  --badge-success-bg: rgba(22, 163, 74, 0.12);
+  --badge-success-text: #16a34a;
+  --badge-warning-bg: rgba(217, 119, 6, 0.12);
+  --badge-warning-text: #d97706;
+  --badge-error-bg: rgba(220, 38, 38, 0.1);
+  --badge-error-text: #dc2626;
+
+  --btn-disabled-fill: var(--panel-2);
+  --btn-disabled-fill-soft: rgba(17, 24, 39, 0.04);
+  --btn-disabled-text: var(--muted);
+
+  --add-placeholder-bg: rgba(248, 250, 252, 0.75);
+  --tab-inactive-bg: rgba(248, 250, 252, 0.7);
+
+  --card-filter: drop-shadow(0 8px 18px var(--shadow));
+  --popover-filter: drop-shadow(0 8px 18px var(--shadow));
+  --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+}
+
+:root[data-theme="isohub-dark"] {
+  --bg: #0b1220;
+  --panel: #111827;
+  --panel-2: #0f172a;
+  --border: #1f2937;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --primary: #9aa2f0;
+  --primary-2: #a7aef5;
+  --primary-text: #0b1220;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #f87171;
+  --shadow: rgba(0, 0, 0, 0.45);
+
+  --sidebar-bg: rgba(15, 23, 42, 0.7);
+
+  --badge-success-bg: rgba(34, 197, 94, 0.12);
+  --badge-success-text: #22c55e;
+  --badge-warning-bg: rgba(245, 158, 11, 0.12);
+  --badge-warning-text: #f59e0b;
+  --badge-error-bg: rgba(248, 113, 113, 0.1);
+  --badge-error-text: #f87171;
+
+  --btn-disabled-fill: rgba(148, 163, 184, 0.12);
+  --btn-disabled-fill-soft: rgba(148, 163, 184, 0.08);
+  --btn-disabled-text: var(--muted);
+
+  --add-placeholder-bg: rgba(255, 255, 255, 0.04);
+  --tab-inactive-bg: rgba(15, 23, 42, 0.7);
+
+  --card-filter: drop-shadow(0 10px 22px var(--shadow));
+  --popover-filter: drop-shadow(0 10px 22px var(--shadow));
+  --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0b1220;
+    --panel: #111827;
+    --panel-2: #0f172a;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --primary: #9aa2f0;
+    --primary-2: #a7aef5;
+    --primary-text: #0b1220;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #f87171;
+    --shadow: rgba(0, 0, 0, 0.45);
+
+    --sidebar-bg: rgba(15, 23, 42, 0.7);
+
+    --badge-success-bg: rgba(34, 197, 94, 0.12);
+    --badge-success-text: #22c55e;
+    --badge-warning-bg: rgba(245, 158, 11, 0.12);
+    --badge-warning-text: #f59e0b;
+    --badge-error-bg: rgba(248, 113, 113, 0.1);
+    --badge-error-text: #f87171;
+
+    --btn-disabled-fill: rgba(148, 163, 184, 0.12);
+    --btn-disabled-fill-soft: rgba(148, 163, 184, 0.08);
+    --btn-disabled-text: var(--muted);
+
+    --add-placeholder-bg: rgba(255, 255, 255, 0.04);
+    --tab-inactive-bg: rgba(15, 23, 42, 0.7);
+
+    --card-filter: drop-shadow(0 10px 22px var(--shadow));
+    --popover-filter: drop-shadow(0 10px 22px var(--shadow));
+    --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.iso-card {
+  filter: var(--card-filter);
+}
+
+.iso-popover {
+  filter: var(--popover-filter);
+}
+
+.iso-modal {
+  filter: var(--modal-filter);
+}
+
+.modal::backdrop {
+  background: var(--overlay);
+}

@@ -37,7 +37,7 @@ impl Default for Limits {
         Self {
             vin_min_v: 9.0,
             vin_max_v: 24.0,
-            idle_current_max_a: 0.010,
+            idle_current_max_a: 0.030,
         }
     }
 }

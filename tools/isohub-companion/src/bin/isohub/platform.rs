@@ -156,7 +156,7 @@ async fn devd_request(
 async fn devd_ipc_call(devd: &DevdClient, method: &str, params: Value) -> anyhow::Result<Value> {
     match ipc_call(&devd.endpoint, method, params.clone()).await {
         Ok(value) => Ok(value),
-        Err(err) if devd.auto_start && looks_like_ipc_connect_error(&err) => {
+        Err(err) if devd.auto_start && looks_like_transient_ipc_error(&err) => {
             let start_mode = acquire_devd_start_gate(&devd.endpoint)?;
             if matches!(start_mode, DevdStartMode::Spawned { .. }) {
                 start_devd(&devd.endpoint)?;
@@ -178,8 +178,13 @@ async fn devd_ipc_call(devd: &DevdClient, method: &str, params: Value) -> anyhow
     }
 }
 
-fn looks_like_ipc_connect_error(err: &anyhow::Error) -> bool {
-    err.to_string().contains("connect IPC")
+fn looks_like_transient_ipc_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        let message = cause.to_string();
+        message.contains("connect IPC")
+            || message.contains("Connection refused")
+            || message.contains("IPC daemon closed the connection without a response")
+    })
 }
 
 enum DevdStartMode {

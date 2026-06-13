@@ -128,6 +128,23 @@ mod power_output_tests {
     }
 
     #[test]
+    fn transient_ipc_errors_include_empty_response_after_connect() {
+        let connect_err = anyhow::anyhow!("connect IPC socket /tmp/isohub.sock");
+        assert!(looks_like_transient_ipc_error(&connect_err));
+
+        let empty_response_err =
+            anyhow::anyhow!("IPC daemon closed the connection without a response");
+        assert!(looks_like_transient_ipc_error(&empty_response_err));
+
+        let refused_err = anyhow::anyhow!("Connection refused (os error 61)")
+            .context("connect IPC socket /tmp/isohub.sock");
+        assert!(looks_like_transient_ipc_error(&refused_err));
+
+        let request_err = anyhow::anyhow!("device busy: another Local USB operation is still running");
+        assert!(!looks_like_transient_ipc_error(&request_err));
+    }
+
+    #[test]
     fn ports_power_accepts_explicit_boolean_value() {
         let cli = Cli::try_parse_from([
             "isohub",

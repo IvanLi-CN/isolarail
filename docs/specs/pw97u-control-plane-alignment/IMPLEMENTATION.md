@@ -32,6 +32,7 @@
 - companion CLI 现已补上 Wi-Fi 写操作门禁：`wifi set` / `wifi clear` 仅接受 `--device` 或 USB-backed `--hardware`，`--url` 与 Wi-Fi/LAN saved hardware 在 CLI 中保持只读，避免绕过 spec 的 USB-capable 写策略。
 - companion daemon 现已为普通 Local USB JSONL 请求增加每串口互斥，避免 `status` / `ports` / `wifi` / `monitor` / `diagnostics export` 并发争抢同一 CDC 设备时出现空 IPC 响应或底层串口 `busy` 噪声。
 - `isohub` CLI 的 devd auto-start 现已增加 endpoint-scoped start gate：多个 CLI 进程同时发现 daemon 不存在时，只允许一个进程真正启动 `isohub-devd serve`，其余进程等待同一 IPC endpoint 就绪，避免并发自启把同一 USB 口拖入额外的 `device busy` 竞争。
+- HIL 复测发现默认 IPC socket 处于拒绝连接或刚关闭空响应时，CLI 仍可能直接失败；现已把 `connect IPC`、`Connection refused` 与 `IPC daemon closed the connection without a response` 统一归入 transient IPC 错误并走 auto-start / wait retry 路径，指定 USB 设备上的并发 `status` / `ports` / `wifi-show` / `monitor` 已复测通过。
 - `diagnostics export` 现已改为 companion 聚合导出：返回当前 `status`、`ports`、`wifi`、设备 transport 元数据与近期 serial session traces，不再依赖固件侧尚未实现的 `pd.diagnostics` 专用方法。
 - 根仓的共享 contract 测试路径已完成第一轮隔离：`heapless` 保留在通用依赖中，`esp-hal` / `embassy` / `gc9d01` 等固件专用依赖收口到 Xtensa 目标依赖，`build.ref.rs` 仅在嵌入式目标下注入 linker 错误处理参数，`just firmware-contract-test` 现在通过 native stable toolchain 运行共享 `device_identity` / `device_contract` / `http_api_v1` 单元测试。
 - 当前固件网络底座仍处于版本收敛中：`esp-hal-embassy` / `esp-radio` / `esp-hal` 组合需要继续对齐后，`src/net*` 才能真正接入四路 `isohub` HTTP/Wi‑Fi 契约。现有 `src/net.rs` / `src/net/http.rs` / `src/net/http_response.rs` 仍保留旧双口 `port_a` / `port_c`、USB-C route、`tps-sw` 语义，尚未接入主固件，也不得视为本 spec 已完成的实现证据；`src/net.rs` 现在已显式标记为 legacy skeleton，防止后续实现误把它当成当前产品模型。
@@ -61,10 +62,18 @@
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' just wifi-show`
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' TAIL=12 just monitor`
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' just diagnostics-export`
+- `USB_PORT=/dev/cu.usbmodem2123101 SCAN=1 just discover`
+- `USB_PORT=/dev/cu.usbmodem2123101 SCAN=1 just hardware-available`
+- `USB_PORT=/dev/cu.usbmodem2123101 just isohub --json status --device usb--dev-cu-usbmodem2123101`
+- `USB_PORT=/dev/cu.usbmodem2123101 just isohub --json ports --device usb--dev-cu-usbmodem2123101`
+- `USB_PORT=/dev/cu.usbmodem2123101 just isohub --json wifi show --device usb--dev-cu-usbmodem2123101`
+- `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' PORT=port1 ENABLED=false just port-power`
+- `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' PORT=port1 ENABLED=true just port-power`
+- `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' PORT=port1 just port-replug`
+- 并发 HIL：同一 `USB_PORT=/dev/cu.usbmodem2123101` 下并行 `status` / `ports` / `wifi-show` / `monitor`，四个进程退出码均为 0。
 
 ## 待完成
 
 - 最终文档收口：确认 README / INSTALL / software / hardware docs 与 `pw97u` 命名真相一致。
 - Review-proof 收口：复查 diff、排除生成物、准备本地提交。
-- 真机复核可选项：有明确 `USB_PORT` 时重跑 `status` / `ports` / `wifi-show` / `monitor` / `diagnostics-export`。
 - 后续实现项：`src/net*` 仍是未接入的 legacy dual-port skeleton；正式 Wi-Fi/LAN transport 接入需继续以 `device_contract` / `http_api_v1` / `runtime_control` 为唯一契约来源。

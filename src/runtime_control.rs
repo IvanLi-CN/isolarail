@@ -7,6 +7,14 @@ pub enum PortControlAction {
     Replug { index: usize },
 }
 
+pub struct PortRuntimeState<'a> {
+    pub manual_enabled: &'a mut [bool; 4],
+    pub ocp_latched: &'a mut [bool; 4],
+    pub ocp_safe_samples: &'a mut [u8; 4],
+    pub ocp_retry_wait: &'a mut [u8; 4],
+    pub replug_countdown: &'a mut [u8; 4],
+}
+
 impl From<ApiPendingAction> for PortControlAction {
     fn from(value: ApiPendingAction) -> Self {
         match value {
@@ -29,11 +37,7 @@ pub fn tick_replug_countdowns(manual_enabled: &mut [bool; 4], replug_countdown: 
 
 pub fn apply_port_action<F>(
     action: PortControlAction,
-    manual_enabled: &mut [bool; 4],
-    ocp_latched: &mut [bool; 4],
-    ocp_safe_samples: &mut [u8; 4],
-    ocp_retry_wait: &mut [u8; 4],
-    replug_countdown: &mut [u8; 4],
+    state: &mut PortRuntimeState<'_>,
     replug_holdoff_ticks: u8,
     mut set_port_enable: F,
 ) -> bool
@@ -43,24 +47,24 @@ where
     let index = match action {
         PortControlAction::PowerSet { index, .. } | PortControlAction::Replug { index } => index,
     };
-    if index >= manual_enabled.len() {
+    if index >= state.manual_enabled.len() {
         return false;
     }
 
     match action {
         PortControlAction::PowerSet { enabled, .. } => {
-            manual_enabled[index] = enabled;
+            state.manual_enabled[index] = enabled;
             if !enabled {
-                ocp_latched[index] = false;
-                ocp_safe_samples[index] = 0;
-                ocp_retry_wait[index] = 0;
+                state.ocp_latched[index] = false;
+                state.ocp_safe_samples[index] = 0;
+                state.ocp_retry_wait[index] = 0;
             }
             set_port_enable(index, enabled);
         }
         PortControlAction::Replug { .. } => {
             set_port_enable(index, false);
-            manual_enabled[index] = false;
-            replug_countdown[index] = replug_holdoff_ticks;
+            state.manual_enabled[index] = false;
+            state.replug_countdown[index] = replug_holdoff_ticks;
         }
     }
     true
@@ -123,17 +127,20 @@ mod tests {
         ocp_latched[1] = true;
         ocp_safe_samples[1] = 3;
         ocp_retry_wait[1] = 2;
+        let mut state = PortRuntimeState {
+            manual_enabled: &mut manual_enabled,
+            ocp_latched: &mut ocp_latched,
+            ocp_safe_samples: &mut ocp_safe_samples,
+            ocp_retry_wait: &mut ocp_retry_wait,
+            replug_countdown: &mut replug_countdown,
+        };
 
         let applied = apply_port_action(
             PortControlAction::PowerSet {
                 index: 1,
                 enabled: false,
             },
-            &mut manual_enabled,
-            &mut ocp_latched,
-            &mut ocp_safe_samples,
-            &mut ocp_retry_wait,
-            &mut replug_countdown,
+            &mut state,
             2,
             |idx, enabled| outputs[idx] = enabled,
         );
@@ -154,14 +161,17 @@ mod tests {
         let mut ocp_retry_wait = [0u8; 4];
         let mut replug_countdown = [0u8; 4];
         let mut outputs = [true; 4];
+        let mut state = PortRuntimeState {
+            manual_enabled: &mut manual_enabled,
+            ocp_latched: &mut ocp_latched,
+            ocp_safe_samples: &mut ocp_safe_samples,
+            ocp_retry_wait: &mut ocp_retry_wait,
+            replug_countdown: &mut replug_countdown,
+        };
 
         let applied = apply_port_action(
             PortControlAction::Replug { index: 3 },
-            &mut manual_enabled,
-            &mut ocp_latched,
-            &mut ocp_safe_samples,
-            &mut ocp_retry_wait,
-            &mut replug_countdown,
+            &mut state,
             2,
             |idx, enabled| outputs[idx] = enabled,
         );
@@ -214,17 +224,20 @@ mod tests {
         let mut ocp_retry_wait = [0u8; 4];
         let mut replug_countdown = [0u8; 4];
         let mut outputs = [true; 4];
+        let mut state = PortRuntimeState {
+            manual_enabled: &mut manual_enabled,
+            ocp_latched: &mut ocp_latched,
+            ocp_safe_samples: &mut ocp_safe_samples,
+            ocp_retry_wait: &mut ocp_retry_wait,
+            replug_countdown: &mut replug_countdown,
+        };
 
         let applied = apply_port_action(
             PortControlAction::PowerSet {
                 index: 8,
                 enabled: false,
             },
-            &mut manual_enabled,
-            &mut ocp_latched,
-            &mut ocp_safe_samples,
-            &mut ocp_retry_wait,
-            &mut replug_countdown,
+            &mut state,
             2,
             |idx, enabled| outputs[idx] = enabled,
         );

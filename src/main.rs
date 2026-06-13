@@ -69,7 +69,7 @@ use crate::device_contract::{
 };
 use crate::runtime_control::{
     apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, tick_replug_countdowns,
-    PortControlAction,
+    PortControlAction, PortRuntimeState,
 };
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
 use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
@@ -770,19 +770,32 @@ fn usb_write_line(serial: &mut UsbSerialJtag<'static, esp_hal::Blocking>, line: 
     serial.flush_tx();
 }
 
+struct UsbJsonlServiceContext<'a> {
+    manual_enabled: &'a mut [bool; 4],
+    port_enables: &'a mut [Output<'static>; 4],
+    ocp_latched: &'a mut [bool; 4],
+    ocp_safe_samples: &'a mut [u8; 4],
+    ocp_retry_wait: &'a mut [u8; 4],
+    replug_countdown: &'a mut [u8; 4],
+    wifi: &'a mut UsbWifiSnapshot,
+}
+
 fn service_usb_jsonl(
     serial: &mut UsbSerialJtag<'static, esp_hal::Blocking>,
     state: &mut UsbJsonlState<1024>,
     snapshot: UsbRuntimeSnapshot,
     version: &str,
-    manual_enabled: &mut [bool; 4],
-    port_enables: &mut [Output<'static>; 4],
-    ocp_latched: &mut [bool; 4],
-    ocp_safe_samples: &mut [u8; 4],
-    ocp_retry_wait: &mut [u8; 4],
-    replug_countdown: &mut [u8; 4],
-    wifi: &mut UsbWifiSnapshot,
+    ctx: &mut UsbJsonlServiceContext<'_>,
 ) -> Option<UsbAction> {
+    let UsbJsonlServiceContext {
+        manual_enabled,
+        port_enables,
+        ocp_latched,
+        ocp_safe_samples,
+        ocp_retry_wait,
+        replug_countdown,
+        wifi,
+    } = ctx;
     let mut bytes = [0u8; 128];
     let mut count = 0usize;
     let mut last_action = None;
@@ -814,13 +827,16 @@ fn service_usb_jsonl(
                             system::software_reset();
                         }
                         UsbAction::PortPowerSet { index, enabled } => {
-                            let _ = apply_port_action(
-                                PortControlAction::PowerSet { index, enabled },
+                            let mut port_state = PortRuntimeState {
                                 manual_enabled,
                                 ocp_latched,
                                 ocp_safe_samples,
                                 ocp_retry_wait,
                                 replug_countdown,
+                            };
+                            let _ = apply_port_action(
+                                PortControlAction::PowerSet { index, enabled },
+                                &mut port_state,
                                 USB_REPLUG_HOLDOFF_TICKS,
                                 |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
                             );
@@ -836,13 +852,16 @@ fn service_usb_jsonl(
                             apply_wifi_clear_snapshot(wifi);
                         }
                         UsbAction::PortReplug { index } => {
-                            let _ = apply_port_action(
-                                PortControlAction::Replug { index },
+                            let mut port_state = PortRuntimeState {
                                 manual_enabled,
                                 ocp_latched,
                                 ocp_safe_samples,
                                 ocp_retry_wait,
                                 replug_countdown,
+                            };
+                            let _ = apply_port_action(
+                                PortControlAction::Replug { index },
+                                &mut port_state,
                                 USB_REPLUG_HOLDOFF_TICKS,
                                 |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
                             );
@@ -2181,18 +2200,21 @@ async fn main(spawner: Spawner) {
             &view,
             &replug_countdown,
         );
+        let mut usb_service = UsbJsonlServiceContext {
+            manual_enabled: &mut manual_enabled,
+            port_enables: &mut port_enables,
+            ocp_latched: &mut ocp_latched,
+            ocp_safe_samples: &mut ocp_safe_samples,
+            ocp_retry_wait: &mut ocp_retry_wait,
+            replug_countdown: &mut replug_countdown,
+            wifi: &mut usb_wifi,
+        };
         let usb_action = service_usb_jsonl(
             &mut usb_serial,
             &mut usb_jsonl,
             runtime_snapshot,
             env!("CARGO_PKG_VERSION"),
-            &mut manual_enabled,
-            &mut port_enables,
-            &mut ocp_latched,
-            &mut ocp_safe_samples,
-            &mut ocp_retry_wait,
-            &mut replug_countdown,
-            &mut usb_wifi,
+            &mut usb_service,
         );
         match usb_action {
             Some(UsbAction::WifiSet { ssid, psk, .. }) => {

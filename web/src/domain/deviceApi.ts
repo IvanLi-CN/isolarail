@@ -38,7 +38,7 @@ export type WifiConfigResponse = {
   configured?: boolean;
   storage: "eeprom" | string;
   address: string;
-  ssid?: string;
+  ssid?: string | null;
   psk_configured?: boolean;
   state?: DeviceInfoResponse["device"]["wifi"]["state"];
   ipv4?: string | null;

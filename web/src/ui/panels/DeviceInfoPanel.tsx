@@ -37,6 +37,13 @@ function unknown(value: string | null | undefined): string {
   return value;
 }
 
+function loadedUnknown<T>(
+  source: T | null,
+  value: string | null | undefined,
+): string {
+  return source === null ? "" : unknown(value);
+}
+
 function transportLabel(transport: DeviceTransport | null): string {
   if (transport === "http") {
     return "Wi-Fi / LAN";
@@ -203,11 +210,6 @@ export function DeviceInfoPanel({
     let retryCount = 0;
 
     const load = async () => {
-      if (!transport) {
-        setInfoLoading(false);
-        setInfoError(null);
-        return;
-      }
       if (!hasInfoRef.current) {
         setInfoLoading(true);
       }
@@ -240,18 +242,13 @@ export function DeviceInfoPanel({
         window.clearTimeout(retryTimer);
       }
     };
-  }, [transport]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | null = null;
 
     const load = async () => {
-      if (!transport) {
-        setWifiLoading(false);
-        setWifiError(null);
-        return;
-      }
       if (!hasWifiConfigRef.current) {
         setWifiLoading(true);
       }
@@ -263,7 +260,7 @@ export function DeviceInfoPanel({
         setWifiConfigState(res.value);
         hasWifiConfigRef.current = true;
         if (!wifiFormDirtyRef.current) {
-          if (res.value.ssid !== undefined) {
+          if (typeof res.value.ssid === "string") {
             setWifiSsid(res.value.ssid);
           } else if (res.value.configured === false) {
             setWifiSsid("");
@@ -286,21 +283,23 @@ export function DeviceInfoPanel({
         window.clearTimeout(retryTimer);
       }
     };
-  }, [transport]);
+  }, []);
 
-  const deviceId = unknown(info?.device.device_id);
-  const hostname = unknown(info?.device.hostname);
-  const fqdn = unknown(info?.device.fqdn);
-  const mac = unknown(info?.device.mac);
-  const variant = unknown(info?.device.variant);
+  const deviceId = loadedUnknown(info, info?.device.device_id);
+  const hostname = loadedUnknown(info, info?.device.hostname);
+  const fqdn = loadedUnknown(info, info?.device.fqdn);
+  const mac = loadedUnknown(info, info?.device.mac);
+  const variant = loadedUnknown(info, info?.device.variant);
   const uptimeMs =
-    info?.device.uptime_ms === undefined
-      ? "unknown"
-      : String(info.device.uptime_ms);
+    info === null
+      ? ""
+      : info.device.uptime_ms === undefined
+        ? "unknown"
+        : String(info.device.uptime_ms);
 
-  const fwName = unknown(info?.device.firmware?.name);
-  const fwVersion = unknown(info?.device.firmware?.version);
-  const fwBuild = "unknown";
+  const fwName = loadedUnknown(info, info?.device.firmware?.name);
+  const fwVersion = loadedUnknown(info, info?.device.firmware?.version);
+  const fwBuild = info === null ? "" : "unknown";
   const webSerialSupported = isWebSerialSupported();
   const firmwarePath =
     transport === "local_usb" || transport === "web_serial" ? transport : null;
@@ -316,32 +315,43 @@ export function DeviceInfoPanel({
   const wifiRuntimeIpv4 = wifiConfig?.ipv4 ?? info?.device.wifi?.ipv4;
   const wifiRuntimeIsStatic =
     wifiConfig?.is_static ?? info?.device.wifi?.is_static;
-  const wifiState = unknown(wifiRuntimeState);
-  const wifiIpv4 = unknown(wifiRuntimeIpv4 ?? undefined);
+  const wifiSource = wifiConfig ?? info;
+  const wifiState = loadedUnknown(wifiSource, wifiRuntimeState);
+  const wifiIpv4 = loadedUnknown(wifiSource, wifiRuntimeIpv4 ?? undefined);
   const wifiIsStatic =
-    wifiRuntimeIsStatic === undefined ? "unknown" : String(wifiRuntimeIsStatic);
-  const wifiStorage = unknown(wifiConfig?.storage);
-  const wifiAddress = unknown(wifiConfig?.address);
+    wifiSource === null
+      ? ""
+      : wifiRuntimeIsStatic === undefined
+        ? "unknown"
+        : String(wifiRuntimeIsStatic);
+  const wifiStorage = loadedUnknown(wifiConfig, wifiConfig?.storage);
+  const wifiAddress = loadedUnknown(wifiConfig, wifiConfig?.address);
   const wifiConfigured =
-    wifiConfig?.configured === undefined
-      ? wifiConfig?.ssid
-        ? "yes"
-        : "unknown"
-      : wifiConfig.configured
-        ? "yes"
-        : "no";
+    wifiConfig === null
+      ? ""
+      : wifiConfig.configured === undefined
+        ? wifiConfig?.ssid
+          ? "yes"
+          : "unknown"
+        : wifiConfig.configured
+          ? "yes"
+          : "no";
   const wifiPskConfigured =
-    wifiConfig?.psk_configured === undefined
-      ? "unknown"
-      : wifiConfig.psk_configured
-        ? "yes"
-        : "no";
+    wifiConfig === null
+      ? ""
+      : wifiConfig.psk_configured === undefined
+        ? "unknown"
+        : wifiConfig.psk_configured
+          ? "yes"
+          : "no";
   const wifiCanManage =
     wifiManagementTransport === "web_serial" ||
     wifiManagementTransport === "local_usb";
   const wifiCanSubmit = wifiCanManage && !wifiBusy;
   const showInfoSkeleton = infoLoading && info === null && !infoError;
   const showWifiSkeleton = wifiLoading && wifiConfig === null && !wifiError;
+  const showInfoUnavailable = !showInfoSkeleton && info === null;
+  const showWifiUnavailable = !showWifiSkeleton && wifiConfig === null;
 
   const saveWifi = async () => {
     const nextPsk = wifiOpenNetwork ? "" : wifiPsk;
@@ -584,26 +594,40 @@ export function DeviceInfoPanel({
               label="device_id"
               value={deviceId}
               loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
             />
             <IdentityRow
               label="hostname"
               value={hostname}
               loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
             />
-            <IdentityRow label="fqdn" value={fqdn} loading={showInfoSkeleton} />
-            <IdentityRow label="mac" value={mac} loading={showInfoSkeleton} />
+            <IdentityRow
+              label="fqdn"
+              value={fqdn}
+              loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
+            />
+            <IdentityRow
+              label="mac"
+              value={mac}
+              loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
+            />
           </div>
           <div className="flex flex-col gap-[10px]">
             <IdentityRow
               label="variant"
               value={variant}
               loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
               narrow
             />
             <IdentityRow
               label="uptime_ms"
               value={uptimeMs}
               loading={showInfoSkeleton}
+              unavailable={showInfoUnavailable}
               wide
             />
           </div>
@@ -613,7 +637,7 @@ export function DeviceInfoPanel({
             className="mt-4 rounded-[10px] border border-[var(--error)] px-3 py-2 text-[12px] font-semibold leading-5 text-[var(--error)]"
             role="alert"
           >
-            {transportLabel(transport)} info failed: {infoError}
+            {transportLabel(transport)} info unavailable: {infoError}
           </div>
         ) : null}
       </div>
@@ -627,6 +651,7 @@ export function DeviceInfoPanel({
             ["build", fwBuild],
           ]}
           loading={showInfoSkeleton}
+          unavailable={showInfoUnavailable}
         />
         <InfoCard
           title="Wi-Fi runtime"
@@ -636,6 +661,7 @@ export function DeviceInfoPanel({
             ["is_static", wifiIsStatic],
           ]}
           loading={showWifiSkeleton}
+          unavailable={showWifiUnavailable}
         />
       </div>
 
@@ -665,32 +691,43 @@ export function DeviceInfoPanel({
             label="state"
             value={wifiState}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
-          <InfoPill label="ipv4" value={wifiIpv4} loading={showWifiSkeleton} />
+          <InfoPill
+            label="ipv4"
+            value={wifiIpv4}
+            loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
+          />
           <InfoPill
             label="static"
             value={wifiIsStatic}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
           <InfoPill
             label="configured"
             value={wifiConfigured}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
           <InfoPill
             label="psk"
             value={wifiPskConfigured}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
           <InfoPill
             label="storage"
             value={wifiStorage}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
           <InfoPill
             label="address"
             value={wifiAddress}
             loading={showWifiSkeleton}
+            unavailable={showWifiUnavailable}
           />
         </div>
 
@@ -1113,12 +1150,14 @@ function IdentityRow({
   label,
   value,
   loading = false,
+  unavailable = false,
   narrow = false,
   wide = false,
 }: {
   label: string;
   value: string;
   loading?: boolean;
+  unavailable?: boolean;
   narrow?: boolean;
   wide?: boolean;
 }) {
@@ -1131,7 +1170,13 @@ function IdentityRow({
         {label}
       </div>
       <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
-        {loading ? <SkeletonLine width="w-[128px]" /> : value}
+        {loading ? (
+          <SkeletonLine width="w-[128px]" />
+        ) : unavailable ? (
+          <span className="text-[var(--muted)]">—</span>
+        ) : (
+          value
+        )}
       </div>
     </div>
   );
@@ -1141,10 +1186,12 @@ function InfoCard({
   title,
   rows,
   loading = false,
+  unavailable = false,
 }: {
   title: string;
   rows: Array<[label: string, value: string]>;
   loading?: boolean;
+  unavailable?: boolean;
 }) {
   return (
     <div className="iso-card h-[152px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
@@ -1156,7 +1203,13 @@ function InfoCard({
               {label}
             </div>
             <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
-              {loading ? <SkeletonLine width="w-[112px]" /> : value}
+              {loading ? (
+                <SkeletonLine width="w-[112px]" />
+              ) : unavailable ? (
+                <span className="text-[var(--muted)]">—</span>
+              ) : (
+                value
+              )}
             </div>
           </div>
         ))}
@@ -1178,10 +1231,12 @@ function InfoPill({
   label,
   value,
   loading = false,
+  unavailable = false,
 }: {
   label: string;
   value: string;
   loading?: boolean;
+  unavailable?: boolean;
 }) {
   return (
     <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
@@ -1189,7 +1244,13 @@ function InfoPill({
         {label}
       </div>
       <div className="min-w-0 truncate font-mono text-[12px] font-semibold leading-5">
-        {loading ? <SkeletonLine width="w-[96px]" /> : value}
+        {loading ? (
+          <SkeletonLine width="w-[96px]" />
+        ) : unavailable ? (
+          <span className="text-[var(--muted)]">—</span>
+        ) : (
+          value
+        )}
       </div>
     </div>
   );

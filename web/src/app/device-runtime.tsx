@@ -629,43 +629,6 @@ export function DeviceRuntimeProvider({
     [devices, pollDevice],
   );
 
-  const deviceInfo = useCallback(
-    async (deviceId: string): Promise<Result<DeviceInfoResponse>> => {
-      const device = devices.find((d) => d.id === deviceId);
-      const activeTransport = runtimeById[deviceId]?.transport;
-      if (!device || !activeTransport) {
-        return {
-          ok: false,
-          error: {
-            kind: "offline",
-            message: "device has no active transport",
-          },
-        };
-      }
-      const res = await requestTransport<DeviceInfoResponse>(
-        deviceId,
-        activeTransport === "http"
-          ? httpBaseUrlForDevice(device)
-          : device.baseUrl,
-        activeTransport,
-        "info",
-      );
-      const checked =
-        res.ok && !isDeviceInfoResponse(res.value)
-          ? ({
-              ok: false,
-              error: {
-                kind: "invalid_response",
-                message: "info response is missing device identity",
-              },
-            } satisfies Result<DeviceInfoResponse>)
-          : res;
-      markChannelResult(deviceId, activeTransport, checked);
-      return checked;
-    },
-    [devices, markChannelResult, requestTransport, runtimeById],
-  );
-
   const runDeviceCommand = useCallback(
     async <T,>(
       deviceId: string,
@@ -720,6 +683,23 @@ export function DeviceRuntimeProvider({
       return res;
     },
     [devices, markChannelResult, orderedTransports, requestTransport],
+  );
+
+  const deviceInfo = useCallback(
+    async (deviceId: string): Promise<Result<DeviceInfoResponse>> => {
+      const res = await runDeviceCommand<DeviceInfoResponse>(deviceId, "info");
+      if (res.ok && !isDeviceInfoResponse(res.value)) {
+        return {
+          ok: false,
+          error: {
+            kind: "invalid_response",
+            message: "info response is missing device identity",
+          },
+        };
+      }
+      return res;
+    },
+    [runDeviceCommand],
   );
 
   const wifiConfig = useCallback(

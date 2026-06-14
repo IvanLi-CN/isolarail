@@ -67,6 +67,24 @@ const neverInfo = (): Promise<Result<DeviceInfoResponse>> =>
 const neverWifi = (): Promise<Result<WifiConfigResponse>> =>
   new Promise(() => undefined);
 
+const offlineInfo = (): Promise<Result<DeviceInfoResponse>> =>
+  Promise.resolve({
+    ok: false,
+    error: {
+      kind: "offline",
+      message: "Waiting for an active connection.",
+    },
+  });
+
+const offlineWifi = (): Promise<Result<WifiConfigResponse>> =>
+  Promise.resolve({
+    ok: false,
+    error: {
+      kind: "offline",
+      message: "Waiting for an active connection.",
+    },
+  });
+
 const serialPreview: SerialActivityEntry[] = [
   {
     id: "activity-3",
@@ -153,6 +171,26 @@ export const LoadingHardwareTelemetry: Story = {
     await expect(
       canvasElement.querySelector(".iso-skeleton-line"),
     ).not.toBeNull();
+  },
+};
+
+export const WaitingForConnection: Story = {
+  args: {
+    transport: null,
+    wifiManagementTransport: null,
+    loadInfo: offlineInfo,
+    loadWifiConfig: offlineWifi,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Identity")).toBeVisible();
+    await expect(
+      await canvas.findByText(
+        "Not connected info unavailable: Waiting for an active connection.",
+      ),
+    ).toBeVisible();
+    await expect(canvas.getAllByText("—").length).toBeGreaterThan(0);
+    await expect(canvas.queryByText("unknown")).not.toBeInTheDocument();
   },
 };
 

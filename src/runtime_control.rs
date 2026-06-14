@@ -35,6 +35,14 @@ pub fn tick_replug_countdowns(manual_enabled: &mut [bool; 4], replug_countdown: 
     }
 }
 
+pub fn port_data_connected(
+    sideband_online: bool,
+    upstream_powered: bool,
+    pwren_enabled: bool,
+) -> bool {
+    sideband_online && upstream_powered && pwren_enabled
+}
+
 pub fn apply_port_action<F>(
     action: PortControlAction,
     state: &mut PortRuntimeState<'_>,
@@ -191,6 +199,14 @@ mod tests {
 
         assert!(manual_enabled[1]);
         assert_eq!(replug_countdown[1], 0);
+    }
+
+    #[test]
+    fn port_data_connected_tracks_ch335f_sideband_not_power_output() {
+        assert!(port_data_connected(true, true, true));
+        assert!(!port_data_connected(true, true, false));
+        assert!(!port_data_connected(true, false, true));
+        assert!(!port_data_connected(false, true, true));
     }
 
     #[test]

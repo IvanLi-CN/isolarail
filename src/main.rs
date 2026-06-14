@@ -68,8 +68,8 @@ use crate::device_contract::{
     WifiSnapshot as UsbWifiSnapshot, WifiState as UsbWifiState,
 };
 use crate::runtime_control::{
-    apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, tick_replug_countdowns,
-    PortControlAction, PortRuntimeState,
+    apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, port_data_connected,
+    tick_replug_countdowns, PortControlAction, PortRuntimeState,
 };
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
 use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
@@ -639,6 +639,7 @@ impl embedded_hal::digital::OutputPin for NoopPin {
 #[derive(Copy, Clone, Debug, Default)]
 struct PortSample {
     connected: bool,
+    data_connected: bool,
     selected: bool,
     // millivolts and milliamps for convenience
     vbus_mv: u32,
@@ -728,7 +729,7 @@ fn usb_runtime_snapshot(
             voltage_mv: view[0].vbus_mv,
             current_ma: view[0].ich_ma,
             power_enabled: view[0].en_enabled,
-            data_connected: view[0].connected,
+            data_connected: view[0].data_connected,
             replugging: replug_countdown[0] > 0,
             busy: false,
             overcurrent: view[0].ocp_latched,
@@ -739,7 +740,7 @@ fn usb_runtime_snapshot(
             voltage_mv: view[1].vbus_mv,
             current_ma: view[1].ich_ma,
             power_enabled: view[1].en_enabled,
-            data_connected: view[1].connected,
+            data_connected: view[1].data_connected,
             replugging: replug_countdown[1] > 0,
             busy: false,
             overcurrent: view[1].ocp_latched,
@@ -750,7 +751,7 @@ fn usb_runtime_snapshot(
             voltage_mv: view[2].vbus_mv,
             current_ma: view[2].ich_ma,
             power_enabled: view[2].en_enabled,
-            data_connected: view[2].connected,
+            data_connected: view[2].data_connected,
             replugging: replug_countdown[2] > 0,
             busy: false,
             overcurrent: view[2].ocp_latched,
@@ -761,7 +762,7 @@ fn usb_runtime_snapshot(
             voltage_mv: view[3].vbus_mv,
             current_ma: view[3].ich_ma,
             power_enabled: view[3].en_enabled,
-            data_connected: view[3].connected,
+            data_connected: view[3].data_connected,
             replugging: replug_countdown[3] > 0,
             busy: false,
             overcurrent: view[3].ocp_latched,
@@ -1982,6 +1983,7 @@ async fn main(spawner: Spawner) {
         let mut view: [PortSample; 4] = [
             PortSample {
                 connected: false,
+                data_connected: false,
                 selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
@@ -1992,6 +1994,7 @@ async fn main(spawner: Spawner) {
             },
             PortSample {
                 connected: false,
+                data_connected: false,
                 selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
@@ -2002,6 +2005,7 @@ async fn main(spawner: Spawner) {
             },
             PortSample {
                 connected: false,
+                data_connected: false,
                 selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
@@ -2012,6 +2016,7 @@ async fn main(spawner: Spawner) {
             },
             PortSample {
                 connected: false,
+                data_connected: false,
                 selected: false,
                 vbus_mv: 0,
                 ich_ma: 0,
@@ -2058,6 +2063,8 @@ async fn main(spawner: Spawner) {
             let idx = ch as usize;
             view[idx].selected = idx == selected_port;
             view[idx].pwren_enabled = pwren_enabled[idx];
+            view[idx].data_connected =
+                port_data_connected(sideband_online, upstream_powered, pwren_enabled[idx]);
             view[idx].ocp_latched = ocp_latched[idx];
             if replug_countdown[idx] > 0 {
                 view[idx].ui_state = UiPortState::Closed;

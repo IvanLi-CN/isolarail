@@ -386,7 +386,7 @@ export function DeviceInfoPanel({
   const showInfoUnavailable = !showInfoSkeleton && info === null;
   const showWifiUnavailable = !showWifiSkeleton && wifiConfig === null;
   const lastSeenLabel = lastOkAt === null ? "—" : formatTimeHms(lastOkAt);
-  const lastError = lastErrorLabel ?? "—";
+  const lastError = lastErrorLabel ?? infoError ?? "—";
   const activeTransportLabel = transportLabel(transport);
   const savedHttpBaseUrl = device.transports?.httpBaseUrl ?? device.baseUrl;
   const savedLocalUsbDeviceId = device.transports?.localUsbDeviceId ?? "—";
@@ -454,14 +454,6 @@ export function DeviceInfoPanel({
               />
             </div>
           </div>
-          {infoError ? (
-            <div
-              className="mt-4 rounded-[10px] border border-[var(--error)] px-3 py-2 text-[12px] font-semibold leading-5 text-[var(--error)]"
-              role="alert"
-            >
-              {activeTransportLabel} info unavailable: {infoError}
-            </div>
-          ) : null}
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

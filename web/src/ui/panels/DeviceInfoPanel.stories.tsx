@@ -225,11 +225,11 @@ export const WaitingForConnection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Identity")).toBeVisible();
+    await expect(await canvas.findByText("last_error")).toBeVisible();
     await expect(
-      await canvas.findByText(
-        "Not connected info unavailable: Waiting for an active connection.",
-      ),
+      await canvas.findByText("Waiting for an active connection."),
     ).toBeVisible();
+    await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
     await expect(canvas.getAllByText("—").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("unknown")).not.toBeInTheDocument();
   },

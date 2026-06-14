@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
+import { expect, within } from "@storybook/test";
 
 import { PortCard } from "./PortCard";
 
@@ -48,6 +49,12 @@ export const PowerOff: Story = {
       sample_uptime_ms: 123_999,
     },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("power off")).toBeVisible();
+    await expect(canvas.getByText("Data unknown")).toBeVisible();
+    await expect(canvas.queryByText("Data off")).not.toBeInTheDocument();
+  },
 };
 
 export const NotInserted: Story = {
@@ -65,6 +72,12 @@ export const NotInserted: Story = {
       power_mw: 0,
       sample_uptime_ms: 124_000,
     },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("not inserted")).toBeVisible();
+    await expect(canvas.getByText("Data unknown")).toBeVisible();
+    await expect(canvas.queryByText("Data off")).not.toBeInTheDocument();
   },
 };
 

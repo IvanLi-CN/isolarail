@@ -44,27 +44,22 @@ function PortStateSummary({
   powerEnabled,
   dataConnected,
   replugging,
-  telemetryStatus,
 }: {
   powerEnabled: boolean;
   dataConnected: boolean;
   replugging: boolean;
-  telemetryStatus: string;
 }) {
-  const dataLabel = replugging
-    ? "Replugging"
-    : dataConnected
-      ? "Data linked"
-      : telemetryStatus === "ok"
-        ? "Data off"
-        : "Data unknown";
   const items = [
     {
       label: powerEnabled ? "Power on" : "Power off",
       active: powerEnabled,
     },
     {
-      label: dataLabel,
+      label: replugging
+        ? "Replugging"
+        : dataConnected
+          ? "Data linked"
+          : "Data off",
       active: dataConnected && !replugging,
     },
   ];
@@ -196,7 +191,6 @@ export function PortCard({
           powerEnabled={state.power_enabled}
           dataConnected={state.data_connected}
           replugging={state.replugging}
-          telemetryStatus={telemetry.status}
         />
       </div>
 

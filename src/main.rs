@@ -9,6 +9,8 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use defmt::{info, warn};
 use embassy_executor::Spawner;
@@ -31,6 +33,8 @@ mod device_contract;
 mod device_identity;
 mod http_api_v1;
 mod hub_sideband;
+mod mdns;
+mod network_runtime;
 mod power_in;
 mod usb_jsonl;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
@@ -93,6 +97,8 @@ type SharedI2cBus = Mutex<CriticalSectionRawMutex, I2cBus>;
 static SENSOR_I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static HUB_I2C_BUS: StaticCell<SharedI2cBus> = StaticCell::new();
 static mut SENSOR_I2C_BUS_REF: Option<&'static SharedI2cBus> = None;
+static WIFI_CREDENTIALS_CACHE: Mutex<CriticalSectionRawMutex, Option<WifiCredentials>> =
+    Mutex::new(None);
 // Latch channel readiness for UI without blocking on Signal::wait
 static CH_RDY: [AtomicBool; 4] = [
     AtomicBool::new(false),
@@ -783,6 +789,14 @@ fn usb_runtime_snapshot(
     }
 }
 
+pub async fn wifi_credentials_cache() -> Option<WifiCredentials> {
+    *WIFI_CREDENTIALS_CACHE.lock().await
+}
+
+async fn set_wifi_credentials_cache(credentials: Option<WifiCredentials>) {
+    *WIFI_CREDENTIALS_CACHE.lock().await = credentials;
+}
+
 fn usb_write_line(serial: &mut UsbSerialJtag<'static, esp_hal::Blocking>, line: &str) {
     let _ = serial.write(line.as_bytes());
     let _ = serial.write(b"\n");
@@ -1322,6 +1336,8 @@ async fn ack_scan_vin_off(sensor_bus: &'static SharedI2cBus, hub_bus: &'static S
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
+    esp_alloc::heap_allocator!(size: 64 * 1024);
+
     let p = esp_hal::init(esp_hal::Config::default());
     let reset_reason = system::reset_reason();
     let usb_mac = Efuse::read_base_mac_address();
@@ -1347,6 +1363,21 @@ async fn main(spawner: Spawner) {
     board_reset.set_high();
     Timer::after(Duration::from_millis(50)).await;
     let board_reset_released_high = board_reset.is_set_high();
+
+    // M24C64 #WC is active high. Drive it low before any provisioning access so
+    // writes are not silently ignored while reads still work.
+    let _rom_wc = Output::new(
+        p.GPIO37,
+        Level::Low,
+        esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
+    );
+    // CH442E selects S2B/S2C when IN is high. S2 is the MCU SDA0/SCL0 side,
+    // while S1 is the CH335F/HUB_LED3 side, so keep EEPROM routed to firmware.
+    let _rom_route = Output::new(
+        p.GPIO38,
+        Level::High,
+        esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
+    );
 
     // IN_CE default off: high turns on the NMOS that pulls TPS2490 EN low.
     let in_ce = Output::new(
@@ -1389,7 +1420,7 @@ async fn main(spawner: Spawner) {
         port_enable.set_low();
     }
 
-    info!("init.hw: chip=ESP32-S3 sensor_i2c=sdaGPIO8/sclGPIO9 hub_i2c=sdaGPIO14/sclGPIO13");
+    info!("init.hw: chip=ESP32-S3 sensor_i2c=sdaGPIO8/sclGPIO9 hub_i2c=sdaGPIO14/sclGPIO13 rom_wc=GPIO37-low rom_route=GPIO38-high");
 
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
     PWR_SW_TARGET.store(PowerSwitchTarget::Closed as u8, Ordering::Relaxed);
@@ -1939,7 +1970,7 @@ async fn main(spawner: Spawner) {
     let mut ocp_retry_wait = [0u8; 4];
     let mut replug_countdown = [0u8; 4];
     let stored_wifi_credentials = {
-        let mut i2c = I2cDevice::new(bus);
+        let mut i2c = I2cDevice::new(hub_bus);
         match load_wifi_credentials(&mut i2c).await {
             Ok(credentials) => credentials,
             Err(error) => {
@@ -1951,6 +1982,15 @@ async fn main(spawner: Spawner) {
             }
         }
     };
+    set_wifi_credentials_cache(stored_wifi_credentials).await;
+    let network = network_runtime::spawn(
+        &spawner,
+        p.WIFI,
+        p.TIMG1,
+        p.RNG,
+        usb_mac,
+        stored_wifi_credentials,
+    );
     let mut usb_wifi = match stored_wifi_credentials {
         Some(credentials) => UsbWifiSnapshot {
             configured: true,
@@ -1968,6 +2008,9 @@ async fn main(spawner: Spawner) {
         },
         None => UsbWifiSnapshot::disconnected(),
     };
+    if let Some(network) = network.as_ref() {
+        usb_wifi = network.state.lock().await.wifi;
+    }
     let mut port_output_active = boot_snapshot.gates.allow_port;
     loop {
         while let Ok(event) = front_events.try_receive() {
@@ -1977,6 +2020,9 @@ async fn main(spawner: Spawner) {
                 &mut manual_enabled,
                 &mut port_enables,
             );
+        }
+        if let Some(network) = network.as_ref() {
+            usb_wifi = network.state.lock().await.wifi;
         }
 
         // Derive per-port samples
@@ -2223,6 +2269,7 @@ async fn main(spawner: Spawner) {
             &view,
             &replug_countdown,
         );
+        network_runtime::publish_snapshot(runtime_snapshot);
         let mut usb_service = UsbJsonlServiceContext {
             manual_enabled: &mut manual_enabled,
             port_enables: &mut port_enables,
@@ -2243,9 +2290,11 @@ async fn main(spawner: Spawner) {
             Some(UsbAction::WifiSet { ssid, psk, .. }) => {
                 match WifiCredentials::new(ssid.as_str(), psk.as_str()) {
                     Ok(credentials) => {
-                        let mut i2c = I2cDevice::new(bus);
+                        let mut i2c = I2cDevice::new(hub_bus);
                         match store_wifi_credentials(&mut i2c, &credentials).await {
                             Ok(()) => {
+                                set_wifi_credentials_cache(Some(credentials)).await;
+                                network_runtime::request_wifi_runtime_apply();
                                 info!("wifi.provisioning: stored ssid_len={}", ssid.len());
                             }
                             Err(error) => {
@@ -2262,9 +2311,11 @@ async fn main(spawner: Spawner) {
                 }
             }
             Some(UsbAction::WifiClear) => {
-                let mut i2c = I2cDevice::new(bus);
+                let mut i2c = I2cDevice::new(hub_bus);
                 match clear_wifi_credentials(&mut i2c).await {
                     Ok(()) => {
+                        set_wifi_credentials_cache(None).await;
+                        network_runtime::request_wifi_runtime_apply();
                         info!("wifi.provisioning: cleared");
                     }
                     Err(error) => {

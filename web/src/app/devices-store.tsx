@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -35,6 +36,7 @@ type DevicesContextValue = {
   addDevice: (input: AddDeviceInput) => Promise<AddDeviceValidationResult>;
   upsertDevice: (input: AddDeviceInput) => Promise<AddDeviceValidationResult>;
   removeDevice: (deviceId: string) => Promise<void>;
+  refreshDevices: () => Promise<void>;
   getDevice: (deviceId: string) => StoredDevice | undefined;
 };
 
@@ -55,6 +57,24 @@ export function DevicesProvider({
   );
   const [ready, setReady] = useState(false);
 
+  const refreshDevices = useCallback(async () => {
+    if (agent) {
+      const res = await fetchStoredDevices(agent);
+      if (!res.ok) {
+        pushToast({
+          variant: "error",
+          message: `Local companion storage unavailable: ${res.error.message}`,
+        });
+        return;
+      }
+      setDevices(res.value);
+      return;
+    }
+    if (!initialDevices) {
+      setDevices(loadStoredDevices());
+    }
+  }, [agent, pushToast, initialDevices]);
+
   useEffect(() => {
     if (!ready) {
       return;
@@ -71,28 +91,16 @@ export function DevicesProvider({
     }
     let cancelled = false;
     void (async () => {
-      if (agent) {
-        const res = await fetchStoredDevices(agent);
-        if (cancelled) {
-          return;
-        }
-        if (!res.ok) {
-          pushToast({
-            variant: "error",
-            message: `Local companion storage unavailable: ${res.error.message}`,
-          });
-        } else {
-          setDevices(res.value);
-        }
-      } else if (!initialDevices) {
-        setDevices(loadStoredDevices());
+      await refreshDevices();
+      if (cancelled) {
+        return;
       }
       setReady(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [agent, status, pushToast, initialDevices]);
+  }, [status, refreshDevices]);
 
   useEffect(() => {
     if (status !== "ready" || !agent) {
@@ -235,9 +243,10 @@ export function DevicesProvider({
         forgetWebSerialDeviceTransport(deviceId);
         setDevices((prev) => prev.filter((d) => d.id !== deviceId));
       },
+      refreshDevices,
       getDevice: (deviceId) => devices.find((d) => d.id === deviceId),
     };
-  }, [devices, agent, pushToast]);
+  }, [devices, agent, pushToast, refreshDevices]);
 
   return (
     <DevicesContext.Provider value={value}>{children}</DevicesContext.Provider>

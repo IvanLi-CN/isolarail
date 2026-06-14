@@ -38,7 +38,10 @@ import {
   getLocalUsbDeviceLink,
   subscribeLocalUsbDeviceLinks,
 } from "../domain/localUsbLinks";
-import { subscribeNetworkDeviceLinks } from "../domain/networkLinks";
+import {
+  announceNetworkDeviceLink,
+  subscribeNetworkDeviceLinks,
+} from "../domain/networkLinks";
 import type {
   CanonicalPortId,
   HubState,
@@ -84,6 +87,20 @@ const DeviceRuntimeContext = createContext<DeviceRuntimeContextValue | null>(
 );
 
 const OFFLINE_THRESHOLD_MS = 10_000;
+const POWER_ECHO_ATTEMPTS = 12;
+const POWER_ECHO_DELAY_MS = 150;
+
+function announceWifiHttpLink(
+  deviceId: string,
+  wifi: WifiConfigResponse | WifiMutationResponse,
+): boolean {
+  const ipv4 = wifi.ipv4?.trim();
+  if (wifi.state !== "connected" || !ipv4) {
+    return false;
+  }
+  announceNetworkDeviceLink({ deviceId, baseUrl: `http://${ipv4}` });
+  return true;
+}
 
 type JsonlEnvelope<T> = {
   id?: number | string | null;
@@ -91,6 +108,12 @@ type JsonlEnvelope<T> = {
   result?: T;
   error?: { code: string; message: string; retryable: boolean };
 };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
 
 function normalizeHubSnapshot(hub: HubState | null): HubState | null {
   if (!hub) {
@@ -138,12 +161,13 @@ export function DeviceRuntimeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { devices } = useDevices();
+  const { devices, refreshDevices } = useDevices();
   const { pushToast } = useToast();
   const [now, setNow] = useState(() => Date.now());
   const [runtimeById, setRuntimeById] = useState<Record<string, DeviceRuntime>>(
     {},
   );
+  const runtimeByIdRef = useRef(runtimeById);
   const inflight = useRef<Set<string>>(new Set());
   const localUsbAgent = useRef<CompanionBridge | null>(null);
   const localUsbPortByDevice = useRef<Record<string, string>>({});
@@ -151,6 +175,10 @@ export function DeviceRuntimeProvider({
   const preferredTransportByDevice = useRef<Record<string, DeviceTransport>>(
     {},
   );
+
+  useEffect(() => {
+    runtimeByIdRef.current = runtimeById;
+  }, [runtimeById]);
 
   useEffect(() => {
     setRuntimeById((prev) => {
@@ -629,6 +657,27 @@ export function DeviceRuntimeProvider({
     [devices, pollDevice],
   );
 
+  const waitForPowerEcho = useCallback(
+    async (
+      deviceId: string,
+      portId: PortId,
+      enabled: boolean,
+    ): Promise<boolean> => {
+      for (let attempt = 0; attempt < POWER_ECHO_ATTEMPTS; attempt += 1) {
+        await refreshDevice(deviceId);
+        await delay(POWER_ECHO_DELAY_MS);
+        const echoed =
+          runtimeByIdRef.current[deviceId]?.ports?.[portId]?.state
+            .power_enabled === enabled;
+        if (echoed) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [refreshDevice],
+  );
+
   const runDeviceCommand = useCallback(
     async <T,>(
       deviceId: string,
@@ -697,16 +746,30 @@ export function DeviceRuntimeProvider({
           },
         };
       }
+      if (res.ok && res.value.device.wifi) {
+        if (announceWifiHttpLink(deviceId, res.value.device.wifi)) {
+          await refreshDevices();
+        }
+      }
       return res;
     },
-    [runDeviceCommand],
+    [refreshDevices, runDeviceCommand],
   );
 
   const wifiConfig = useCallback(
     async (deviceId: string): Promise<Result<WifiConfigResponse>> => {
-      return runDeviceCommand<WifiConfigResponse>(deviceId, "wifi.get");
+      const res = await runDeviceCommand<WifiConfigResponse>(
+        deviceId,
+        "wifi.get",
+      );
+      if (res.ok) {
+        if (announceWifiHttpLink(deviceId, res.value)) {
+          await refreshDevices();
+        }
+      }
+      return res;
     },
-    [runDeviceCommand],
+    [refreshDevices, runDeviceCommand],
   );
 
   const saveWifiConfig = useCallback(
@@ -721,11 +784,15 @@ export function DeviceRuntimeProvider({
         ["web_serial", "local_usb"],
       );
       if (res.ok) {
+        const linkedWifiHttp = announceWifiHttpLink(deviceId, res.value);
         await refreshDevice(deviceId);
+        if (linkedWifiHttp) {
+          await refreshDevices();
+        }
       }
       return res;
     },
-    [refreshDevice, runDeviceCommand],
+    [refreshDevice, refreshDevices, runDeviceCommand],
   );
 
   const clearWifi = useCallback(
@@ -738,10 +805,11 @@ export function DeviceRuntimeProvider({
       );
       if (res.ok) {
         await refreshDevice(deviceId);
+        await refreshDevices();
       }
       return res;
     },
-    [refreshDevice, runDeviceCommand],
+    [refreshDevice, refreshDevices, runDeviceCommand],
   );
 
   const reboot = useCallback(
@@ -807,11 +875,13 @@ export function DeviceRuntimeProvider({
           return;
         }
         if (res.ok) {
+          const echoed = await waitForPowerEcho(deviceId, portId, enabled);
           pushToast({
-            message: `${device.name}: ${label} power set`,
-            variant: "success",
+            message: echoed
+              ? `${device.name}: ${label} power set`
+              : `${device.name}: ${label} power accepted, refresh lagging`,
+            variant: echoed ? "success" : "warning",
           });
-          await refreshDevice(deviceId);
           return;
         }
         handleApiErrorToast(device.name, label, res.error);
@@ -823,11 +893,11 @@ export function DeviceRuntimeProvider({
       devices,
       handleApiErrorToast,
       pushToast,
-      refreshDevice,
       markChannelResult,
       orderedTransports,
       requestTransport,
       setPending,
+      waitForPowerEcho,
     ],
   );
 

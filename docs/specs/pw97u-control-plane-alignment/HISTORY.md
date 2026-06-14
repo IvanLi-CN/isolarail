@@ -42,3 +42,13 @@
 - 将 `src/net.rs` 明确标记为未接入的 legacy dual-port skeleton，防止仓内旧 `port_a` / `port_c` / USB-C route 语义继续被误当成当前四路控制面的实现基线。
 - 将 companion 开发路径收紧到显式 USB allowlist：新增 `ISOHUB_USB_PORT` 约束，repo-root `just` 以 `USB_PORT` 暴露它；串口扫描、USB JSONL、flash 与 reset 现在都会拒绝 allowlist 外的串口，避免误操作其他项目硬件。
 - 以 `just web-check`、`just web-test-companion-bridge`、`just web-test-unit`、`just web-build`、`just devd-help`、`just isohub --help`、`just tools-test`、`just firmware-check`、`just firmware-contract-test` 作为本轮已验证入口；同时明确 `src/net*` 旧双口 HTTP skeleton 尚未接入主固件，不计入控制面对齐完成证据。
+
+## 2026-06-15
+
+- 固件接入活动 ESP32-S3 Wi-Fi runtime：启动时从 `M24C64@0x50` 读取凭据，`wifi.set` / `wifi.clear` 后触发 apply，LAN HTTP/mDNS 只在获取 IPv4 后成为有效通道。
+- 修正 V3 硬件上的 Wi-Fi EEPROM 路由：profile 读写走 `hub_bus`，并显式配置 `ROM_WC=GPIO37-low` 与 `ROM_ROUTE=GPIO38-high`。
+- USB JSONL parser 改为 frame-aware，忽略 defmt/串口噪声，避免二进制日志污染 JSON response。
+- companion `wifi.set` / `wifi.clear` 增加设备回读确认，避免 Web UI 在固件未真正写入/清除时提前显示成功。
+- companion storage 以 firmware identity `device_id` 作为 Web-visible canonical hardware id，合并 HTTP/LAN 与 Local USB profile；internal `--usb` id 不再进入 Web URL，非法 profile-suffixed route 不做兼容。
+- companion 会在 USB Wi-Fi 状态显示 connected IPv4 后刷新 HTTP profile，Wi-Fi clear 只删除 HTTP profile 并保留 Local USB profile。
+- Web runtime 在 Wi-Fi connected 回读后自动刷新设备列表补齐 LAN 通道；Dashboard 端口卡片改为图标化 power/replug 控件，pending 图标保持到状态回显匹配。

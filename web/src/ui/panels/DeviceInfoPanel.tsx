@@ -578,6 +578,7 @@ export function DeviceInfoPanel({
         psk: nextPsk,
       });
       if (res.ok) {
+        const rebootRequired = res.value.reboot_required === true;
         setWifiConfigState((prev) => ({
           ...prev,
           storage: prev?.storage ?? "eeprom",
@@ -585,16 +586,18 @@ export function DeviceInfoPanel({
           configured: true,
           ssid: wifiSsid,
           psk_configured: nextPsk.length > 0,
-          state: res.value.reboot_required ? prev?.state : "connecting",
-          ipv4: res.value.reboot_required ? prev?.ipv4 : null,
-          is_static: prev?.is_static,
+          state: rebootRequired
+            ? prev?.state
+            : (res.value.state ?? "connecting"),
+          ipv4: rebootRequired ? prev?.ipv4 : (res.value.ipv4 ?? null),
+          is_static: res.value.is_static ?? prev?.is_static,
         }));
         setWifiPsk("");
         setWifiOpenNetwork(false);
         wifiFormDirtyRef.current = false;
-        setWifiRebootRequired(res.value.reboot_required);
+        setWifiRebootRequired(rebootRequired);
         setWifiStatus(
-          res.value.reboot_required
+          rebootRequired
             ? "Wi-Fi configuration saved. Reboot this hub to apply it."
             : "Wi-Fi configuration saved and applying now.",
         );
@@ -614,22 +617,25 @@ export function DeviceInfoPanel({
     try {
       const res = await clearWifiConfig();
       if (res.ok) {
+        const rebootRequired = res.value.reboot_required === true;
         setWifiConfigState((prev) => ({
           storage: prev?.storage ?? "eeprom",
           address: prev?.address ?? "0x50",
           configured: false,
           psk_configured: false,
-          state: res.value.reboot_required ? prev?.state : "idle",
-          ipv4: res.value.reboot_required ? prev?.ipv4 : null,
-          is_static: res.value.reboot_required ? prev?.is_static : false,
+          state: rebootRequired ? prev?.state : (res.value.state ?? "idle"),
+          ipv4: rebootRequired ? prev?.ipv4 : (res.value.ipv4 ?? null),
+          is_static: rebootRequired
+            ? prev?.is_static
+            : (res.value.is_static ?? false),
         }));
         setWifiSsid("");
         setWifiPsk("");
         setWifiOpenNetwork(false);
         wifiFormDirtyRef.current = false;
-        setWifiRebootRequired(res.value.reboot_required);
+        setWifiRebootRequired(rebootRequired);
         setWifiStatus(
-          res.value.reboot_required
+          rebootRequired
             ? "Wi-Fi configuration cleared. Reboot this hub to apply it."
             : "Wi-Fi configuration cleared and Wi-Fi is stopping.",
         );

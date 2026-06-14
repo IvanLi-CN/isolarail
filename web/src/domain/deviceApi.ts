@@ -51,9 +51,9 @@ export type WifiConfigInput = {
 };
 
 export type WifiMutationResponse = {
-  accepted: true;
-  reboot_required: boolean;
-};
+  accepted?: true;
+  reboot_required?: boolean;
+} & Partial<WifiConfigResponse>;
 
 export type RebootResponse = {
   accepted: true;

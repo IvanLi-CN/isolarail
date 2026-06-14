@@ -200,9 +200,15 @@ async fn dispatch_ipc_request(
         "device.wifi.get" => {
             let req: DeviceIdRequest = serde_json::from_value(params)?;
             require_compatible_project_firmware(state, &req.device_id).await?;
-            Ok(redact_sensitive(
-                &usb_jsonl_request(state, &req.device_id, "wifi.get", None).await?,
-            ))
+            let value = usb_jsonl_request(state, &req.device_id, "wifi.get", None).await?;
+            if let Err(err) = update_http_profile_from_usb_wifi(state, &req.device_id, &value).await
+            {
+                tracing::warn!(
+                    device_id = %req.device_id,
+                    "could not update HTTP profile from Wi-Fi status: {err}"
+                );
+            }
+            Ok(redact_sensitive(&value))
         }
         "device.wifi.set" => {
             let req: DeviceWifiSetRequest = serde_json::from_value(params)?;
@@ -216,11 +222,35 @@ async fn dispatch_ipc_request(
             )
             .await
             {
-                Ok(value) => Ok(redact_sensitive(&value)),
+                Ok(_) => {
+                    let value =
+                        verify_wifi_after_set_timeout(state, &req.device_id, &expected_ssid)
+                            .await?;
+                    if let Err(err) =
+                        update_http_profile_from_usb_wifi(state, &req.device_id, &value).await
+                    {
+                        tracing::warn!(
+                            device_id = %req.device_id,
+                            "could not update HTTP profile from Wi-Fi status: {err}"
+                        );
+                    }
+                    Ok(redact_sensitive(&value))
+                }
                 Err(err) => {
                     match verify_wifi_after_set_timeout(state, &req.device_id, &expected_ssid).await
                     {
-                        Ok(value) => Ok(redact_sensitive(&value)),
+                        Ok(value) => {
+                            if let Err(update_err) =
+                                update_http_profile_from_usb_wifi(state, &req.device_id, &value)
+                                    .await
+                            {
+                                tracing::warn!(
+                                    device_id = %req.device_id,
+                                    "could not update HTTP profile from Wi-Fi status: {update_err}"
+                                );
+                            }
+                            Ok(redact_sensitive(&value))
+                        }
                         Err(_) => Err(err),
                     }
                 }
@@ -229,9 +259,15 @@ async fn dispatch_ipc_request(
         "device.wifi.clear" => {
             let req: DeviceIdRequest = serde_json::from_value(params)?;
             require_compatible_project_firmware(state, &req.device_id).await?;
-            Ok(redact_sensitive(
-                &usb_jsonl_request(state, &req.device_id, "wifi.clear", None).await?,
-            ))
+            usb_jsonl_request(state, &req.device_id, "wifi.clear", None).await?;
+            let value = verify_wifi_after_clear_timeout(state, &req.device_id).await?;
+            if let Err(err) = delete_http_profile_for_usb_device(state, &req.device_id).await {
+                tracing::warn!(
+                    device_id = %req.device_id,
+                    "could not delete HTTP profile after Wi-Fi clear: {err}"
+                );
+            }
+            Ok(redact_sensitive(&value))
         }
         "device.ports.get" => {
             let req: DeviceIdRequest = serde_json::from_value(params)?;

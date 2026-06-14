@@ -35,7 +35,10 @@ export const PowerOn: Story = {};
 
 PowerOn.play = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await expect(canvas.getByText("Power on")).toBeVisible();
+  await expect(canvas.getByText("ON")).toBeVisible();
+  await expect(canvas.getByText("Cut")).toBeVisible();
+  await expect(canvasElement.querySelectorAll("svg").length).toBeGreaterThan(0);
+  await expect(canvas.queryByText("State")).not.toBeInTheDocument();
   await expect(canvas.queryByText("Data linked")).not.toBeInTheDocument();
   await expect(canvas.queryByText("Data off")).not.toBeInTheDocument();
 };
@@ -60,7 +63,10 @@ export const PowerOff: Story = {
 
 PowerOff.play = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await expect(canvas.getByText("Power off")).toBeVisible();
+  await expect(canvas.getByText("OFF")).toBeVisible();
+  await expect(canvas.getByText("Restore")).toBeVisible();
+  await expect(canvasElement.querySelectorAll("svg").length).toBeGreaterThan(0);
+  await expect(canvas.queryByText("State")).not.toBeInTheDocument();
   await expect(canvas.queryByText("Data linked")).not.toBeInTheDocument();
   await expect(canvas.queryByText("Data off")).not.toBeInTheDocument();
 };
@@ -98,6 +104,7 @@ export const Busy: Story = {
   args: {
     portId: "port4",
     label: "Port 4",
+    powerPending: true,
     state: {
       power_enabled: true,
       data_connected: true,
@@ -105,4 +112,41 @@ export const Busy: Story = {
       busy: true,
     },
   },
+};
+
+Busy.play = async ({ canvasElement }) => {
+  const powerIcon = canvasElement.querySelector(".lucide-power");
+  const loaderIcon = canvasElement.querySelector(".lucide-loader-circle");
+  await expect(powerIcon).toBeNull();
+  await expect(loaderIcon).toBeTruthy();
+  await expect(loaderIcon).toHaveClass("iso-control-spin");
+};
+
+export const BusyNotPending: Story = {
+  args: {
+    portId: "port2",
+    label: "Port 2",
+    powerPending: false,
+    state: {
+      power_enabled: false,
+      data_connected: false,
+      replugging: false,
+      busy: true,
+    },
+    telemetry: {
+      status: "error",
+      voltage_mv: null,
+      current_ma: null,
+      power_mw: null,
+      sample_uptime_ms: 0,
+    },
+    disabled: true,
+  },
+};
+
+BusyNotPending.play = async ({ canvasElement }) => {
+  const powerIcon = canvasElement.querySelector(".lucide-power");
+  const loaderIcon = canvasElement.querySelector(".lucide-loader-circle");
+  await expect(powerIcon).toBeTruthy();
+  await expect(loaderIcon).toBeNull();
 };

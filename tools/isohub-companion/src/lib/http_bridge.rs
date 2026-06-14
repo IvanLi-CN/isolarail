@@ -245,7 +245,15 @@ async fn wifi_get(
         return error_from_anyhow(err);
     }
     match usb_jsonl_request(&state, &id, "wifi.get", None).await {
-        Ok(value) => Json(redact_sensitive(&value)).into_response(),
+        Ok(value) => {
+            if let Err(err) = update_http_profile_from_usb_wifi(&state, &id, &value).await {
+                tracing::warn!(
+                    device_id = %id,
+                    "could not update HTTP profile from Wi-Fi status: {err}"
+                );
+            }
+            Json(redact_sensitive(&value)).into_response()
+        }
         Err(err) => error_from_anyhow(err),
     }
 }
@@ -270,7 +278,18 @@ async fn wifi_set(
     )
     .await
     {
-        Ok(value) => Json(redact_sensitive(&value)).into_response(),
+        Ok(_) => match verify_wifi_after_set_timeout(&state, &id, &req.ssid).await {
+            Ok(value) => {
+                if let Err(err) = update_http_profile_from_usb_wifi(&state, &id, &value).await {
+                    tracing::warn!(
+                        device_id = %id,
+                        "could not update HTTP profile from Wi-Fi status: {err}"
+                    );
+                }
+                Json(redact_sensitive(&value)).into_response()
+            }
+            Err(err) => error_from_anyhow(err),
+        },
         Err(err) => error_from_anyhow(err),
     }
 }
@@ -287,7 +306,18 @@ async fn wifi_clear(
         return error_from_anyhow(err);
     }
     match usb_jsonl_request(&state, &id, "wifi.clear", None).await {
-        Ok(value) => Json(redact_sensitive(&value)).into_response(),
+        Ok(_) => match verify_wifi_after_clear_timeout(&state, &id).await {
+            Ok(value) => {
+                if let Err(err) = delete_http_profile_for_usb_device(&state, &id).await {
+                    tracing::warn!(
+                        device_id = %id,
+                        "could not delete HTTP profile after Wi-Fi clear: {err}"
+                    );
+                }
+                Json(redact_sensitive(&value)).into_response()
+            }
+            Err(err) => error_from_anyhow(err),
+        },
         Err(err) => error_from_anyhow(err),
     }
 }
@@ -350,36 +380,6 @@ async fn port_replug(
         Ok(value) => Json(redact_sensitive(&value)).into_response(),
         Err(err) => error_from_anyhow(err),
     }
-}
-
-async fn verify_wifi_after_set_timeout(
-    state: &AppState,
-    id: &str,
-    expected_ssid: &str,
-) -> anyhow::Result<Value> {
-    let mut last_error = None;
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        match usb_jsonl_request(state, id, "wifi.get", None).await {
-            Ok(mut value) => {
-                if wifi_matches_expected_ssid(&value, expected_ssid) {
-                    if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
-                        result.insert("verified_after_serial_timeout".to_string(), json!(true));
-                    }
-                    return Ok(value);
-                }
-                last_error = Some(anyhow!("Wi-Fi settings did not report expected SSID yet"));
-            }
-            Err(err) => last_error = Some(err),
-        }
-    }
-    Err(last_error.unwrap_or_else(|| anyhow!("Wi-Fi set did not verify after serial timeout")))
-}
-
-fn wifi_matches_expected_ssid(value: &Value, expected_ssid: &str) -> bool {
-    let wifi = value.get("result").unwrap_or(value);
-    wifi.get("configured").and_then(Value::as_bool) == Some(true)
-        && wifi.get("ssid").and_then(Value::as_str) == Some(expected_ssid)
 }
 
 async fn device_flash(
@@ -856,6 +856,15 @@ fn web_storage_public_id(profiles: &[&DeviceProfile], primary: &DeviceProfile) -
         .iter()
         .find(|profile| !is_transport_variant_profile_id(&profile.id))
         .map(|profile| profile.id.clone())
+        .or_else(|| {
+            profiles.iter().find_map(|profile| {
+                profile
+                    .identity
+                    .as_ref()
+                    .and_then(|identity| identity.device_id.as_deref())
+                    .map(str::to_string)
+            })
+        })
         .unwrap_or_else(|| primary.id.clone())
 }
 

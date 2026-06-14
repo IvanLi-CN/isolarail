@@ -1,17 +1,13 @@
 #![allow(dead_code)]
 
-use core::fmt::Write as _;
-
 use defmt::*;
-use embassy_futures::select::{Either, select};
+use embassy_futures::select::{select, Either};
 use embassy_net::{
-    IpAddress, IpEndpoint, Ipv4Address, Stack,
     udp::{PacketMetadata, RecvError, SendError, UdpSocket},
+    IpAddress, IpEndpoint, Ipv4Address, Stack,
 };
 use embassy_time::{Duration, Timer};
 use heapless::String;
-
-use crate::device_identity::{fqdn_from_hostname, hostname_from_short_id, short_id_from_mac};
 
 const MDNS_MULTICAST_V4: Ipv4Address = Ipv4Address::new(224, 0, 0, 251);
 const MDNS_PORT: u16 = 5353;
@@ -422,7 +418,7 @@ fn write_srv_record(
         return None;
     }
     buf[offset..offset + 2].copy_from_slice(&33u16.to_be_bytes()); // SRV
-    // CLASS IN with cache-flush bit.
+                                                                   // CLASS IN with cache-flush bit.
     buf[offset + 2] = 0x80;
     buf[offset + 3] = 0x01;
     buf[offset + 4..offset + 8].copy_from_slice(&MDNS_RESPONSE_TTL_SECS.to_be_bytes());
@@ -454,7 +450,7 @@ fn write_txt_record(buf: &mut [u8], offset: usize, name: &str, txt: &str) -> Opt
         return None;
     }
     buf[offset..offset + 2].copy_from_slice(&16u16.to_be_bytes()); // TXT
-    // CLASS IN with cache-flush bit.
+                                                                   // CLASS IN with cache-flush bit.
     buf[offset + 2] = 0x80;
     buf[offset + 3] = 0x01;
     buf[offset + 4..offset + 8].copy_from_slice(&MDNS_RESPONSE_TTL_SECS.to_be_bytes());
@@ -499,7 +495,7 @@ fn encode_dotted_name(buf: &mut [u8], mut offset: usize, name: &str) -> Option<u
         return None;
     }
     for label in name.split('.') {
-        let len = label.as_bytes().len();
+        let len = label.len();
         if len == 0 || len > 63 || offset + 1 + len > buf.len() {
             return None;
         }

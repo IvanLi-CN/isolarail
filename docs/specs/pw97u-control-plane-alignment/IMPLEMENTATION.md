@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 本轮接手复核后，控制面对齐已达到 `部分完成（3/4）`：M1/M2/M3 的代码与文档主体已落地，M4 仍需完成最终文档/review-proof/本地提交收口。
+- 控制面对齐已推进到 PR-ready 实现状态：固件 Wi-Fi runtime、Local USB / LAN profile coalescing、Web canonical route、Dashboard 控件交互与本地验证均已收口。
 - 新建规格并冻结 `isohub` 命名空间、`port1..port4` 端口模型、当前 V3 硬件基线命名与 `replug=power-cycle` 语义。
 - 规格已补齐仓内一方软件包清单：root firmware `iso-usb-hub`、repo JS tooling `isohub-dev-tools`、frontend package `web`、companion package/binaries、`gc9d01` 与 `tools/` 下的本地预览/资源转换 crate。
 - 规格已补上 manifest coverage audit：当前仓内全部 `Cargo.toml` / `package.json` 都已被 `Software Package Matrix` 明确覆盖，`tools/firmware-catalog/` 被记录为 script-only 目录而非独立 package。
@@ -25,17 +25,24 @@
 - 固件已新增共享 `runtime_control` 层，把四路 `port.power_set` / `port.replug` / Wi‑Fi runtime snapshot 更新与 replug holdoff tick 收口为可复用 helper；当前 USB JSONL 已复用这套动作语义，后续 HTTP transport 只需搬运 `ApiPendingAction`，不再重复实现一套端口控制状态机。
 - 活动 USB JSONL `wifi.get` 已进一步对齐 companion/web 的实际消费形状：现在会返回 EEPROM `storage="eeprom"`、`address="0x50"`、已保存的 `ssid`、`psk_configured` 与运行态 `state/ipv4/is_static`，不再让 Wi‑Fi 读取路径停留在 `ssid/address` 永远缺失的半残状态。
 - Web 开发环境已改为通过 Vite 同源代理访问显式配置的本地 `isohub-devd web` origins；前端不再扫描 localhost 端口，配置应优先放 mDNS URL，再放 IP/localhost fallback。
-- web 设备页路由现已按 spec 收口到 `Dashboard / Settings / Info`：`/devices/:deviceId` 为 dashboard，`/devices/:deviceId/settings` 为 settings，`/devices/:deviceId/info` 为 info，同时保留 `/overview`、`/details` 与旧 `/hardware` 的兼容重定向，避免旧本地链接直接失效。
+- web 设备页路由现已按 spec 收口到 `Dashboard / Settings / Info`：`/devices/:deviceId` 为 dashboard，`/devices/:deviceId/settings` 为 settings，`/devices/:deviceId/info` 为 info。非法 profile-suffixed 路径（例如把 internal `--usb` storage id 放进 URL）不做兼容重定向；Web storage 必须对外返回 canonical hardware id。
+- Web runtime 在 `wifi.get` / `wifi.set` 回读到 connected IPv4 时会刷新设备列表并补齐 LAN 通道；页面 URL 始终使用 canonical hardware id。
+- Web Dashboard 端口卡片已把电源状态和电源操作组合为同一个控制面：待命时用成熟图标库 `lucide-react` 表示电源/重插，power/replug 操作期间切换为 spinning 图标，且 pending 状态保持到 API 回显匹配目标状态。
 - companion 实现应以本项目命名 `isohub-devd` / `isohub` 为目标；当前 owner-facing 门户是 `isohub` CLI，`devd` 只承担后台单例；参考项目 `isolapurr` 仅用于架构对齐，不进入本项目 owner-facing 命名。
 - companion workspace 需要与仓根 Xtensa 固件配置隔离，避免本地 CLI / daemon 构建继承固件 target/toolchain。
 - companion Local USB 路径现已支持显式单端口约束：repo-root `just` 会把 `USB_PORT` 透传为 `ISOHUB_USB_PORT`，`list_serial_ports()` 与实际串口打开 / flash 路径都会拒绝 allowlist 之外的设备，避免开发期误碰其他硬件。
 - companion CLI 现已补上 Wi-Fi 写操作门禁：`wifi set` / `wifi clear` 仅接受 `--device` 或 USB-backed `--hardware`，`--url` 与 Wi-Fi/LAN saved hardware 在 CLI 中保持只读，避免绕过 spec 的 USB-capable 写策略。
+- companion `wifi.set` / `wifi.clear` 现在会等待设备回读确认；`wifi.set` 只有读回期望 SSID 才返回保存成功，`wifi.clear` 只有读回 unconfigured 才返回清除成功。
+- companion storage 现在以 firmware identity 的 `device_id` 作为 Web-visible hardware id，把 HTTP/LAN profile 与 Local USB profile 合并成同一个 canonical 设备；internal `--usb` 只保留在 storage/transport 层，不进入 URL。
+- companion 在 USB Wi-Fi 状态读到 `state=connected` 与 IPv4 后，会自动写入或刷新同一 hardware id 的 HTTP profile；清除 Wi-Fi 时只删除对应 HTTP profile，保留 Local USB profile。
 - companion daemon 现已为普通 Local USB JSONL 请求增加每串口互斥，避免 `status` / `ports` / `wifi` / `monitor` / `diagnostics export` 并发争抢同一 CDC 设备时出现空 IPC 响应或底层串口 `busy` 噪声。
 - `isohub` CLI 的 devd auto-start 现已增加 endpoint-scoped start gate：多个 CLI 进程同时发现 daemon 不存在时，只允许一个进程真正启动 `isohub-devd serve`，其余进程等待同一 IPC endpoint 就绪，避免并发自启把同一 USB 口拖入额外的 `device busy` 竞争。
 - HIL 复测发现默认 IPC socket 处于拒绝连接或刚关闭空响应时，CLI 仍可能直接失败；现已把 `connect IPC`、`Connection refused` 与 `IPC daemon closed the connection without a response` 统一归入 transient IPC 错误并走 auto-start / wait retry 路径，指定 USB 设备上的并发 `status` / `ports` / `wifi-show` / `monitor` 已复测通过。
 - `diagnostics export` 现已改为 companion 聚合导出：返回当前 `status`、`ports`、`wifi`、设备 transport 元数据与近期 serial session traces，不再依赖固件侧尚未实现的 `pd.diagnostics` 专用方法。
 - 根仓的共享 contract 测试路径已完成第一轮隔离：`heapless` 保留在通用依赖中，`esp-hal` / `embassy` / `gc9d01` 等固件专用依赖收口到 Xtensa 目标依赖，`build.ref.rs` 仅在嵌入式目标下注入 linker 错误处理参数，`just firmware-contract-test` 现在通过 native stable toolchain 运行共享 `device_identity` / `device_contract` / `http_api_v1` 单元测试。
-- 当前固件网络底座仍处于版本收敛中：`esp-hal-embassy` / `esp-radio` / `esp-hal` 组合需要继续对齐后，`src/net*` 才能真正接入四路 `isohub` HTTP/Wi‑Fi 契约。现有 `src/net.rs` / `src/net/http.rs` / `src/net/http_response.rs` 仍保留旧双口 `port_a` / `port_c`、USB-C route、`tps-sw` 语义，尚未接入主固件，也不得视为本 spec 已完成的实现证据；`src/net.rs` 现在已显式标记为 legacy skeleton，防止后续实现误把它当成当前产品模型。
+- 固件已接入 ESP32-S3 Wi-Fi runtime：设备启动时从 `M24C64@0x50` 加载凭据，`wifi.set` / `wifi.clear` 后会触发 runtime apply，HTTP/mDNS 只在 Wi-Fi runtime 拿到有效 IPv4 后作为 LAN 通道出现。
+- 固件 Wi-Fi EEPROM 访问已按 V3 硬件路由走 `hub_bus`，并在启动时配置 `ROM_WC=GPIO37-low`、`ROM_ROUTE=GPIO38-high`，避免把 Wi-Fi profile 写到错误 I2C 控制器路径。
+- USB JSONL frame parser 已改为只在 JSON frame 内累计输入，忽略 defmt/串口噪声，避免二进制日志污染 companion 请求响应。
 
 ## 当前验证证据
 
@@ -51,6 +58,20 @@
 - `just firmware-contract-test`
 - `cargo +esp check`
 - `cargo +esp build --release`
+- `source ~/export-esp.sh && cargo check`
+- `source ~/export-esp.sh && cargo build --release`
+- `source ~/export-esp.sh && cargo +esp fmt --all -- --check`
+- `source ~/export-esp.sh && cargo +esp clippy --bin iso-usb-hub -- -D warnings`
+- `cargo check --target aarch64-apple-darwin`（`tools/isohub-companion`）
+- `cargo test --target aarch64-apple-darwin web_storage -- --nocapture`（`tools/isohub-companion`）
+- `cargo test --target aarch64-apple-darwin delete_http_profile_keeps_usb_profile -- --nocapture`（`tools/isohub-companion`）
+- `cargo test --target aarch64-apple-darwin matches_wifi_set_verification_shape -- --nocapture`（`tools/isohub-companion`）
+- `npm run check`（`web`）
+- `npm run build`（`web`）
+- `bun test ./src`（`web`）
+- `npm run build-storybook`（`web`）
+- `git diff --check`
+- Chrome / Web runtime smoke：`/devices/f1fb44/info` 使用 canonical URL，页面链接不再包含 `--usb`，USB-only profile 不再进入 `Device not found`。
 - `just web-test-companion-bridge`
 - `just web-test-unit`
 - `just web-build`
@@ -74,6 +95,5 @@
 
 ## 待完成
 
-- 最终文档收口：确认 README / INSTALL / software / hardware docs 与 `pw97u` 命名真相一致。
-- Review-proof 收口：复查 diff、排除生成物、准备本地提交。
-- 后续实现项：`src/net*` 仍是未接入的 legacy dual-port skeleton；正式 Wi-Fi/LAN transport 接入需继续以 `device_contract` / `http_api_v1` / `runtime_control` 为唯一契约来源。
+- 后续实现项：`src/net*` 中旧双口 skeleton 已被当前 `network_runtime` 路径替代为活动实现；若继续清理 legacy 文件，应单独做删除/迁移任务并保持 `device_contract` / `http_api_v1` / `runtime_control` 为唯一契约来源。
+- 后续产品化项：LAN bind、远程 token 暴露策略、PR 图片入库与发布文档仍需单独授权。

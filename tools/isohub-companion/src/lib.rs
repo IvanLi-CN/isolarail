@@ -628,6 +628,139 @@ struct ErrorInfo {
     retryable: bool,
 }
 
+async fn verify_wifi_after_set_timeout(
+    state: &AppState,
+    id: &str,
+    expected_ssid: &str,
+) -> anyhow::Result<Value> {
+    let mut last_error = None;
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        match usb_jsonl_request(state, id, "wifi.get", None).await {
+            Ok(mut value) => {
+                if wifi_matches_expected_ssid(&value, expected_ssid) {
+                    if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
+                        result.insert("verified_after_serial_timeout".to_string(), json!(true));
+                    }
+                    return Ok(value);
+                }
+                last_error = Some(anyhow!("Wi-Fi settings did not report expected SSID yet"));
+            }
+            Err(err) => last_error = Some(err),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("Wi-Fi set did not verify after serial timeout")))
+}
+
+async fn verify_wifi_after_clear_timeout(state: &AppState, id: &str) -> anyhow::Result<Value> {
+    let mut last_error = None;
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        match usb_jsonl_request(state, id, "wifi.get", None).await {
+            Ok(mut value) => {
+                if wifi_reports_unconfigured(&value) {
+                    if let Some(result) = value.get_mut("result").and_then(Value::as_object_mut) {
+                        result.insert("verified_after_serial_timeout".to_string(), json!(true));
+                    }
+                    return Ok(value);
+                }
+                last_error = Some(anyhow!("Wi-Fi settings still report configured credentials"));
+            }
+            Err(err) => last_error = Some(err),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("Wi-Fi clear did not verify after serial timeout")))
+}
+
+fn wifi_matches_expected_ssid(value: &Value, expected_ssid: &str) -> bool {
+    let wifi = value.get("result").unwrap_or(value);
+    wifi.get("configured").and_then(Value::as_bool) == Some(true)
+        && wifi.get("ssid").and_then(Value::as_str) == Some(expected_ssid)
+}
+
+fn wifi_reports_unconfigured(value: &Value) -> bool {
+    let wifi = value.get("result").unwrap_or(value);
+    wifi.get("configured").and_then(Value::as_bool) == Some(false)
+        && wifi.get("ssid").and_then(Value::as_str).is_none()
+}
+
+fn connected_wifi_ipv4(value: &Value) -> Option<&str> {
+    let wifi = value.get("result").unwrap_or(value);
+    if wifi.get("state").and_then(Value::as_str) != Some("connected") {
+        return None;
+    }
+    wifi.get("ipv4")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "0.0.0.0")
+}
+
+async fn update_http_profile_from_usb_wifi(
+    state: &AppState,
+    usb_device_id: &str,
+    wifi_value: &Value,
+) -> anyhow::Result<Option<DeviceProfile>> {
+    let Some(ipv4) = connected_wifi_ipv4(wifi_value) else {
+        return Ok(None);
+    };
+
+    let status = require_compatible_project_firmware(state, usb_device_id).await?;
+    let device = status
+        .get("result")
+        .and_then(|result| result.get("device"))
+        .or_else(|| status.get("device"))
+        .ok_or_else(|| anyhow!("device status did not include identity"))?;
+    let hardware_id = device
+        .get("device_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow!("device status did not include device_id"))?;
+    let name = device
+        .get("hostname")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(hardware_id);
+    let identity = DeviceIdentity {
+        device_id: Some(hardware_id.to_string()),
+        mac: device
+            .get("mac")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+    };
+    let profile = save_hardware(SavedHardwareInput {
+        id: hardware_id.to_string(),
+        name: name.to_string(),
+        transport: HardwareTransport::Http {
+            base_url: format!("http://{ipv4}"),
+        },
+        identity: Some(identity),
+    })?;
+    Ok(Some(profile))
+}
+
+async fn delete_http_profile_for_usb_device(
+    state: &AppState,
+    usb_device_id: &str,
+) -> anyhow::Result<bool> {
+    let status = require_compatible_project_firmware(state, usb_device_id).await?;
+    let device = status
+        .get("result")
+        .and_then(|result| result.get("device"))
+        .or_else(|| status.get("device"))
+        .ok_or_else(|| anyhow!("device status did not include identity"))?;
+    let hardware_id = device
+        .get("device_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow!("device status did not include device_id"))?;
+    delete_hardware_http_profile(hardware_id)
+}
+
 include!("lib/ipc.rs");
 include!("lib/http_bridge.rs");
 
@@ -876,6 +1009,35 @@ mod tests {
     }
 
     #[test]
+    fn web_storage_uses_identity_id_for_usb_only_profile() {
+        let registry = HardwareRegistry {
+            schema_version: STORAGE_SCHEMA_VERSION,
+            devices: vec![DeviceProfile {
+                id: "f1fb44--usb".to_string(),
+                name: "isohub-f1fb44".to_string(),
+                transport: HardwareTransport::Usb {
+                    device_id: "usb--dev-cu-usbmodem21234101".to_string(),
+                    devd_url: None,
+                },
+                identity: Some(DeviceIdentity {
+                    device_id: Some("f1fb44".to_string()),
+                    mac: None,
+                }),
+                last_seen_at: Some(11),
+            }],
+        };
+
+        let devices = web_storage_devices(&registry);
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0]["id"], "f1fb44");
+        assert_eq!(
+            devices[0]["transports"]["localUsbDeviceId"],
+            "usb--dev-cu-usbmodem21234101"
+        );
+    }
+
+    #[test]
     fn web_storage_save_input_preserves_explicit_transports() {
         let profiles = parse_storage_save_input(json!({
             "device": {
@@ -908,6 +1070,52 @@ mod tests {
                 .and_then(|identity| identity.device_id.as_deref()),
             Some("f1fb44")
         );
+    }
+
+    #[test]
+    fn delete_http_profile_keeps_usb_profile() {
+        let mut registry = HardwareRegistry {
+            schema_version: STORAGE_SCHEMA_VERSION,
+            devices: vec![
+                DeviceProfile {
+                    id: "f1fb44".to_string(),
+                    name: "isohub-f1fb44".to_string(),
+                    transport: HardwareTransport::Http {
+                        base_url: "http://192.0.2.10".to_string(),
+                    },
+                    identity: Some(DeviceIdentity {
+                        device_id: Some("f1fb44".to_string()),
+                        mac: None,
+                    }),
+                    last_seen_at: Some(10),
+                },
+                DeviceProfile {
+                    id: "f1fb44--usb".to_string(),
+                    name: "isohub-f1fb44".to_string(),
+                    transport: HardwareTransport::Usb {
+                        device_id: "usb--dev-cu-usbmodem21234101".to_string(),
+                        devd_url: None,
+                    },
+                    identity: Some(DeviceIdentity {
+                        device_id: Some("f1fb44".to_string()),
+                        mac: None,
+                    }),
+                    last_seen_at: Some(11),
+                },
+            ],
+        };
+
+        assert!(delete_hardware_http_profile_from_registry(
+            &mut registry,
+            "f1fb44"
+        ));
+
+        assert_eq!(registry.devices.len(), 1);
+        assert_eq!(registry.devices[0].id, "f1fb44--usb");
+        assert!(matches!(
+            registry.devices[0].transport,
+            HardwareTransport::Usb { .. }
+        ));
     }
 
     #[test]
@@ -1065,11 +1273,11 @@ mod tests {
             "ok": true,
             "result": {
                 "configured": true,
-                "ssid": "Ivan",
+                "ssid": "TestNet",
                 "state": "connected"
             }
         });
-        assert!(wifi_matches_expected_ssid(&value, "Ivan"));
+        assert!(wifi_matches_expected_ssid(&value, "TestNet"));
         assert!(!wifi_matches_expected_ssid(&value, "Other"));
     }
 

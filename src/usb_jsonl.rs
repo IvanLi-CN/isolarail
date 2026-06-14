@@ -49,32 +49,56 @@ pub enum UsbAction {
 
 pub struct UsbJsonlState<const N: usize> {
     buffer: Vec<u8, N>,
+    in_frame: bool,
 }
 
 impl<const N: usize> UsbJsonlState<N> {
     pub const fn new() -> Self {
-        Self { buffer: Vec::new() }
+        Self {
+            buffer: Vec::new(),
+            in_frame: false,
+        }
     }
 
     pub fn push_byte(&mut self, byte: u8) -> Result<Option<String<N>>, ProtocolError> {
         match byte {
             b'\n' => {
-                if self.buffer.is_empty() {
+                if !self.in_frame || self.buffer.is_empty() {
+                    self.buffer.clear();
+                    self.in_frame = false;
                     return Ok(None);
                 }
                 let mut line = String::<N>::new();
-                let text = core::str::from_utf8(self.buffer.as_slice())
-                    .map_err(|_| ProtocolError::InvalidJson)?;
-                line.push_str(text)
-                    .map_err(|_| ProtocolError::FrameTooLarge)?;
+                let text = match core::str::from_utf8(self.buffer.as_slice()) {
+                    Ok(text) => text,
+                    Err(_) => {
+                        self.buffer.clear();
+                        self.in_frame = false;
+                        return Err(ProtocolError::InvalidJson);
+                    }
+                };
+                if line.push_str(text).is_err() {
+                    self.buffer.clear();
+                    self.in_frame = false;
+                    return Err(ProtocolError::FrameTooLarge);
+                }
                 self.buffer.clear();
+                self.in_frame = false;
                 Ok(Some(line))
             }
             b'\r' => Ok(None),
             other => {
-                self.buffer
-                    .push(other)
-                    .map_err(|_| ProtocolError::FrameTooLarge)?;
+                if !self.in_frame {
+                    if other != b'{' {
+                        return Ok(None);
+                    }
+                    self.in_frame = true;
+                }
+                if self.buffer.push(other).is_err() {
+                    self.buffer.clear();
+                    self.in_frame = false;
+                    return Err(ProtocolError::FrameTooLarge);
+                }
                 Ok(None)
             }
         }

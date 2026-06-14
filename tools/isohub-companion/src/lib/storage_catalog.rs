@@ -104,6 +104,21 @@ fn delete_hardware(id: &str) -> anyhow::Result<bool> {
     Ok(before != registry.devices.len())
 }
 
+fn delete_hardware_http_profile(id: &str) -> anyhow::Result<bool> {
+    let mut registry = read_hardware_registry()?;
+    let deleted = delete_hardware_http_profile_from_registry(&mut registry, id);
+    write_hardware_registry(&registry)?;
+    Ok(deleted)
+}
+
+fn delete_hardware_http_profile_from_registry(registry: &mut HardwareRegistry, id: &str) -> bool {
+    let before = registry.devices.len();
+    registry.devices.retain(|device| {
+        !(device.id == id && matches!(device.transport, HardwareTransport::Http { .. }))
+    });
+    before != registry.devices.len()
+}
+
 fn import_profiles(profiles: Vec<DeviceProfile>) -> anyhow::Result<usize> {
     let mut registry = read_hardware_registry()?;
     let mut count = 0;

@@ -1,3 +1,4 @@
+import { Circle, LoaderCircle, Power, RotateCw, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { PortCardProps } from "./types";
 
@@ -38,40 +39,6 @@ function formatValue(value: number | null, unit: "V" | "A" | "W"): string {
     return `--.-${unit}`;
   }
   return `${(value / 1000).toFixed(2)}${unit}`;
-}
-
-function PortStateSummary({
-  powerEnabled,
-  replugging,
-}: {
-  powerEnabled: boolean;
-  replugging: boolean;
-}) {
-  const items = [
-    {
-      label: powerEnabled ? "Power on" : "Power off",
-      active: powerEnabled,
-    },
-    ...(replugging ? [{ label: "Replugging", active: false }] : []),
-  ];
-
-  return (
-    <div className="grid h-7 grid-cols-1 gap-2">
-      {items.map((item) => (
-        <div
-          className={[
-            "flex min-w-0 items-center justify-center rounded-[8px] px-2 text-[11px] font-bold",
-            item.active
-              ? "bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]"
-              : "bg-[var(--btn-disabled-fill-soft)] text-[var(--muted)]",
-          ].join(" ")}
-          key={item.label}
-        >
-          <span className="truncate">{item.label}</span>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function ConfirmPopover({
@@ -147,17 +114,44 @@ export function PortCard({
   telemetry,
   state,
   disabled,
+  powerPending = false,
   onTogglePower,
   onReplug,
 }: PortCardProps) {
   const [confirmOffOpen, setConfirmOffOpen] = useState(false);
+  const [powerPulse, setPowerPulse] = useState(false);
+  const [replugPulse, setReplugPulse] = useState(false);
   const busy = state.busy;
   const actionDisabled = !!disabled || busy;
   const badge = statusBadgeStyles(telemetry.status);
+  const powerEnabled = state.power_enabled;
+  const powerAnimating = powerPulse || powerPending;
+
+  const triggerPowerToggle = () => {
+    setPowerPulse(false);
+    window.requestAnimationFrame(() => setPowerPulse(true));
+    onTogglePower();
+  };
+
+  useEffect(() => {
+    if (!replugPulse) {
+      return;
+    }
+    const id = window.setTimeout(() => setReplugPulse(false), 280);
+    return () => window.clearTimeout(id);
+  }, [replugPulse]);
+
+  useEffect(() => {
+    if (!powerPulse) {
+      return;
+    }
+    const id = window.setTimeout(() => setPowerPulse(false), 280);
+    return () => window.clearTimeout(id);
+  }, [powerPulse]);
 
   return (
     <div
-      className="iso-card relative flex h-full min-h-[236px] flex-col rounded-[18px] bg-[var(--panel)] p-6 shadow-[inset_0_0_0_1px_var(--border)]"
+      className="iso-card relative flex h-full min-h-[248px] flex-col rounded-[18px] bg-[var(--panel)] p-6 shadow-[inset_0_0_0_1px_var(--border)]"
       data-testid={`port-card-${portId}`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -174,17 +168,7 @@ export function PortCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-3">
-        <div className="text-[12px] font-semibold text-[var(--muted)]">
-          State
-        </div>
-        <PortStateSummary
-          powerEnabled={state.power_enabled}
-          replugging={state.replugging}
-        />
-      </div>
-
-      <div className="mt-5 grid grid-cols-3 gap-6 sm:gap-10">
+      <div className="mt-7 grid grid-cols-3 gap-6 sm:gap-10">
         <div>
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Voltage
@@ -211,17 +195,24 @@ export function PortCard({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:w-auto">
+      <div className="mt-7 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1 sm:max-w-[252px]">
           <button
             className={[
-              "flex h-10 w-full items-center justify-center rounded-[10px] text-[12px] font-bold sm:w-[132px]",
+              "group flex h-12 w-full items-center gap-3 rounded-[12px] border px-3 text-left transition-colors duration-150",
               actionDisabled
-                ? "bg-[var(--btn-disabled-fill)] text-[var(--btn-disabled-text)]"
-                : "bg-[var(--primary)] text-[var(--primary-text)]",
+                ? "border-[var(--border)] bg-[var(--btn-disabled-fill)] text-[var(--btn-disabled-text)]"
+                : powerEnabled
+                  ? "border-[var(--badge-success-bg)] bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]"
+                  : "border-[var(--border)] bg-[var(--btn-disabled-fill-soft)] text-[var(--muted)]",
+              powerPulse ? "iso-control-pulse" : "",
             ].join(" ")}
             type="button"
             disabled={actionDisabled}
+            aria-label={
+              powerEnabled ? "Power on, turn off" : "Power off, turn on"
+            }
+            title={powerEnabled ? "Turn power off" : "Turn power on"}
             onClick={() => {
               if (actionDisabled) {
                 return;
@@ -230,30 +221,111 @@ export function PortCard({
                 setConfirmOffOpen(true);
                 return;
               }
-              onTogglePower();
+              triggerPowerToggle();
             }}
           >
-            Power
+            <span
+              className={[
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+                powerEnabled
+                  ? "border-[var(--badge-success-text)] bg-[var(--badge-success-text)] text-[var(--panel)]"
+                  : "border-[var(--power-track-off)] bg-[var(--btn-disabled-fill-soft)] text-[var(--muted)]",
+              ].join(" ")}
+              aria-hidden
+            >
+              {powerAnimating ? (
+                <LoaderCircle
+                  className="iso-control-spin"
+                  size={15}
+                  strokeWidth={2.4}
+                />
+              ) : (
+                <Power size={15} strokeWidth={2.4} />
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                {powerEnabled ? (
+                  <Zap size={13} strokeWidth={2.2} aria-hidden />
+                ) : (
+                  <Circle size={12} strokeWidth={2.2} aria-hidden />
+                )}
+                <span className="text-[11px] font-extrabold tracking-[0.08em]">
+                  {powerEnabled ? "ON" : "OFF"}
+                </span>
+              </span>
+              <span
+                className={[
+                  "mt-[2px] block h-1 w-full max-w-[92px] rounded-full",
+                  powerEnabled
+                    ? "bg-[var(--badge-success-text)]"
+                    : "bg-[var(--power-track-off)]",
+                ].join(" ")}
+                aria-hidden
+              />
+            </span>
+            <span
+              className={[
+                "flex h-7 min-w-[54px] items-center justify-center rounded-[8px] px-2 text-[10px] font-bold",
+                actionDisabled
+                  ? "bg-[var(--btn-disabled-fill-soft)]"
+                  : powerEnabled
+                    ? "bg-[var(--panel)] text-[var(--badge-success-text)]"
+                    : "bg-[var(--panel)] text-[var(--text)]",
+              ].join(" ")}
+            >
+              {powerEnabled ? "Cut" : "Restore"}
+            </span>
           </button>
           <ConfirmPopover
             open={confirmOffOpen}
             onClose={() => setConfirmOffOpen(false)}
-            onConfirm={onTogglePower}
+            onConfirm={triggerPowerToggle}
           />
         </div>
         <button
           className={[
-            "flex h-10 w-full items-center justify-center rounded-[10px] border border-[var(--border)] text-[12px] font-bold sm:w-[140px]",
+            "flex h-12 w-full items-center justify-center gap-2 rounded-[12px] border text-[12px] font-bold transition-colors duration-150 sm:w-[112px]",
             actionDisabled
-              ? "bg-[var(--btn-disabled-fill-soft)] text-[var(--btn-disabled-text)]"
-              : "bg-transparent text-[var(--text)]",
+              ? "border-[var(--border)] bg-[var(--btn-disabled-fill-soft)] text-[var(--btn-disabled-text)]"
+              : state.replugging
+                ? "border-[var(--primary)] bg-[var(--btn-disabled-fill-soft)] text-[var(--primary)]"
+                : "border-[var(--border)] bg-transparent text-[var(--text)]",
+            replugPulse ? "iso-control-pulse" : "",
           ].join(" ")}
           type="button"
           disabled={actionDisabled}
-          onClick={onReplug}
+          onClick={() => {
+            if (actionDisabled) {
+              return;
+            }
+            setReplugPulse(false);
+            window.requestAnimationFrame(() => setReplugPulse(true));
+            onReplug();
+          }}
+          title="Replug USB data path"
         >
+          <RotateCw
+            className={
+              state.replugging || replugPulse ? "iso-control-spin" : undefined
+            }
+            size={14}
+            strokeWidth={2.2}
+            aria-hidden
+          />
           Replug
         </button>
+        {state.replugging ? (
+          <div className="flex h-8 items-center gap-2 rounded-full bg-[var(--btn-disabled-fill-soft)] px-3 text-[11px] font-bold text-[var(--muted)]">
+            <RotateCw
+              className="iso-control-spin"
+              size={12}
+              strokeWidth={2.2}
+              aria-hidden
+            />
+            Replugging
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -245,23 +245,29 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
           label: portLabel(portId),
           telemetry: telemetry(portId),
           state: state(portId),
+          pending: isOnline ? pending(portId) : false,
         },
       ]),
     ) as Record<
       CanonicalPortId,
-      { label: string; telemetry: PortTelemetry; state: PortState }
+      {
+        label: string;
+        telemetry: PortTelemetry;
+        state: PortState;
+        pending: boolean;
+      }
     >;
   }, [connectionState, device.id, runtime]);
 
   return (
     <div className="flex flex-col gap-6" data-testid="device-dashboard">
-      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)] sm:min-h-[116px]">
-        <div className="grid grid-cols-1 gap-y-[10px] leading-4 sm:grid-cols-2 sm:gap-x-6">
-          <div className="flex min-w-0 items-center">
-            <div className="w-[54px] text-[12px] font-semibold text-[var(--muted)]">
+      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+        <div className="grid grid-cols-1 gap-5 leading-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start">
+          <div className="grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
+            <div className="pt-[6px] text-[12px] font-semibold text-[var(--muted)]">
               Status
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4">
               <div
                 className={[
                   "flex h-[26px] items-center justify-center rounded-full",
@@ -308,27 +314,27 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
               </div>
             </div>
           </div>
-          <div className="flex min-w-0 items-center">
-            <div className="w-12 text-[12px] font-semibold text-[var(--muted)]">
+
+          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-x-4 gap-y-3">
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
               Build
             </div>
             <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
               {buildSha}
             </div>
-          </div>
-          <div className="flex items-center">
-            <div className="w-[54px] text-[12px] font-semibold text-[var(--muted)]">
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
               Last ok
             </div>
             <div className="font-mono text-[12px] font-semibold">
               {headerLastOk}
             </div>
-          </div>
-          <div className="flex min-w-0 items-center">
-            <div className="w-12 text-[12px] font-semibold text-[var(--muted)]">
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
               Notes
             </div>
-            <div className="min-w-0 truncate text-[12px] font-semibold">
+            <div
+              className="min-w-0 truncate text-[12px] font-semibold"
+              title={notes}
+            >
               {notes}
             </div>
           </div>
@@ -344,6 +350,7 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
             telemetry={items[portId].telemetry}
             state={items[portId].state}
             disabled={writeDisabled}
+            powerPending={items[portId].pending}
             onTogglePower={() =>
               void runtime.setPower(
                 device.id,

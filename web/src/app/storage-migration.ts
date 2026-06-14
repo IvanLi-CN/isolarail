@@ -26,10 +26,35 @@ function parseStoredDevice(value: unknown): StoredDevice | null {
     return null;
   }
   const normalized = normalizeBaseUrl(record.baseUrl);
+  const transports =
+    record.transports && typeof record.transports === "object"
+      ? (record.transports as Record<string, unknown>)
+      : null;
+  const httpBaseUrl =
+    typeof transports?.httpBaseUrl === "string"
+      ? normalizeBaseUrl(transports.httpBaseUrl)
+      : null;
   return {
     id: record.id,
     name: record.name,
     baseUrl: normalized.ok ? normalized.baseUrl : record.baseUrl,
+    transports: transports
+      ? {
+          httpBaseUrl: httpBaseUrl?.ok
+            ? httpBaseUrl.baseUrl
+            : typeof transports.httpBaseUrl === "string"
+              ? transports.httpBaseUrl
+              : undefined,
+          localUsbDeviceId:
+            typeof transports.localUsbDeviceId === "string"
+              ? transports.localUsbDeviceId
+              : undefined,
+          webSerialLabel:
+            typeof transports.webSerialLabel === "string"
+              ? transports.webSerialLabel
+              : undefined,
+        }
+      : undefined,
     lastSeenAt:
       typeof record.lastSeenAt === "string" ? record.lastSeenAt : undefined,
   };

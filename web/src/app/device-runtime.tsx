@@ -161,7 +161,7 @@ export function DeviceRuntimeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { devices, refreshDevices } = useDevices();
+  const { devices, persistDevice, refreshDevices } = useDevices();
   const { pushToast } = useToast();
   const [now, setNow] = useState(() => Date.now());
   const [runtimeById, setRuntimeById] = useState<Record<string, DeviceRuntime>>(
@@ -600,9 +600,20 @@ export function DeviceRuntimeProvider({
       if (!currentTransport) {
         preferredTransportByDevice.current[link.deviceId] = "http";
       }
+      const device = devices.find((d) => d.id === link.deviceId);
+      const previousHttp = device?.transports?.httpBaseUrl ?? device?.baseUrl;
+      if (device && previousHttp !== link.baseUrl) {
+        void persistDevice({
+          ...device,
+          transports: {
+            ...device.transports,
+            httpBaseUrl: link.baseUrl,
+          },
+        });
+      }
       void pollDevice(link.deviceId, link.baseUrl);
     });
-  }, [markChannelResult, pollDevice, runtimeById]);
+  }, [devices, markChannelResult, persistDevice, pollDevice, runtimeById]);
 
   useEffect(() => {
     let cancelled = false;

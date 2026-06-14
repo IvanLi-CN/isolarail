@@ -44,7 +44,7 @@ test("renders devices list and mock dashboard", async ({ page }) => {
   await expect(page.getByTestId("port-card-port4")).toBeVisible();
 });
 
-test("uses canonical hardware/info device routes", async ({ page }) => {
+test("uses canonical settings/info device routes", async ({ page }) => {
   const storageKey = "isohub.devices";
   const device = {
     id: "demo",
@@ -64,9 +64,9 @@ test("uses canonical hardware/info device routes", async ({ page }) => {
   await page.goto("/devices/demo");
   await expect(page.getByTestId("device-tabs")).toBeVisible();
 
-  await page.getByRole("tab", { name: "Hardware" }).click();
-  await expect(page).toHaveURL(/\/devices\/demo\/hardware$/);
-  await expect(page.getByTestId("device-hardware-page")).toBeVisible();
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/devices\/demo\/settings$/);
+  await expect(page.getByTestId("device-settings-page")).toBeVisible();
 
   await page.goto("/devices/demo/details");
   await expect(page).toHaveURL(/\/devices\/demo\/info$/);

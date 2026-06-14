@@ -351,7 +351,11 @@ async fn port_power(
     if let Err(err) = require_compatible_project_firmware(&state, &id).await {
         return error_from_anyhow(err);
     }
-    let enabled = matches!(query.get("enabled").map(String::as_str), Some("1" | "true"));
+    let enabled = match query.get("enabled").map(String::as_str) {
+        Some("1" | "true") => true,
+        Some("0" | "false") => false,
+        _ => return bad_request("enabled query must be one of 1, 0, true, false"),
+    };
     match usb_jsonl_request(
         &state,
         &id,

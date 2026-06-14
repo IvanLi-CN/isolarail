@@ -35,6 +35,7 @@ type DevicesContextValue = {
   devices: StoredDevice[];
   addDevice: (input: AddDeviceInput) => Promise<AddDeviceValidationResult>;
   upsertDevice: (input: AddDeviceInput) => Promise<AddDeviceValidationResult>;
+  persistDevice: (device: StoredDevice) => Promise<StoredDevice | null>;
   removeDevice: (deviceId: string) => Promise<void>;
   refreshDevices: () => Promise<void>;
   getDevice: (deviceId: string) => StoredDevice | undefined;
@@ -191,6 +192,13 @@ export function DevicesProvider({
       return { ok: true, device: res.value };
     };
 
+    const persistExistingDevice = async (
+      device: StoredDevice,
+    ): Promise<StoredDevice | null> => {
+      const res = await persistDevice(device);
+      return res.ok ? res.device : null;
+    };
+
     return {
       devices,
       addDevice: async (input) => {
@@ -228,6 +236,7 @@ export function DevicesProvider({
           transports: input.transports,
         });
       },
+      persistDevice: persistExistingDevice,
       removeDevice: async (deviceId) => {
         if (agent) {
           const res = await deleteStoredDevice(agent, deviceId);

@@ -796,7 +796,7 @@ export function DeviceInfoPanel({
           </>
         ) : (
           <div className="mt-5 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--muted)]">
-            Hardware changes are disabled on this page. Switch to Hardware to
+            Settings changes are disabled on this page. Switch to Settings to
             save credentials, clear EEPROM Wi-Fi state, or reboot after a Wi-Fi
             update.
           </div>
@@ -1083,7 +1083,7 @@ export function DeviceInfoPanel({
 
       <div className="text-[12px] font-semibold text-[var(--muted)]">
         {mode === "hardware"
-          ? "Hardware focuses on EEPROM-backed Wi-Fi provisioning, firmware flashing, and local maintenance."
+          ? "Settings focuses on EEPROM-backed Wi-Fi provisioning, firmware flashing, and local maintenance."
           : "Info summarizes firmware, connectivity, and saved-device metadata for this four-port hub."}
       </div>
     </div>

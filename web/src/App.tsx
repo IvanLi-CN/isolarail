@@ -68,7 +68,7 @@ function RootLayout() {
 function LegacyDeviceRouteRedirect({
   target,
 }: {
-  target: "dashboard" | "info";
+  target: "dashboard" | "info" | "settings";
 }) {
   const { deviceId } = useParams();
 
@@ -81,7 +81,7 @@ function LegacyDeviceRouteRedirect({
       to={
         target === "dashboard"
           ? `/devices/${deviceId}`
-          : `/devices/${deviceId}/info`
+          : `/devices/${deviceId}/${target}`
       }
       replace
     />
@@ -104,8 +104,12 @@ export default function App() {
                       element={<DeviceDashboardPage />}
                     />
                     <Route
-                      path="devices/:deviceId/hardware"
+                      path="devices/:deviceId/settings"
                       element={<DeviceInfoPage mode="hardware" />}
+                    />
+                    <Route
+                      path="devices/:deviceId/hardware"
+                      element={<LegacyDeviceRouteRedirect target="settings" />}
                     />
                     <Route
                       path="devices/:deviceId/info"

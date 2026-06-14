@@ -33,10 +33,10 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
               : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
           ].join(" ")
         }
-        to={`/devices/${deviceId}/hardware`}
+        to={`/devices/${deviceId}/settings`}
         role="tab"
       >
-        Hardware
+        Settings
       </NavLink>
       <NavLink
         className={({ isActive }) =>

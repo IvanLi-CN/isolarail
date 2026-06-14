@@ -6,7 +6,7 @@ React SPA (Vite + React + TypeScript) for the four-port IsoHub USB Hub control s
 
 - `/` — Dashboard (multi-device grid)
 - `/devices/:deviceId` — Device Dashboard
-- `/devices/:deviceId/hardware` — Device Hardware
+- `/devices/:deviceId/settings` — Device Settings
 - `/devices/:deviceId/info` — Device Info
 - `/about` — About
 

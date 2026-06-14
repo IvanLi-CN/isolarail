@@ -36,7 +36,7 @@ export function DeviceInfoPage({
   }
 
   const shortId = device.id.length > 6 ? device.id.slice(0, 6) : device.id;
-  const title = mode === "hardware" ? "Hardware" : "Info";
+  const title = mode === "hardware" ? "Settings" : "Info";
   const pageTestId =
     mode === "hardware" ? "device-hardware-page" : "device-info-page";
 

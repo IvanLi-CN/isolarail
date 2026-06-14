@@ -25,7 +25,7 @@
 - 固件已新增共享 `runtime_control` 层，把四路 `port.power_set` / `port.replug` / Wi‑Fi runtime snapshot 更新与 replug holdoff tick 收口为可复用 helper；当前 USB JSONL 已复用这套动作语义，后续 HTTP transport 只需搬运 `ApiPendingAction`，不再重复实现一套端口控制状态机。
 - 活动 USB JSONL `wifi.get` 已进一步对齐 companion/web 的实际消费形状：现在会返回 EEPROM `storage="eeprom"`、`address="0x50"`、已保存的 `ssid`、`psk_configured` 与运行态 `state/ipv4/is_static`，不再让 Wi‑Fi 读取路径停留在 `ssid/address` 永远缺失的半残状态。
 - Web 开发环境已改为通过 Vite 同源代理访问显式配置的本地 `isohub-devd web` origins；前端不再扫描 localhost 端口，配置应优先放 mDNS URL，再放 IP/localhost fallback。
-- web 设备页路由现已按 spec 收口到 `Dashboard / Hardware / Info`：`/devices/:deviceId` 为 dashboard，`/devices/:deviceId/hardware` 为 hardware，`/devices/:deviceId/info` 为 info，同时保留 `/overview` 与 `/details` 的兼容重定向，避免旧本地链接直接失效。
+- web 设备页路由现已按 spec 收口到 `Dashboard / Settings / Info`：`/devices/:deviceId` 为 dashboard，`/devices/:deviceId/settings` 为 settings，`/devices/:deviceId/info` 为 info，同时保留 `/overview`、`/details` 与旧 `/hardware` 的兼容重定向，避免旧本地链接直接失效。
 - companion 实现应以本项目命名 `isohub-devd` / `isohub` 为目标；当前 owner-facing 门户是 `isohub` CLI，`devd` 只承担后台单例；参考项目 `isolapurr` 仅用于架构对齐，不进入本项目 owner-facing 命名。
 - companion workspace 需要与仓根 Xtensa 固件配置隔离，避免本地 CLI / daemon 构建继承固件 target/toolchain。
 - companion Local USB 路径现已支持显式单端口约束：repo-root `just` 会把 `USB_PORT` 透传为 `ISOHUB_USB_PORT`，`list_serial_ports()` 与实际串口打开 / flash 路径都会拒绝 allowlist 之外的设备，避免开发期误碰其他硬件。

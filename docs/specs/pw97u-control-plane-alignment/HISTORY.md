@@ -27,7 +27,7 @@
 - 把 `gc9d01/examples/**` 的示例 manifest 明确归类为 vendored example package，并补充 `SC8815 + SW2303`、`PCA9545A INT/INTx`、`PSTOP_CTL/PSTOP`、`VIN_ADC`、scoped `RESET#` 等 legacy/scoped 名称的受限使用规则，避免它们漂移进 V3 owner-facing 控制面命名。
 - 为主 spec 增补 `Documentation Truth Boundary`，明确 `pw97u` 持有 owner-facing 命名真相，`j6nvw` 持有 V3 pin-level / display / reset 真相；随后将 `docs/hardware_connection_overview.md` 提升为当前 V3 硬件总览，并把 `docs/esp32-s3fh4r2_gpio_assignment_guide.md` 降级为历史 GPIO 参考。
 - 完成 Web 活动代码面第一轮命名迁移：`desktopAgent` / `desktopStorage` 替换为 `companionBridge` / `companionStorage`，`Justfile` 中的 companion bridge 单测入口与相关 stories/mock 数据同步改名。
-- 继续收口 web 设备页语义：`/devices/:deviceId`、`/hardware`、`/info` 现在分别对应 Dashboard / Hardware / Info，旧 `/overview` 与 `/details` 保留为兼容重定向；同时补上 `just web-test-e2e` 作为正式开发者入口。
+- 继续收口 web 设备页语义：`/devices/:deviceId`、`/settings`、`/info` 现在分别对应 Dashboard / Settings / Info，旧 `/overview`、`/details` 与 `/hardware` 保留为兼容重定向；同时补上 `just web-test-e2e` 作为正式开发者入口。
 - 修正活动设备契约中的 identity 漂移：固件 USB JSONL `wifi.get` 改为 `storage="eeprom"`，hostname / Storybook 示例统一为 `isohub-*`，活动固件 `device.variant` 统一为 `v3`。
 - 新增共享 `src/device_identity.rs`，把 `iso-usb-hub` / `isohub-<shortid>` / `v3` / MAC 文本格式化的活动固件真相收口到单一模块，并让 USB JSONL 与 mDNS 复用这套逻辑。
 - 新增共享 `src/device_contract.rs`，把活动四路 `info` / `ports` / `wifi` JSON 结果、canonical `port1..port4` 解析与 `state.overcurrent` 字段收口到单一模块，避免后续 HTTP/Wi-Fi 接入再从旧双口 skeleton 复制错误形状。

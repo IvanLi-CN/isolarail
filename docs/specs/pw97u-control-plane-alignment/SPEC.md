@@ -18,7 +18,7 @@
 
 - 设备端引入 `USB CDC JSONL + Wi-Fi/LAN HTTP + mDNS + EEPROM provisioning`。
 - 交付 `isohub-devd` 与 `isohub`，统一 Local USB、LAN discovery、flash/reset/monitor、browser bridge 与 shared profile storage，并明确当前 `isohub` CLI 才是 owner-facing 门户；若未来引入 desktop 程序，也必须复用同一 daemon 语义。
-- 交付 `web/` 三通道控制台，围绕四路 `port1..port4` 构建 Add device、Dashboard、Hardware、Info 工作流。
+- 交付 `web/` 三通道控制台，围绕四路 `port1..port4` 构建 Add device、Dashboard、Settings、Info 工作流。
 - 统一文档、构建、验证、视觉证据与 release 产物形状，收口到 `PR-ready`。
 
 ### Non-goals
@@ -267,7 +267,7 @@
 
 ### UI / Visual Evidence
 
-- `Add device`、`Device Dashboard`、`Device Hardware`、`Device Info` 至少提供一组桌面与窄屏视觉证据。
+- `Add device`、`Device Dashboard`、`Device Settings`、`Device Info` 至少提供一组桌面与窄屏视觉证据。
 - 最终效果图写入本 spec 的 `## Visual Evidence`。
 
 ## 文档更新

@@ -858,15 +858,23 @@ export function DeviceRuntimeProvider({
       }
 
       const label = portLabel(portId);
+      const transports = orderedTransports(deviceId).filter(
+        (transport) => transport === "web_serial" || transport === "local_usb",
+      );
+      if (transports.length === 0) {
+        pushToast({
+          message: `${device.name}: ${label} requires Web Serial or Local USB`,
+          variant: "warning",
+        });
+        return;
+      }
       setPending(deviceId, portId, true);
       try {
         let res: Result<{ accepted: true }> | null = null;
-        for (const transport of orderedTransports(deviceId)) {
+        for (const transport of transports) {
           const candidate = await requestTransport<{ accepted: true }>(
             deviceId,
-            transport === "http"
-              ? httpBaseUrlForDevice(device)
-              : device.baseUrl,
+            device.baseUrl,
             transport,
             "port.power_set",
             {
@@ -920,15 +928,23 @@ export function DeviceRuntimeProvider({
       }
 
       const label = portLabel(portId);
+      const transports = orderedTransports(deviceId).filter(
+        (transport) => transport === "web_serial" || transport === "local_usb",
+      );
+      if (transports.length === 0) {
+        pushToast({
+          message: `${device.name}: ${label} requires Web Serial or Local USB`,
+          variant: "warning",
+        });
+        return;
+      }
       setPending(deviceId, portId, true);
       try {
         let res: Result<{ accepted: true }> | null = null;
-        for (const transport of orderedTransports(deviceId)) {
+        for (const transport of transports) {
           const candidate = await requestTransport<{ accepted: true }>(
             deviceId,
-            transport === "http"
-              ? httpBaseUrlForDevice(device)
-              : device.baseUrl,
+            device.baseUrl,
             transport,
             "port.replug",
             {
@@ -994,9 +1010,7 @@ export function DeviceRuntimeProvider({
     const transport = (deviceId: string): DeviceTransport | null =>
       runtimeById[deviceId]?.transport ?? null;
 
-    const wifiManagementTransport = (
-      deviceId: string,
-    ): DeviceTransport | null => {
+    const usbWriteTransport = (deviceId: string): DeviceTransport | null => {
       const active = runtimeById[deviceId]?.transport ?? null;
       const stored = devices.find((device) => device.id === deviceId);
       if (active === "web_serial" || active === "local_usb") {
@@ -1014,6 +1028,8 @@ export function DeviceRuntimeProvider({
       }
       return null;
     };
+
+    const wifiManagementTransport = usbWriteTransport;
 
     const channelState = (
       deviceId: string,
@@ -1044,6 +1060,7 @@ export function DeviceRuntimeProvider({
       lastOkAt,
       lastErrorLabel,
       transport,
+      usbWriteTransport,
       wifiManagementTransport,
       channelState,
       hub,

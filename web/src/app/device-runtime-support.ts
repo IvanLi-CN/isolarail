@@ -40,6 +40,7 @@ export type DeviceRuntimeContextValue = {
   lastOkAt: (deviceId: string) => number | null;
   lastErrorLabel: (deviceId: string) => string | null;
   transport: (deviceId: string) => DeviceTransport | null;
+  usbWriteTransport: (deviceId: string) => DeviceTransport | null;
   wifiManagementTransport: (deviceId: string) => DeviceTransport | null;
   channelState: (
     deviceId: string,

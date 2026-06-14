@@ -219,7 +219,8 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
     runtime.lastErrorLabel(device.id) ??
     `Primary: ${transportLabel(transport)} · Wi-Fi ${shortChannelState(wifiState)} · Web Serial ${shortChannelState(webSerialState)} · Local USB ${shortChannelState(localUsbState)}`;
 
-  const writeDisabled = connectionState !== "online";
+  const writeDisabled =
+    connectionState !== "online" || !runtime.usbWriteTransport(device.id);
 
   const items = useMemo(() => {
     const isOnline = connectionState === "online";

@@ -5,8 +5,8 @@ use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
 use embassy_net::{
-    tcp::TcpSocket, Config as NetConfig, DhcpConfig, Ipv4Address, Ipv4Cidr, Stack, StackResources,
-    StaticConfigV4,
+    tcp::TcpSocket, Config as NetConfig, ConfigV4, DhcpConfig, Ipv4Address, Ipv4Cidr, Stack,
+    StackResources, StaticConfigV4,
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, signal::Signal};
 use embassy_time::{Duration, Timer};
@@ -145,9 +145,7 @@ async fn wifi_task(
         let Some(credentials) = active_credentials else {
             update_wifi_state(state, None, WifiState::Idle, None, false).await;
             WIFI_APPLY_SIGNAL.wait().await;
-            active_credentials = crate::wifi_credentials_cache().await;
-            let (_, next_is_static) = build_net_config(active_credentials.as_ref());
-            is_static = next_is_static;
+            (active_credentials, is_static) = reload_wifi_config(stack).await;
             continue;
         };
 
@@ -169,14 +167,14 @@ async fn wifi_task(
         if let Err(err) = controller.set_configuration(&conf) {
             warn!("network.wifi: set_configuration failed err={:?}", err);
             update_wifi_state(state, Some(&credentials), WifiState::Error, None, is_static).await;
-            wait_or_reload_credentials(&mut active_credentials, &mut is_static).await;
+            wait_or_reload_credentials(stack, &mut active_credentials, &mut is_static).await;
             continue;
         }
 
         if let Err(err) = controller.start_async().await {
             warn!("network.wifi: start failed err={:?}", err);
             update_wifi_state(state, Some(&credentials), WifiState::Error, None, is_static).await;
-            wait_or_reload_credentials(&mut active_credentials, &mut is_static).await;
+            wait_or_reload_credentials(stack, &mut active_credentials, &mut is_static).await;
             continue;
         }
 
@@ -192,9 +190,7 @@ async fn wifi_task(
                     match select(Timer::after(WIFI_DHCP_POLL), WIFI_APPLY_SIGNAL.wait()).await {
                         Either::First(()) => {}
                         Either::Second(()) => {
-                            active_credentials = crate::wifi_credentials_cache().await;
-                            let (_, next_is_static) = build_net_config(active_credentials.as_ref());
-                            is_static = next_is_static;
+                            (active_credentials, is_static) = reload_wifi_config(stack).await;
                             let _ = controller.disconnect_async().await;
                             let _ = controller.stop_async().await;
                             continue;
@@ -225,9 +221,7 @@ async fn wifi_task(
                             active_credentials = crate::wifi_credentials_cache().await;
                         }
                         Either::Second(()) => {
-                            active_credentials = crate::wifi_credentials_cache().await;
-                            let (_, next_is_static) = build_net_config(active_credentials.as_ref());
-                            is_static = next_is_static;
+                            (active_credentials, is_static) = reload_wifi_config(stack).await;
                             let _ = controller.disconnect_async().await;
                         }
                     }
@@ -238,7 +232,8 @@ async fn wifi_task(
                         .await;
                     let _ = controller.disconnect_async().await;
                     let _ = controller.stop_async().await;
-                    wait_or_reload_credentials(&mut active_credentials, &mut is_static).await;
+                    wait_or_reload_credentials(stack, &mut active_credentials, &mut is_static)
+                        .await;
                 }
             }
             Err(err) => {
@@ -246,13 +241,14 @@ async fn wifi_task(
                 update_wifi_state(state, Some(&credentials), WifiState::Error, None, is_static)
                     .await;
                 let _ = controller.stop_async().await;
-                wait_or_reload_credentials(&mut active_credentials, &mut is_static).await;
+                wait_or_reload_credentials(stack, &mut active_credentials, &mut is_static).await;
             }
         }
     }
 }
 
 async fn wait_or_reload_credentials(
+    stack: Stack<'static>,
     active_credentials: &mut Option<WifiCredentials>,
     is_static: &mut bool,
 ) {
@@ -264,10 +260,18 @@ async fn wait_or_reload_credentials(
     {
         Either::First(()) | Either::Second(()) => {
             *active_credentials = crate::wifi_credentials_cache().await;
-            let (_, next_is_static) = build_net_config(active_credentials.as_ref());
+            let (next_ipv4, next_is_static) = build_ipv4_config(active_credentials.as_ref());
+            stack.set_config_v4(next_ipv4);
             *is_static = next_is_static;
         }
     }
+}
+
+async fn reload_wifi_config(stack: Stack<'static>) -> (Option<WifiCredentials>, bool) {
+    let credentials = crate::wifi_credentials_cache().await;
+    let (ipv4, is_static) = build_ipv4_config(credentials.as_ref());
+    stack.set_config_v4(ipv4);
+    (credentials, is_static)
 }
 
 async fn update_wifi_state(
@@ -436,6 +440,16 @@ fn header_value<'a>(request: &'a str, key: &str) -> Option<&'a str> {
 }
 
 fn build_net_config(credentials: Option<&WifiCredentials>) -> (NetConfig, bool) {
+    let (ipv4, is_static) = build_ipv4_config(credentials);
+    let config = match ipv4 {
+        ConfigV4::Static(config) => NetConfig::ipv4_static(config),
+        ConfigV4::Dhcp(config) => NetConfig::dhcpv4(config),
+        ConfigV4::None => NetConfig::dhcpv4(DhcpConfig::default()),
+    };
+    (config, is_static)
+}
+
+fn build_ipv4_config(credentials: Option<&WifiCredentials>) -> (ConfigV4, bool) {
     if let Some(static_ipv4) = credentials.and_then(|credentials| credentials.static_ipv4()) {
         let address = Ipv4Address::new(
             static_ipv4.address[0],
@@ -461,7 +475,7 @@ fn build_net_config(credentials: Option<&WifiCredentials>) -> (NetConfig, bool) 
                 let _ = dns_servers.push(Ipv4Address::new(dns[0], dns[1], dns[2], dns[3]));
             }
             return (
-                NetConfig::ipv4_static(StaticConfigV4 {
+                ConfigV4::Static(StaticConfigV4 {
                     address: Ipv4Cidr::new(address, prefix),
                     gateway: Some(gateway),
                     dns_servers,
@@ -470,7 +484,7 @@ fn build_net_config(credentials: Option<&WifiCredentials>) -> (NetConfig, bool) 
             );
         }
     }
-    (NetConfig::dhcpv4(DhcpConfig::default()), false)
+    (ConfigV4::Dhcp(DhcpConfig::default()), false)
 }
 
 fn netmask_to_prefix(mask: Ipv4Address) -> Option<u8> {

@@ -299,6 +299,9 @@ async fn http_task(stack: Stack<'static>) {
         socket.set_timeout(Some(embassy_time_net::Duration::from_secs(10)));
         match socket.accept(HTTP_PORT).await {
             Ok(()) => {
+                while let Some(snapshot) = SNAPSHOT_SIGNAL.try_take() {
+                    latest = Some(snapshot);
+                }
                 if let Err(err) = handle_connection(&mut socket, latest).await {
                     warn!("network.http: connection error err={:?}", err);
                 }

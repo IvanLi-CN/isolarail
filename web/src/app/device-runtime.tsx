@@ -13,7 +13,6 @@ import {
   tryBootstrapCompanionBridge,
 } from "../domain/companionBridge";
 import {
-  clearWifiConfig,
   type DeviceApiError,
   type DeviceInfoResponse,
   getDeviceInfo,
@@ -21,10 +20,6 @@ import {
   getWifiConfig,
   type RebootResponse,
   type Result,
-  rebootDevice,
-  replugPort,
-  setPortPower,
-  setWifiConfig,
   type WifiConfigInput,
   type WifiConfigResponse,
   type WifiMutationResponse,
@@ -384,30 +379,16 @@ export function DeviceRuntimeProvider({
         if (method === "wifi.get") {
           return getWifiConfig(baseUrl) as Promise<Result<T>>;
         }
-        if (method === "wifi.set") {
-          return setWifiConfig(baseUrl, {
-            ssid: String(params?.ssid ?? ""),
-            psk: String(params?.psk ?? ""),
-          }) as Promise<Result<T>>;
-        }
-        if (method === "wifi.clear") {
-          return clearWifiConfig(baseUrl) as Promise<Result<T>>;
-        }
-        if (method === "reboot") {
-          return rebootDevice(baseUrl) as Promise<Result<T>>;
-        }
-        if (method === "port.power_set") {
-          return setPortPower(
-            baseUrl,
-            params?.port as PortId,
-            Boolean(params?.enabled),
-          ) as Promise<Result<T>>;
-        }
-        if (method === "port.replug") {
-          return replugPort(baseUrl, params?.port as PortId) as Promise<
-            Result<T>
-          >;
-        }
+        return {
+          ok: false,
+          error: {
+            kind: "api_error",
+            status: 405,
+            code: "http_write_not_supported",
+            message: "HTTP transport is read-only; use Web Serial or Local USB",
+            retryable: false,
+          },
+        };
       }
       if (transport === "web_serial") {
         return requestWebSerial<T>(deviceId, method, params);

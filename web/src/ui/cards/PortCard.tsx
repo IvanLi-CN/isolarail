@@ -42,11 +42,9 @@ function formatValue(value: number | null, unit: "V" | "A" | "W"): string {
 
 function PortStateSummary({
   powerEnabled,
-  dataConnected,
   replugging,
 }: {
   powerEnabled: boolean;
-  dataConnected: boolean;
   replugging: boolean;
 }) {
   const items = [
@@ -54,18 +52,11 @@ function PortStateSummary({
       label: powerEnabled ? "Power on" : "Power off",
       active: powerEnabled,
     },
-    {
-      label: replugging
-        ? "Replugging"
-        : dataConnected
-          ? "Data linked"
-          : "Data off",
-      active: dataConnected && !replugging,
-    },
+    ...(replugging ? [{ label: "Replugging", active: false }] : []),
   ];
 
   return (
-    <div className="grid h-7 grid-cols-2 gap-2">
+    <div className="grid h-7 grid-cols-1 gap-2">
       {items.map((item) => (
         <div
           className={[
@@ -189,7 +180,6 @@ export function PortCard({
         </div>
         <PortStateSummary
           powerEnabled={state.power_enabled}
-          dataConnected={state.data_connected}
           replugging={state.replugging}
         />
       </div>

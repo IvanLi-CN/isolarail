@@ -68,8 +68,8 @@ use crate::device_contract::{
     WifiSnapshot as UsbWifiSnapshot, WifiState as UsbWifiState,
 };
 use crate::runtime_control::{
-    apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, port_data_connected,
-    tick_replug_countdowns, PortControlAction, PortRuntimeState,
+    apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, tick_replug_countdowns,
+    PortControlAction, PortRuntimeState,
 };
 use embedded_hal_async::spi::{Operation as SpiOp, SpiBus as Eh1SpiBus, SpiDevice as Eh1SpiDevice};
 use gc9d01::{Config as DisplayConfig, Orientation, Timer as Gc9d01Timer, GC9D01};
@@ -2063,8 +2063,6 @@ async fn main(spawner: Spawner) {
             let idx = ch as usize;
             view[idx].selected = idx == selected_port;
             view[idx].pwren_enabled = pwren_enabled[idx];
-            view[idx].data_connected =
-                port_data_connected(sideband_online, upstream_powered, pwren_enabled[idx]);
             view[idx].ocp_latched = ocp_latched[idx];
             if replug_countdown[idx] > 0 {
                 view[idx].ui_state = UiPortState::Closed;

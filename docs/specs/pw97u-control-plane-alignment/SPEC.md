@@ -293,6 +293,22 @@
 ## Visual Evidence
 
 - source_type: `storybook_canvas`
+  story_id_or_title: `Panels/DeviceDashboardPanel/Default`
+  scenario: `dashboard port controls`
+  evidence_note: 验证 Dashboard 端口卡片把电源状态与电源操作组合到同一控制面，并使用图标化 power/replug 控件。
+  submission_gate: `approved`
+  PR: include
+  ![Dashboard port controls](./assets/dashboard-default-storybook.png)
+
+- source_type: `storybook_canvas`
+  story_id_or_title: `Cards/PortCard/Busy`
+  scenario: `pending power control`
+  evidence_note: 验证端口电源 pending 状态切换为 spinning 图标，且 off rail 在未点亮时仍可读。
+  submission_gate: `approved`
+  PR: include
+  ![PortCard pending power control](./assets/portcard-busy-storybook.png)
+
+- source_type: `storybook_canvas`
   story_id_or_title: `Panels/DeviceInfoPanel/WebSerialActivity`
   scenario: `desktop monitor timeline`
   evidence_note: 验证 `Device Info` 在桌面视口下同时展示 JSON response、raw CDC line 与 defmt/raw binary frame 三类单口混流活动。

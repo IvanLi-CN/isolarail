@@ -132,6 +132,33 @@ body {
   filter: var(--card-filter);
 }
 
+.iso-skeleton-line {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border) 72%, transparent),
+    color-mix(in srgb, var(--muted) 22%, transparent),
+    color-mix(in srgb, var(--border) 72%, transparent)
+  );
+  background-size: 220% 100%;
+  animation: iso-skeleton 1.1s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iso-skeleton-line {
+    animation: none;
+  }
+}
+
+@keyframes iso-skeleton {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 .iso-popover {
   filter: var(--popover-filter);
 }

@@ -61,6 +61,12 @@ const okWifiMutation = (
     value: { accepted: true, reboot_required: rebootRequired },
   });
 
+const neverInfo = (): Promise<Result<DeviceInfoResponse>> =>
+  new Promise(() => undefined);
+
+const neverWifi = (): Promise<Result<WifiConfigResponse>> =>
+  new Promise(() => undefined);
+
 const serialPreview: SerialActivityEntry[] = [
   {
     id: "activity-3",
@@ -132,6 +138,21 @@ export const WebSerialActivity: Story = {
     transport: "web_serial",
     wifiManagementTransport: "web_serial",
     serialActivityPreview: serialPreview,
+  },
+};
+
+export const LoadingHardwareTelemetry: Story = {
+  args: {
+    loadInfo: neverInfo,
+    loadWifiConfig: neverWifi,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Identity")).toBeVisible();
+    await expect(canvas.queryByText("unknown")).not.toBeInTheDocument();
+    await expect(
+      canvasElement.querySelector(".iso-skeleton-line"),
+    ).not.toBeNull();
   },
 };
 

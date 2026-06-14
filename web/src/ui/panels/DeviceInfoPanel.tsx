@@ -94,10 +94,12 @@ export function DeviceInfoPanel({
   serialActivityPreview?: SerialActivityEntry[] | null;
 }) {
   const [info, setInfo] = useState<DeviceInfoResponse | null>(null);
+  const [infoLoading, setInfoLoading] = useState(true);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [wifiConfig, setWifiConfigState] = useState<WifiConfigResponse | null>(
     null,
   );
+  const [wifiLoading, setWifiLoading] = useState(true);
   const [wifiBusy, setWifiBusy] = useState(false);
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPsk, setWifiPsk] = useState("");
@@ -123,6 +125,8 @@ export function DeviceInfoPanel({
   const loadInfoRef = useRef(loadInfo);
   const loadWifiConfigRef = useRef(loadWifiConfig);
   const wifiFormDirtyRef = useRef(false);
+  const hasInfoRef = useRef(false);
+  const hasWifiConfigRef = useRef(false);
 
   useEffect(() => {
     loadInfoRef.current = loadInfo;
@@ -137,8 +141,12 @@ export function DeviceInfoPanel({
       return;
     }
     setInfo(null);
+    hasInfoRef.current = false;
+    setInfoLoading(true);
     setInfoError(null);
     setWifiConfigState(null);
+    hasWifiConfigRef.current = false;
+    setWifiLoading(true);
     setWifiSsid("");
     setWifiPsk("");
     setWifiOpenNetwork(false);
@@ -196,8 +204,12 @@ export function DeviceInfoPanel({
 
     const load = async () => {
       if (!transport) {
+        setInfoLoading(false);
         setInfoError(null);
         return;
+      }
+      if (!hasInfoRef.current) {
+        setInfoLoading(true);
       }
       if (retryTimer !== null) {
         window.clearTimeout(retryTimer);
@@ -209,12 +221,14 @@ export function DeviceInfoPanel({
       }
       if (res.ok) {
         setInfo(res.value);
+        hasInfoRef.current = true;
         setInfoError(null);
         retryCount = 0;
       } else {
         setInfoError(res.error.message);
         retryCount = Math.min(retryCount + 1, 5);
       }
+      setInfoLoading(false);
       const delayMs = res.ok ? 15_000 : 800 * 2 ** Math.min(retryCount, 3);
       retryTimer = window.setTimeout(() => void load(), delayMs);
     };
@@ -234,8 +248,12 @@ export function DeviceInfoPanel({
 
     const load = async () => {
       if (!transport) {
+        setWifiLoading(false);
         setWifiError(null);
         return;
+      }
+      if (!hasWifiConfigRef.current) {
+        setWifiLoading(true);
       }
       const res = await loadWifiConfigRef.current();
       if (cancelled) {
@@ -243,6 +261,7 @@ export function DeviceInfoPanel({
       }
       if (res.ok) {
         setWifiConfigState(res.value);
+        hasWifiConfigRef.current = true;
         if (!wifiFormDirtyRef.current) {
           if (res.value.ssid !== undefined) {
             setWifiSsid(res.value.ssid);
@@ -254,6 +273,7 @@ export function DeviceInfoPanel({
       } else {
         setWifiError(res.error.message);
       }
+      setWifiLoading(false);
       const state = res.ok ? res.value.state : null;
       const delayMs = state === "connecting" ? 2_000 : 5_000;
       retryTimer = window.setTimeout(() => void load(), delayMs);
@@ -320,6 +340,8 @@ export function DeviceInfoPanel({
     wifiManagementTransport === "web_serial" ||
     wifiManagementTransport === "local_usb";
   const wifiCanSubmit = wifiCanManage && !wifiBusy;
+  const showInfoSkeleton = infoLoading && info === null && !infoError;
+  const showWifiSkeleton = wifiLoading && wifiConfig === null && !wifiError;
 
   const saveWifi = async () => {
     const nextPsk = wifiOpenNetwork ? "" : wifiPsk;
@@ -558,14 +580,32 @@ export function DeviceInfoPanel({
         <div className="text-[16px] font-bold leading-5">Identity</div>
         <div className="mt-[14px] grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,564px)_minmax(0,1fr)]">
           <div className="flex flex-col gap-[10px]">
-            <IdentityRow label="device_id" value={deviceId} />
-            <IdentityRow label="hostname" value={hostname} />
-            <IdentityRow label="fqdn" value={fqdn} />
-            <IdentityRow label="mac" value={mac} />
+            <IdentityRow
+              label="device_id"
+              value={deviceId}
+              loading={showInfoSkeleton}
+            />
+            <IdentityRow
+              label="hostname"
+              value={hostname}
+              loading={showInfoSkeleton}
+            />
+            <IdentityRow label="fqdn" value={fqdn} loading={showInfoSkeleton} />
+            <IdentityRow label="mac" value={mac} loading={showInfoSkeleton} />
           </div>
           <div className="flex flex-col gap-[10px]">
-            <IdentityRow label="variant" value={variant} narrow />
-            <IdentityRow label="uptime_ms" value={uptimeMs} wide />
+            <IdentityRow
+              label="variant"
+              value={variant}
+              loading={showInfoSkeleton}
+              narrow
+            />
+            <IdentityRow
+              label="uptime_ms"
+              value={uptimeMs}
+              loading={showInfoSkeleton}
+              wide
+            />
           </div>
         </div>
         {infoError ? (
@@ -586,6 +626,7 @@ export function DeviceInfoPanel({
             ["version", fwVersion],
             ["build", fwBuild],
           ]}
+          loading={showInfoSkeleton}
         />
         <InfoCard
           title="Wi-Fi runtime"
@@ -594,6 +635,7 @@ export function DeviceInfoPanel({
             ["ipv4", wifiIpv4],
             ["is_static", wifiIsStatic],
           ]}
+          loading={showWifiSkeleton}
         />
       </div>
 
@@ -619,13 +661,37 @@ export function DeviceInfoPanel({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <InfoPill label="state" value={wifiState} />
-          <InfoPill label="ipv4" value={wifiIpv4} />
-          <InfoPill label="static" value={wifiIsStatic} />
-          <InfoPill label="configured" value={wifiConfigured} />
-          <InfoPill label="psk" value={wifiPskConfigured} />
-          <InfoPill label="storage" value={wifiStorage} />
-          <InfoPill label="address" value={wifiAddress} />
+          <InfoPill
+            label="state"
+            value={wifiState}
+            loading={showWifiSkeleton}
+          />
+          <InfoPill label="ipv4" value={wifiIpv4} loading={showWifiSkeleton} />
+          <InfoPill
+            label="static"
+            value={wifiIsStatic}
+            loading={showWifiSkeleton}
+          />
+          <InfoPill
+            label="configured"
+            value={wifiConfigured}
+            loading={showWifiSkeleton}
+          />
+          <InfoPill
+            label="psk"
+            value={wifiPskConfigured}
+            loading={showWifiSkeleton}
+          />
+          <InfoPill
+            label="storage"
+            value={wifiStorage}
+            loading={showWifiSkeleton}
+          />
+          <InfoPill
+            label="address"
+            value={wifiAddress}
+            loading={showWifiSkeleton}
+          />
         </div>
 
         {showHardwareControls ? (
@@ -1046,11 +1112,13 @@ function SerialActivityRow({ entry }: { entry: SerialActivityEntry }) {
 function IdentityRow({
   label,
   value,
+  loading = false,
   narrow = false,
   wide = false,
 }: {
   label: string;
   value: string;
+  loading?: boolean;
   narrow?: boolean;
   wide?: boolean;
 }) {
@@ -1063,7 +1131,7 @@ function IdentityRow({
         {label}
       </div>
       <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
-        {value}
+        {loading ? <SkeletonLine width="w-[128px]" /> : value}
       </div>
     </div>
   );
@@ -1072,9 +1140,11 @@ function IdentityRow({
 function InfoCard({
   title,
   rows,
+  loading = false,
 }: {
   title: string;
   rows: Array<[label: string, value: string]>;
+  loading?: boolean;
 }) {
   return (
     <div className="iso-card h-[152px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
@@ -1086,7 +1156,7 @@ function InfoCard({
               {label}
             </div>
             <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
-              {value}
+              {loading ? <SkeletonLine width="w-[112px]" /> : value}
             </div>
           </div>
         ))}
@@ -1104,16 +1174,33 @@ function parseFlashAddress(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function InfoPill({ label, value }: { label: string; value: string }) {
+function InfoPill({
+  label,
+  value,
+  loading = false,
+}: {
+  label: string;
+  value: string;
+  loading?: boolean;
+}) {
   return (
     <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
       <div className="text-[11px] font-bold uppercase leading-4 text-[var(--muted)]">
         {label}
       </div>
       <div className="min-w-0 truncate font-mono text-[12px] font-semibold leading-5">
-        {value}
+        {loading ? <SkeletonLine width="w-[96px]" /> : value}
       </div>
     </div>
+  );
+}
+
+function SkeletonLine({ width }: { width: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`iso-skeleton-line inline-block h-[13px] max-w-full rounded-[6px] align-middle ${width}`}
+    />
   );
 }
 

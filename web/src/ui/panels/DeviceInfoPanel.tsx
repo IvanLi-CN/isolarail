@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DeviceTransport } from "../../app/device-runtime";
+import type { ConnectionState } from "../../app/device-runtime-support";
 import {
   type CompanionBridge,
   tryBootstrapCompanionBridge,
@@ -27,6 +28,7 @@ import {
   setWebSerialDeviceTransport,
   subscribeWebSerialDeviceLinks,
 } from "../../domain/webSerialLinks";
+import { formatTimeHms } from "../format/time";
 
 const MAX_SERIAL_ACTIVITY_ITEMS = 24;
 
@@ -57,6 +59,20 @@ function transportLabel(transport: DeviceTransport | null): string {
   return "Not connected";
 }
 
+function channelLabel(transport: DeviceTransport): string {
+  if (transport === "http") {
+    return "Wi-Fi / LAN";
+  }
+  if (transport === "local_usb") {
+    return "Local USB";
+  }
+  return "Web Serial";
+}
+
+function connectionLabel(state: ConnectionState): string {
+  return state;
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -76,7 +92,15 @@ async function restoreWebSerialTransport(deviceId: string): Promise<void> {
 export function DeviceInfoPanel({
   mode = "hardware",
   device,
+  connectionState = "unknown",
+  lastOkAt = null,
+  lastErrorLabel = null,
   transport,
+  channelStates = {
+    http: "unknown",
+    web_serial: "unknown",
+    local_usb: "unknown",
+  },
   wifiManagementTransport,
   loadInfo,
   loadWifiConfig,
@@ -88,7 +112,11 @@ export function DeviceInfoPanel({
 }: {
   mode?: "hardware" | "info";
   device: StoredDevice;
+  connectionState?: ConnectionState;
+  lastOkAt?: number | null;
+  lastErrorLabel?: string | null;
   transport: DeviceTransport | null;
+  channelStates?: Record<DeviceTransport, ConnectionState>;
   wifiManagementTransport: DeviceTransport | null;
   loadInfo: () => Promise<Result<DeviceInfoResponse>>;
   loadWifiConfig: () => Promise<Result<WifiConfigResponse>>;
@@ -249,6 +277,11 @@ export function DeviceInfoPanel({
     let retryTimer: number | null = null;
 
     const load = async () => {
+      if (mode !== "hardware") {
+        setWifiLoading(false);
+        setWifiError(null);
+        return;
+      }
       if (!hasWifiConfigRef.current) {
         setWifiLoading(true);
       }
@@ -283,7 +316,7 @@ export function DeviceInfoPanel({
         window.clearTimeout(retryTimer);
       }
     };
-  }, []);
+  }, [mode]);
 
   const deviceId = loadedUnknown(info, info?.device.device_id);
   const hostname = loadedUnknown(info, info?.device.hostname);
@@ -352,6 +385,154 @@ export function DeviceInfoPanel({
   const showWifiSkeleton = wifiLoading && wifiConfig === null && !wifiError;
   const showInfoUnavailable = !showInfoSkeleton && info === null;
   const showWifiUnavailable = !showWifiSkeleton && wifiConfig === null;
+  const lastSeenLabel = lastOkAt === null ? "—" : formatTimeHms(lastOkAt);
+  const lastError = lastErrorLabel ?? "—";
+  const activeTransportLabel = transportLabel(transport);
+  const savedHttpBaseUrl = device.transports?.httpBaseUrl ?? device.baseUrl;
+  const savedLocalUsbDeviceId = device.transports?.localUsbDeviceId ?? "—";
+  const savedWebSerialLabel = device.transports?.webSerialLabel ?? "—";
+  const channelRows: Array<[DeviceTransport, string, string]> = [
+    ["http", channelLabel("http"), connectionLabel(channelStates.http)],
+    [
+      "web_serial",
+      channelLabel("web_serial"),
+      connectionLabel(channelStates.web_serial),
+    ],
+    [
+      "local_usb",
+      channelLabel("local_usb"),
+      connectionLabel(channelStates.local_usb),
+    ],
+  ];
+
+  if (mode === "info") {
+    return (
+      <div className="flex flex-col gap-6" data-testid="device-info">
+        <div className="iso-card min-h-[168px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+          <div className="text-[16px] font-bold leading-5">Identity</div>
+          <div className="mt-[14px] grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,564px)_minmax(0,1fr)]">
+            <div className="flex flex-col gap-[10px]">
+              <IdentityRow
+                label="device_id"
+                value={deviceId}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+              />
+              <IdentityRow
+                label="hostname"
+                value={hostname}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+              />
+              <IdentityRow
+                label="fqdn"
+                value={fqdn}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+              />
+              <IdentityRow
+                label="mac"
+                value={mac}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+              />
+            </div>
+            <div className="flex flex-col gap-[10px]">
+              <IdentityRow
+                label="variant"
+                value={variant}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+                narrow
+              />
+              <IdentityRow
+                label="uptime_ms"
+                value={uptimeMs}
+                loading={showInfoSkeleton}
+                unavailable={showInfoUnavailable}
+                wide
+              />
+            </div>
+          </div>
+          {infoError ? (
+            <div
+              className="mt-4 rounded-[10px] border border-[var(--error)] px-3 py-2 text-[12px] font-semibold leading-5 text-[var(--error)]"
+              role="alert"
+            >
+              {activeTransportLabel} info unavailable: {infoError}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <InfoCard
+            title="Firmware"
+            rows={[
+              ["name", fwName],
+              ["version", fwVersion],
+              ["build", fwBuild],
+            ]}
+            loading={showInfoSkeleton}
+            unavailable={showInfoUnavailable}
+          />
+          <InfoCard
+            title="Last seen"
+            rows={[
+              ["connection", connectionState],
+              ["transport", activeTransportLabel],
+              ["last_ok", lastSeenLabel],
+              ["last_error", lastError],
+            ]}
+          />
+        </div>
+
+        <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+          <div className="text-[16px] font-bold leading-5">
+            Connection channels
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {channelRows.map(([channel, label, state]) => (
+              <InfoPill
+                key={channel}
+                label={label}
+                value={state}
+                unavailable={state === "unknown"}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+          <div className="text-[16px] font-bold leading-5">
+            Saved profile metadata
+          </div>
+          <div className="mt-[14px] grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <IdentityRow label="name" value={device.name} />
+            <IdentityRow label="base_url" value={device.baseUrl} wide />
+            <IdentityRow label="http_base_url" value={savedHttpBaseUrl} wide />
+            <IdentityRow
+              label="local_usb_id"
+              value={savedLocalUsbDeviceId}
+              unavailable={savedLocalUsbDeviceId === "—"}
+              wide
+            />
+            <IdentityRow
+              label="web_serial"
+              value={savedWebSerialLabel}
+              unavailable={savedWebSerialLabel === "—"}
+              wide
+            />
+            <IdentityRow
+              label="saved_last_seen"
+              value={device.lastSeenAt ?? "—"}
+              unavailable={!device.lastSeenAt}
+              wide
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const saveWifi = async () => {
     const nextPsk = wifiOpenNetwork ? "" : wifiPsk;
@@ -582,89 +763,8 @@ export function DeviceInfoPanel({
     }
   };
 
-  const showHardwareControls = mode === "hardware";
-
   return (
     <div className="flex flex-col gap-6" data-testid="device-info">
-      <div className="iso-card min-h-[168px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
-        <div className="text-[16px] font-bold leading-5">Identity</div>
-        <div className="mt-[14px] grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,564px)_minmax(0,1fr)]">
-          <div className="flex flex-col gap-[10px]">
-            <IdentityRow
-              label="device_id"
-              value={deviceId}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-            />
-            <IdentityRow
-              label="hostname"
-              value={hostname}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-            />
-            <IdentityRow
-              label="fqdn"
-              value={fqdn}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-            />
-            <IdentityRow
-              label="mac"
-              value={mac}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-            />
-          </div>
-          <div className="flex flex-col gap-[10px]">
-            <IdentityRow
-              label="variant"
-              value={variant}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-              narrow
-            />
-            <IdentityRow
-              label="uptime_ms"
-              value={uptimeMs}
-              loading={showInfoSkeleton}
-              unavailable={showInfoUnavailable}
-              wide
-            />
-          </div>
-        </div>
-        {infoError ? (
-          <div
-            className="mt-4 rounded-[10px] border border-[var(--error)] px-3 py-2 text-[12px] font-semibold leading-5 text-[var(--error)]"
-            role="alert"
-          >
-            {transportLabel(transport)} info unavailable: {infoError}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <InfoCard
-          title="Firmware"
-          rows={[
-            ["name", fwName],
-            ["version", fwVersion],
-            ["build", fwBuild],
-          ]}
-          loading={showInfoSkeleton}
-          unavailable={showInfoUnavailable}
-        />
-        <InfoCard
-          title="Wi-Fi runtime"
-          rows={[
-            ["state", wifiState],
-            ["ipv4", wifiIpv4],
-            ["is_static", wifiIsStatic],
-          ]}
-          loading={showWifiSkeleton}
-          unavailable={showWifiUnavailable}
-        />
-      </div>
-
       <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -731,113 +831,103 @@ export function DeviceInfoPanel({
           />
         </div>
 
-        {showHardwareControls ? (
-          <>
-            <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <label className="form-control min-w-0">
-                <div className="label px-0 pb-1 pt-0">
-                  <span className="label-text text-[12px] font-bold text-[var(--muted)]">
-                    SSID
-                  </span>
-                </div>
-                <input
-                  className="input input-sm w-full font-mono"
-                  autoComplete="off"
-                  value={wifiSsid}
-                  disabled={!wifiCanManage || wifiBusy}
-                  onChange={(event) => {
-                    wifiFormDirtyRef.current = true;
-                    setWifiSsid(event.target.value);
-                  }}
-                  placeholder="Network name"
-                />
-              </label>
-              <div className="min-w-0">
-                <label className="form-control min-w-0">
-                  <div className="label px-0 pb-1 pt-0">
-                    <span className="label-text text-[12px] font-bold text-[var(--muted)]">
-                      PSK
-                    </span>
-                  </div>
-                  <input
-                    className="input input-sm w-full font-mono"
-                    type="password"
-                    autoComplete="new-password"
-                    value={wifiPsk}
-                    disabled={!wifiCanManage || wifiBusy || wifiOpenNetwork}
-                    onChange={(event) => {
-                      wifiFormDirtyRef.current = true;
-                      setWifiPsk(event.target.value);
-                      if (event.target.value.length > 0) {
-                        setWifiOpenNetwork(false);
-                      }
-                    }}
-                    placeholder="Blank means open network"
-                  />
-                </label>
-                <label className="mt-2 flex min-h-6 items-center gap-2 text-[12px] font-semibold text-[var(--muted)]">
-                  <input
-                    className="checkbox checkbox-xs"
-                    type="checkbox"
-                    checked={wifiOpenNetwork}
-                    disabled={!wifiCanManage || wifiBusy}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      wifiFormDirtyRef.current = true;
-                      setWifiOpenNetwork(checked);
-                      if (checked) {
-                        setWifiPsk("");
-                      }
-                    }}
-                  />
-                  <span>Open network (no PSK)</span>
-                </label>
-              </div>
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <label className="form-control min-w-0">
+            <div className="label px-0 pb-1 pt-0">
+              <span className="label-text text-[12px] font-bold text-[var(--muted)]">
+                SSID
+              </span>
             </div>
-
-            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="text-[12px] font-semibold leading-5 text-[var(--muted)]">
-                {wifiCanManage
-                  ? "Existing PSK is never shown. Re-enter it before saving a secured network, or choose Open network to replace it."
-                  : "Wi-Fi/LAN is read-only for Wi-Fi settings. Connect with Web Serial or Local USB to change credentials."}
+            <input
+              className="input input-sm w-full font-mono"
+              autoComplete="off"
+              value={wifiSsid}
+              disabled={!wifiCanManage || wifiBusy}
+              onChange={(event) => {
+                wifiFormDirtyRef.current = true;
+                setWifiSsid(event.target.value);
+              }}
+              placeholder="Network name"
+            />
+          </label>
+          <div className="min-w-0">
+            <label className="form-control min-w-0">
+              <div className="label px-0 pb-1 pt-0">
+                <span className="label-text text-[12px] font-bold text-[var(--muted)]">
+                  PSK
+                </span>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:min-w-[260px]">
-                <button
-                  className="btn btn-primary btn-sm min-h-10"
-                  type="button"
-                  disabled={!wifiCanSubmit}
-                  onClick={() => void saveWifi()}
-                >
-                  {wifiBusy ? "Saving..." : "Save Wi-Fi"}
-                </button>
-                <button
-                  className="btn btn-outline btn-sm min-h-10"
-                  type="button"
-                  disabled={!wifiCanSubmit}
-                  onClick={() => setWifiClearConfirmOpen(true)}
-                >
-                  Clear
-                </button>
-                {wifiRebootRequired ? (
-                  <button
-                    className="btn btn-outline btn-sm min-h-10"
-                    type="button"
-                    disabled={!wifiCanSubmit}
-                    onClick={() => void rebootForWifi()}
-                  >
-                    Reboot
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="mt-5 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--muted)]">
-            Settings changes are disabled on this page. Switch to Settings to
-            save credentials, clear EEPROM Wi-Fi state, or reboot after a Wi-Fi
-            update.
+              <input
+                className="input input-sm w-full font-mono"
+                type="password"
+                autoComplete="new-password"
+                value={wifiPsk}
+                disabled={!wifiCanManage || wifiBusy || wifiOpenNetwork}
+                onChange={(event) => {
+                  wifiFormDirtyRef.current = true;
+                  setWifiPsk(event.target.value);
+                  if (event.target.value.length > 0) {
+                    setWifiOpenNetwork(false);
+                  }
+                }}
+                placeholder="Blank means open network"
+              />
+            </label>
+            <label className="mt-2 flex min-h-6 items-center gap-2 text-[12px] font-semibold text-[var(--muted)]">
+              <input
+                className="checkbox checkbox-xs"
+                type="checkbox"
+                checked={wifiOpenNetwork}
+                disabled={!wifiCanManage || wifiBusy}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  wifiFormDirtyRef.current = true;
+                  setWifiOpenNetwork(checked);
+                  if (checked) {
+                    setWifiPsk("");
+                  }
+                }}
+              />
+              <span>Open network (no PSK)</span>
+            </label>
           </div>
-        )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-[12px] font-semibold leading-5 text-[var(--muted)]">
+            {wifiCanManage
+              ? "Existing PSK is never shown. Re-enter it before saving a secured network, or choose Open network to replace it."
+              : "Wi-Fi/LAN is read-only for Wi-Fi settings. Connect with Web Serial or Local USB to change credentials."}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:min-w-[260px]">
+            <button
+              className="btn btn-primary btn-sm min-h-10"
+              type="button"
+              disabled={!wifiCanSubmit}
+              onClick={() => void saveWifi()}
+            >
+              {wifiBusy ? "Saving..." : "Save Wi-Fi"}
+            </button>
+            <button
+              className="btn btn-outline btn-sm min-h-10"
+              type="button"
+              disabled={!wifiCanSubmit}
+              onClick={() => setWifiClearConfirmOpen(true)}
+            >
+              Clear
+            </button>
+            {wifiRebootRequired ? (
+              <button
+                className="btn btn-outline btn-sm min-h-10"
+                type="button"
+                disabled={!wifiCanSubmit}
+                onClick={() => void rebootForWifi()}
+              >
+                Reboot
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         {wifiStatus ? (
           <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--muted)]">
@@ -855,91 +945,89 @@ export function DeviceInfoPanel({
         ) : null}
       </div>
 
-      {showHardwareControls ? (
-        <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="text-[16px] font-bold leading-5">
-                Firmware update
-              </div>
-              <div className="mt-2 text-[12px] font-semibold leading-5 text-[var(--muted)]">
-                Flash an ESP32-S3 application image at `0x10000`.
-              </div>
+      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="text-[16px] font-bold leading-5">
+              Firmware update
             </div>
-            <div className="flex min-h-8 items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-bold text-[var(--muted)]">
-              Current: {firmwarePathLabel}
+            <div className="mt-2 text-[12px] font-semibold leading-5 text-[var(--muted)]">
+              Flash an ESP32-S3 application image at `0x10000`.
             </div>
           </div>
-
-          {firmwareUnavailableReason ? (
-            <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--muted)]">
-              {firmwareUnavailableReason}
-            </div>
-          ) : null}
-
-          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_132px]">
-            <input
-              className="file-input file-input-sm w-full"
-              type="file"
-              accept=".bin,application/octet-stream"
-              onChange={(event) =>
-                setFirmwareFile(event.currentTarget.files?.[0] ?? null)
-              }
-            />
-            <input
-              className="input input-sm w-full font-mono"
-              aria-label="Flash address"
-              value={flashAddress}
-              onChange={(event) => setFlashAddress(event.target.value)}
-            />
+          <div className="flex min-h-8 items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-bold text-[var(--muted)]">
+            Current: {firmwarePathLabel}
           </div>
-
-          {firmwarePath === "web_serial" && !webSerialSupported ? (
-            <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--warning)]">
-              This browser does not expose Web Serial. Use Chrome/Edge or Local
-              USB.
-            </div>
-          ) : null}
-
-          {flashProgress ? (
-            <div className="mt-4 text-[12px] font-semibold text-[var(--muted)]">
-              {flashProgress.message}
-              {flashProgress.total
-                ? ` ${Math.round(((flashProgress.written ?? 0) / flashProgress.total) * 100)}%`
-                : ""}
-            </div>
-          ) : null}
-
-          {flashStatus ? (
-            <div className="mt-4 text-[12px] font-semibold text-[var(--muted)]">
-              {flashStatus}
-            </div>
-          ) : null}
-
-          {flashError ? (
-            <div
-              className="mt-4 rounded-[12px] border border-[var(--error)] bg-[var(--panel)] px-4 py-3 text-[12px] font-semibold text-[var(--error)]"
-              role="alert"
-            >
-              {flashError}
-            </div>
-          ) : null}
-
-          <button
-            className="btn btn-primary mt-5 h-11 w-full justify-center"
-            type="button"
-            disabled={
-              flashBusy ||
-              !firmwareFile ||
-              !firmwarePath ||
-              (firmwarePath === "web_serial" && !webSerialSupported)
-            }
-            onClick={() => void flashFirmware()}
-          >
-            {flashBusy ? "Updating..." : "Flash firmware"}
-          </button>
         </div>
-      ) : null}
+
+        {firmwareUnavailableReason ? (
+          <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--muted)]">
+            {firmwareUnavailableReason}
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_132px]">
+          <input
+            className="file-input file-input-sm w-full"
+            type="file"
+            accept=".bin,application/octet-stream"
+            onChange={(event) =>
+              setFirmwareFile(event.currentTarget.files?.[0] ?? null)
+            }
+          />
+          <input
+            className="input input-sm w-full font-mono"
+            aria-label="Flash address"
+            value={flashAddress}
+            onChange={(event) => setFlashAddress(event.target.value)}
+          />
+        </div>
+
+        {firmwarePath === "web_serial" && !webSerialSupported ? (
+          <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[12px] font-semibold text-[var(--warning)]">
+            This browser does not expose Web Serial. Use Chrome/Edge or Local
+            USB.
+          </div>
+        ) : null}
+
+        {flashProgress ? (
+          <div className="mt-4 text-[12px] font-semibold text-[var(--muted)]">
+            {flashProgress.message}
+            {flashProgress.total
+              ? ` ${Math.round(((flashProgress.written ?? 0) / flashProgress.total) * 100)}%`
+              : ""}
+          </div>
+        ) : null}
+
+        {flashStatus ? (
+          <div className="mt-4 text-[12px] font-semibold text-[var(--muted)]">
+            {flashStatus}
+          </div>
+        ) : null}
+
+        {flashError ? (
+          <div
+            className="mt-4 rounded-[12px] border border-[var(--error)] bg-[var(--panel)] px-4 py-3 text-[12px] font-semibold text-[var(--error)]"
+            role="alert"
+          >
+            {flashError}
+          </div>
+        ) : null}
+
+        <button
+          className="btn btn-primary mt-5 h-11 w-full justify-center"
+          type="button"
+          disabled={
+            flashBusy ||
+            !firmwareFile ||
+            !firmwarePath ||
+            (firmwarePath === "web_serial" && !webSerialSupported)
+          }
+          onClick={() => void flashFirmware()}
+        >
+          {flashBusy ? "Updating..." : "Flash firmware"}
+        </button>
+      </div>
 
       <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1031,35 +1119,26 @@ export function DeviceInfoPanel({
         </div>
       ) : null}
 
-      <div className="iso-card h-[156px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
-        <div className="text-[16px] font-bold leading-5">Notes</div>
-        <div className="mt-[14px] space-y-[6px] text-[14px] font-medium leading-5">
-          <div>- Missing fields render as “unknown”</div>
-          <div>- Connection: offline when last ok ≥ 10s</div>
-          <div>- Replug means controlled power-cycle on this hardware</div>
-        </div>
-      </div>
-
       <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <div className="text-[16px] font-bold leading-5">Saved device</div>
+            <div className="text-[16px] font-bold leading-5">
+              Danger actions
+            </div>
             <div className="mt-2 text-[12px] font-semibold leading-5 text-[var(--muted)]">
-              Remove this hub from the local device list.
+              Remove this saved profile from the local device list.
             </div>
           </div>
-          {showHardwareControls ? (
-            <button
-              className="btn btn-outline btn-sm min-h-10 justify-center border-[var(--error)] text-[var(--error)]"
-              type="button"
-              onClick={() => {
-                setDeleteError(null);
-                setDeleteConfirmOpen(true);
-              }}
-            >
-              Delete device
-            </button>
-          ) : null}
+          <button
+            className="btn btn-outline btn-sm min-h-10 justify-center border-[var(--error)] text-[var(--error)]"
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteConfirmOpen(true);
+            }}
+          >
+            Delete device
+          </button>
         </div>
         {deleteError ? (
           <div
@@ -1119,9 +1198,8 @@ export function DeviceInfoPanel({
       ) : null}
 
       <div className="text-[12px] font-semibold text-[var(--muted)]">
-        {mode === "hardware"
-          ? "Settings focuses on EEPROM-backed Wi-Fi provisioning, firmware flashing, and local maintenance."
-          : "Info summarizes firmware, connectivity, and saved-device metadata for this four-port hub."}
+        Settings focuses on EEPROM-backed Wi-Fi provisioning, firmware flashing,
+        serial maintenance, and local danger actions.
       </div>
     </div>
   );

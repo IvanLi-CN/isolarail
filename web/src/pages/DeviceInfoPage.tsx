@@ -57,7 +57,15 @@ export function DeviceInfoPage({
         <DeviceInfoPanel
           mode={mode}
           device={device}
+          connectionState={runtime.connectionState(device.id)}
+          lastOkAt={runtime.lastOkAt(device.id)}
+          lastErrorLabel={runtime.lastErrorLabel(device.id)}
           transport={runtime.transport(device.id)}
+          channelStates={{
+            http: runtime.channelState(device.id, "http"),
+            web_serial: runtime.channelState(device.id, "web_serial"),
+            local_usb: runtime.channelState(device.id, "local_usb"),
+          }}
           wifiManagementTransport={runtime.wifiManagementTransport(device.id)}
           loadInfo={() => runtime.deviceInfo(device.id)}
           loadWifiConfig={() => runtime.wifiConfig(device.id)}

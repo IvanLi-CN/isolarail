@@ -134,7 +134,15 @@ const meta: Meta<typeof DeviceInfoPanel> = {
   args: {
     mode: "hardware",
     device: demoDevice,
+    connectionState: "online",
+    lastOkAt: Date.now(),
+    lastErrorLabel: null,
     transport: "local_usb",
+    channelStates: {
+      http: "offline",
+      web_serial: "unknown",
+      local_usb: "online",
+    },
     wifiManagementTransport: "local_usb",
     loadInfo: okInfo,
     loadWifiConfig: () => okWifi(),
@@ -149,7 +157,38 @@ export default meta;
 
 type Story = StoryObj<typeof DeviceInfoPanel>;
 
-export const Default: Story = {};
+export const SettingsMaintenance: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Wi-Fi configuration")).toBeVisible();
+    await expect(canvas.getByText("Firmware update")).toBeVisible();
+    await expect(canvas.getByText("Serial activity")).toBeVisible();
+    await expect(canvas.getByText("Danger actions")).toBeVisible();
+    await expect(canvas.queryByText("Identity")).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByText("Connection channels"),
+    ).not.toBeInTheDocument();
+  },
+};
+
+export const InfoSummary: Story = {
+  args: {
+    mode: "info",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Identity")).toBeVisible();
+    await expect(canvas.getByText("Firmware")).toBeVisible();
+    await expect(canvas.getByText("Connection channels")).toBeVisible();
+    await expect(canvas.getByText("Saved profile metadata")).toBeVisible();
+    await expect(canvas.getByText("Last seen")).toBeVisible();
+    await expect(
+      canvas.queryByText("Wi-Fi configuration"),
+    ).not.toBeInTheDocument();
+    await expect(canvas.queryByText("Firmware update")).not.toBeInTheDocument();
+    await expect(canvas.queryByText("Danger actions")).not.toBeInTheDocument();
+  },
+};
 
 export const WebSerialActivity: Story = {
   args: {
@@ -161,6 +200,7 @@ export const WebSerialActivity: Story = {
 
 export const LoadingHardwareTelemetry: Story = {
   args: {
+    mode: "info",
     loadInfo: neverInfo,
     loadWifiConfig: neverWifi,
   },
@@ -176,6 +216,7 @@ export const LoadingHardwareTelemetry: Story = {
 
 export const WaitingForConnection: Story = {
   args: {
+    mode: "info",
     transport: null,
     wifiManagementTransport: null,
     loadInfo: offlineInfo,
@@ -196,6 +237,7 @@ export const WaitingForConnection: Story = {
 
 export const LanReadOnly: Story = {
   args: {
+    mode: "hardware",
     transport: "http",
     wifiManagementTransport: null,
   },

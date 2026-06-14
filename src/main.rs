@@ -690,7 +690,25 @@ fn usb_port_status(state: UiPortState, connected: bool) -> UsbPortTelemetryStatu
         UiPortState::Overcurrent => UsbPortTelemetryStatus::Overcurrent,
         UiPortState::Disconnected if connected => UsbPortTelemetryStatus::Error,
         UiPortState::Disconnected => UsbPortTelemetryStatus::NotInserted,
-        UiPortState::Closed | UiPortState::Initializing => UsbPortTelemetryStatus::NotInserted,
+        UiPortState::Closed => UsbPortTelemetryStatus::Off,
+        UiPortState::Initializing => UsbPortTelemetryStatus::NotInserted,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closed_port_reports_off_not_not_inserted() {
+        assert_eq!(
+            usb_port_status(UiPortState::Closed, false),
+            UsbPortTelemetryStatus::Off
+        );
+        assert_eq!(
+            usb_port_status(UiPortState::Disconnected, false),
+            UsbPortTelemetryStatus::NotInserted
+        );
     }
 }
 

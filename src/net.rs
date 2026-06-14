@@ -137,6 +137,7 @@ impl ApiPortId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApiTelemetryStatus {
     Ok,
+    Off,
     NotInserted,
     Error,
     Overrange,
@@ -146,6 +147,7 @@ impl ApiTelemetryStatus {
     pub const fn as_str(self) -> &'static str {
         match self {
             ApiTelemetryStatus::Ok => "ok",
+            ApiTelemetryStatus::Off => "off",
             ApiTelemetryStatus::NotInserted => "not_inserted",
             ApiTelemetryStatus::Error => "error",
             ApiTelemetryStatus::Overrange => "overrange",

@@ -21,7 +21,12 @@ export function portLabel(portId: PortId): string {
   }
 }
 
-export type TelemetryStatus = "ok" | "not_inserted" | "error" | "overrange";
+export type TelemetryStatus =
+  | "ok"
+  | "off"
+  | "not_inserted"
+  | "error"
+  | "overrange";
 
 export type HubState = {
   // Backward-compat: older firmware and summary cards use this field.

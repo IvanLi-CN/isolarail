@@ -96,7 +96,7 @@ const mockDeviceApi = async (
           portId: "port3",
           label: "Port 3",
           telemetry: {
-            status: "not_inserted",
+            status: "off",
             voltage_mv: 0,
             current_ma: 0,
             power_mw: 0,

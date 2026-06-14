@@ -41,11 +41,29 @@ export const PowerOff: Story = {
       busy: false,
     },
     telemetry: {
-      status: "ok",
+      status: "off",
       voltage_mv: 0,
       current_ma: 0,
       power_mw: 0,
       sample_uptime_ms: 123_999,
+    },
+  },
+};
+
+export const NotInserted: Story = {
+  args: {
+    state: {
+      power_enabled: false,
+      data_connected: false,
+      replugging: false,
+      busy: false,
+    },
+    telemetry: {
+      status: "not_inserted",
+      voltage_mv: 0,
+      current_ma: 0,
+      power_mw: 0,
+      sample_uptime_ms: 124_000,
     },
   },
 };

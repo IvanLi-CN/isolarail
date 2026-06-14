@@ -65,6 +65,7 @@ impl WifiSnapshot {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PortTelemetryStatus {
     Ok,
+    Off,
     NotInserted,
     Error,
     Overcurrent,
@@ -74,6 +75,7 @@ impl PortTelemetryStatus {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Ok => "ok",
+            Self::Off => "off",
             Self::NotInserted => "not_inserted",
             Self::Error => "error",
             Self::Overcurrent => "overrange",

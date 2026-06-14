@@ -20,6 +20,19 @@ function statusBadgeStyles(status: string): { bg: string; text: string } {
   };
 }
 
+function statusLabel(status: string): string {
+  if (status === "ok") {
+    return "OK";
+  }
+  if (status === "off") {
+    return "power off";
+  }
+  if (status === "not_inserted") {
+    return "not inserted";
+  }
+  return status;
+}
+
 function formatValue(value: number | null, unit: "V" | "A" | "W"): string {
   if (value === null) {
     return `--.-${unit}`;
@@ -166,11 +179,7 @@ export function PortCard({
             "whitespace-nowrap text-[12px] font-semibold",
           ].join(" ")}
         >
-          {telemetry.status === "not_inserted"
-            ? "not inserted"
-            : telemetry.status === "ok"
-              ? "OK"
-              : telemetry.status}
+          {statusLabel(telemetry.status)}
         </div>
       </div>
 

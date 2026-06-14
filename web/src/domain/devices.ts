@@ -16,6 +16,7 @@ export type AddDeviceInput = {
   name: string;
   baseUrl: string;
   id?: string;
+  transports?: StoredDevice["transports"];
 };
 
 export type AddDeviceValidationErrors = {
@@ -142,6 +143,7 @@ export function validateAddDeviceInput(
       id: finalId,
       name,
       baseUrl: baseUrlResult.ok ? baseUrlResult.baseUrl : input.baseUrl,
+      transports: parseStoredDeviceTransports(input.transports),
     },
   };
 }

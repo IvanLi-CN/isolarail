@@ -335,8 +335,11 @@ export function DeviceInfoPanel({
   const fwBuild = info === null ? "" : "unknown";
   const webSerialSupported = isWebSerialSupported();
   const firmwarePath =
-    transport === "local_usb" || transport === "web_serial" ? transport : null;
-  const firmwarePathLabel = transportLabel(transport);
+    wifiManagementTransport === "local_usb" ||
+    wifiManagementTransport === "web_serial"
+      ? wifiManagementTransport
+      : null;
+  const firmwarePathLabel = transportLabel(firmwarePath);
   const firmwareUnavailableReason =
     transport === "http"
       ? "Firmware flashing is disabled over Wi-Fi/LAN because OTA is not implemented yet."
@@ -388,6 +391,14 @@ export function DeviceInfoPanel({
   const lastSeenLabel = lastOkAt === null ? "—" : formatTimeHms(lastOkAt);
   const lastError = lastErrorLabel ?? infoError ?? "—";
   const activeTransportLabel = transportLabel(transport);
+  const wifiStatusLabel =
+    wifiLoading && wifiConfig === null && !wifiError
+      ? "Loading"
+      : wifiError
+        ? "Read failed"
+        : wifiConfig
+          ? "Loaded"
+          : transportLabel(transport);
   const savedHttpBaseUrl = device.transports?.httpBaseUrl ?? device.baseUrl;
   const savedLocalUsbDeviceId = device.transports?.localUsbDeviceId ?? "—";
   const savedWebSerialLabel = device.transports?.webSerialLabel ?? "—";
@@ -408,6 +419,14 @@ export function DeviceInfoPanel({
   if (mode === "info") {
     return (
       <div className="flex flex-col gap-6" data-testid="device-info">
+        {infoError ? (
+          <output className="rounded-[14px] border border-[var(--warning)] bg-[var(--panel)] px-4 py-3 text-[12px] font-semibold leading-5 text-[var(--warning)]">
+            Info read failed over {activeTransportLabel}: {infoError}. The saved
+            profile remains visible below, but live identity and firmware fields
+            are unavailable until a channel reconnects.
+          </output>
+        ) : null}
+
         <div className="iso-card min-h-[168px] rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
           <div className="text-[16px] font-bold leading-5">Identity</div>
           <div className="mt-[14px] grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,564px)_minmax(0,1fr)]">
@@ -770,7 +789,7 @@ export function DeviceInfoPanel({
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="flex min-h-8 items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-bold text-[var(--muted)]">
-              Current: {transportLabel(transport)}
+              Status: {wifiStatusLabel}
             </div>
             <div className="flex min-h-8 items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-bold text-[var(--muted)]">
               Manage: {transportLabel(wifiManagementTransport)}
@@ -948,7 +967,7 @@ export function DeviceInfoPanel({
             </div>
           </div>
           <div className="flex min-h-8 items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-bold text-[var(--muted)]">
-            Current: {firmwarePathLabel}
+            Manage: {firmwarePathLabel}
           </div>
         </div>
 

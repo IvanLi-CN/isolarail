@@ -580,6 +580,7 @@ async fn handle_hardware(
                 id,
                 name,
                 transport,
+                identity: None,
             })?;
             Ok(json!({"path": path, "device": saved}))
         }

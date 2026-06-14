@@ -75,4 +75,26 @@ describe("validateAddDeviceInput", () => {
     }
     expect(res.device.id).toHaveLength(8);
   });
+
+  test("preserves explicit transport metadata", () => {
+    const res = validateAddDeviceInput({
+      id: "hub-a",
+      name: "A",
+      baseUrl: "http://example.com",
+      transports: {
+        httpBaseUrl: "http://example.com/api",
+        localUsbDeviceId: "usb--dev-cu-usbmodem1",
+        webSerialLabel: "ESP32-S3 USB Serial/JTAG",
+      },
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) {
+      throw new Error("expected ok");
+    }
+    expect(res.device.transports).toEqual({
+      httpBaseUrl: "http://example.com",
+      localUsbDeviceId: "usb--dev-cu-usbmodem1",
+      webSerialLabel: "ESP32-S3 USB Serial/JTAG",
+    });
+  });
 });

@@ -225,11 +225,13 @@ export const WaitingForConnection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Identity")).toBeVisible();
+    await expect(
+      await canvas.findByText(/Info read failed over Not connected/),
+    ).toBeVisible();
     await expect(await canvas.findByText("last_error")).toBeVisible();
     await expect(
       await canvas.findByText("Waiting for an active connection."),
     ).toBeVisible();
-    await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
     await expect(canvas.getAllByText("—").length).toBeGreaterThan(0);
     await expect(canvas.queryByText("unknown")).not.toBeInTheDocument();
   },
@@ -243,7 +245,7 @@ export const LanReadOnly: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getAllByText("Current: Wi-Fi / LAN")[0]).toBeVisible();
+    await expect(canvas.getAllByText("Manage: Not connected").length).toBe(2);
     await expect(
       canvas.getByRole("button", { name: "Save Wi-Fi" }),
     ).toBeDisabled();

@@ -574,15 +574,19 @@ async fn storage_save(
         Ok(input) => input,
         Err(err) => return bad_request(&err.to_string()),
     };
-    match save_hardware(input) {
-        Ok(device) => {
+    match save_hardware_profiles(input) {
+        Ok(devices) => {
             let web_device = read_hardware_registry()
                 .ok()
-                .and_then(|registry| web_storage_device_for_profile(&registry, &device))
-                .unwrap_or_else(|| web_storage_device(&device));
+                .and_then(|registry| {
+                    devices
+                        .first()
+                        .and_then(|device| web_storage_device_for_profile(&registry, device))
+                })
+                .unwrap_or_else(|| web_storage_group_device(&devices.iter().collect::<Vec<_>>()));
             Json(json!({
                 "device": web_device,
-                "profile": device,
+                "profiles": devices,
             }))
             .into_response()
         }
@@ -682,7 +686,7 @@ async fn storage_reset(State(state): State<AppState>, headers: HeaderMap) -> Res
     Json(json!({"ok": true})).into_response()
 }
 
-fn parse_storage_save_input(value: Value) -> anyhow::Result<SavedHardwareInput> {
+fn parse_storage_save_input(value: Value) -> anyhow::Result<Vec<SavedHardwareInput>> {
     if let Some(device) = value.get("device").and_then(Value::as_object) {
         let name = device
             .get("name")
@@ -699,11 +703,53 @@ fn parse_storage_save_input(value: Value) -> anyhow::Result<SavedHardwareInput> 
             .and_then(Value::as_str)
             .map(str::to_string)
             .unwrap_or_else(|| stable_http_device_id(&base_url));
-        return Ok(SavedHardwareInput {
-            id,
-            name,
-            transport: hardware_transport_from_storage_url(&base_url),
+        let identity = default_hostname_short_id(&base_url).map(|device_id| DeviceIdentity {
+            device_id: Some(device_id),
+            mac: None,
         });
+        let transports = device.get("transports").and_then(Value::as_object);
+        let http_base_url = transports
+            .and_then(|transports| transports.get("httpBaseUrl"))
+            .and_then(Value::as_str)
+            .unwrap_or(&base_url);
+        let mut inputs = vec![SavedHardwareInput {
+            id: id.clone(),
+            name: name.clone(),
+            transport: HardwareTransport::Http {
+                base_url: http_base_url.to_string(),
+            },
+            identity: identity.clone(),
+        }];
+        if let Some(local_usb_device_id) = transports
+            .and_then(|transports| transports.get("localUsbDeviceId"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            inputs.push(SavedHardwareInput {
+                id: format!("{id}--usb"),
+                name: name.clone(),
+                transport: HardwareTransport::Usb {
+                    device_id: local_usb_device_id.to_string(),
+                    devd_url: None,
+                },
+                identity: identity.clone(),
+            });
+        }
+        if let Some(web_serial_label) = transports
+            .and_then(|transports| transports.get("webSerialLabel"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            inputs.push(SavedHardwareInput {
+                id: format!("{id}--webserial"),
+                name: name.clone(),
+                transport: HardwareTransport::WebSerial {
+                    label: Some(web_serial_label.to_string()),
+                },
+                identity: identity.clone(),
+            });
+        }
+        return Ok(inputs);
     }
     #[derive(Deserialize)]
     struct Wire {
@@ -712,15 +758,12 @@ fn parse_storage_save_input(value: Value) -> anyhow::Result<SavedHardwareInput> 
         transport: HardwareTransport,
     }
     let wire: Wire = serde_json::from_value(value)?;
-    Ok(SavedHardwareInput {
+    Ok(vec![SavedHardwareInput {
         id: wire.id,
         name: wire.name,
         transport: wire.transport,
-    })
-}
-
-fn web_storage_device(profile: &DeviceProfile) -> Value {
-    web_storage_group_device(&[profile])
+        identity: None,
+    }])
 }
 
 fn web_storage_devices(registry: &HardwareRegistry) -> Vec<Value> {
@@ -800,12 +843,24 @@ fn web_storage_group_device(profiles: &[&DeviceProfile]) -> Value {
     }
 
     json!({
-        "id": primary.id,
+        "id": web_storage_public_id(profiles, primary),
         "name": primary.name,
         "baseUrl": base_url,
         "lastSeenAt": last_seen_at.map(|ts| ts.to_string()),
         "transports": Value::Object(transports),
     })
+}
+
+fn web_storage_public_id(profiles: &[&DeviceProfile], primary: &DeviceProfile) -> String {
+    profiles
+        .iter()
+        .find(|profile| !is_transport_variant_profile_id(&profile.id))
+        .map(|profile| profile.id.clone())
+        .unwrap_or_else(|| primary.id.clone())
+}
+
+fn is_transport_variant_profile_id(id: &str) -> bool {
+    id.ends_with("--http") || id.ends_with("--usb") || id.ends_with("--webserial")
 }
 
 fn profile_group_key(profile: &DeviceProfile) -> String {

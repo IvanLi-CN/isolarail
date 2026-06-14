@@ -95,10 +95,7 @@ impl Drop for WebMdnsAdvertiser {
     }
 }
 
-pub fn build_web_mdns_service_info(
-    instance_name: &str,
-    port: u16,
-) -> anyhow::Result<ServiceInfo> {
+pub fn build_web_mdns_service_info(instance_name: &str, port: u16) -> anyhow::Result<ServiceInfo> {
     let properties = [
         ("app", "isohub-devd"),
         ("mode", "web"),
@@ -517,6 +514,7 @@ pub struct SavedHardwareInput {
     pub id: String,
     pub name: String,
     pub transport: HardwareTransport,
+    pub identity: Option<DeviceIdentity>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -831,6 +829,84 @@ mod tests {
         assert_eq!(
             devices[0]["transports"]["localUsbDeviceId"],
             "usb--dev-cu-usbmodem21221401"
+        );
+    }
+
+    #[test]
+    fn web_storage_keeps_logical_id_when_usb_is_primary() {
+        let registry = HardwareRegistry {
+            schema_version: STORAGE_SCHEMA_VERSION,
+            devices: vec![
+                DeviceProfile {
+                    id: "f1fb44".to_string(),
+                    name: "isohub-f1fb44".to_string(),
+                    transport: HardwareTransport::Http {
+                        base_url: "http://isohub-f1fb44.local".to_string(),
+                    },
+                    identity: Some(DeviceIdentity {
+                        device_id: Some("f1fb44".to_string()),
+                        mac: None,
+                    }),
+                    last_seen_at: Some(10),
+                },
+                DeviceProfile {
+                    id: "f1fb44--usb".to_string(),
+                    name: "isohub-f1fb44".to_string(),
+                    transport: HardwareTransport::Usb {
+                        device_id: "usb--dev-cu-usbmodem21234101".to_string(),
+                        devd_url: None,
+                    },
+                    identity: Some(DeviceIdentity {
+                        device_id: Some("f1fb44".to_string()),
+                        mac: None,
+                    }),
+                    last_seen_at: Some(11),
+                },
+            ],
+        };
+
+        let devices = web_storage_devices(&registry);
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0]["id"], "f1fb44");
+        assert_eq!(
+            devices[0]["transports"]["localUsbDeviceId"],
+            "usb--dev-cu-usbmodem21234101"
+        );
+    }
+
+    #[test]
+    fn web_storage_save_input_preserves_explicit_transports() {
+        let profiles = parse_storage_save_input(json!({
+            "device": {
+                "id": "f1fb44",
+                "name": "isohub-f1fb44",
+                "baseUrl": "http://isohub-f1fb44.local",
+                "transports": {
+                    "httpBaseUrl": "http://isohub-f1fb44.local",
+                    "localUsbDeviceId": "usb--dev-cu-usbmodem21234101"
+                }
+            }
+        }))
+        .expect("web storage device should parse");
+
+        assert_eq!(profiles.len(), 2);
+        assert!(matches!(
+            profiles[0].transport,
+            HardwareTransport::Http { ref base_url }
+                if base_url == "http://isohub-f1fb44.local"
+        ));
+        assert!(matches!(
+            profiles[1].transport,
+            HardwareTransport::Usb { ref device_id, .. }
+                if device_id == "usb--dev-cu-usbmodem21234101"
+        ));
+        assert_eq!(
+            profiles[1]
+                .identity
+                .as_ref()
+                .and_then(|identity| identity.device_id.as_deref()),
+            Some("f1fb44")
         );
     }
 
@@ -1220,6 +1296,9 @@ mod tests {
         assert_eq!(info.get_property_val_str("app"), Some("isohub-devd"));
         assert_eq!(info.get_property_val_str("mode"), Some("web"));
         assert_eq!(info.get_property_val_str("api"), Some("/api/v1/bootstrap"));
-        assert_eq!(info.get_property_val_str("version"), Some(release_version()));
+        assert_eq!(
+            info.get_property_val_str("version"),
+            Some(release_version())
+        );
     }
 }

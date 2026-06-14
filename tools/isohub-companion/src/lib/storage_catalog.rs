@@ -70,17 +70,30 @@ fn write_storage_settings(settings: &StorageSettings) -> anyhow::Result<()> {
 }
 
 pub fn save_hardware(input: SavedHardwareInput) -> anyhow::Result<DeviceProfile> {
+    let profiles = save_hardware_profiles(vec![input])?;
+    profiles
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("no hardware profile saved"))
+}
+
+pub fn save_hardware_profiles(inputs: Vec<SavedHardwareInput>) -> anyhow::Result<Vec<DeviceProfile>> {
     let mut registry = read_hardware_registry()?;
-    let profile = DeviceProfile {
-        id: input.id,
-        name: input.name,
-        transport: input.transport,
-        identity: None,
-        last_seen_at: Some(now_unix_seconds()),
-    };
-    upsert_profile(&mut registry, profile.clone());
+    let now = now_unix_seconds();
+    let mut saved = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        let profile = DeviceProfile {
+            id: input.id,
+            name: input.name,
+            transport: input.transport,
+            identity: input.identity,
+            last_seen_at: Some(now),
+        };
+        upsert_profile(&mut registry, profile.clone());
+        saved.push(profile);
+    }
     write_hardware_registry(&registry)?;
-    Ok(profile)
+    Ok(saved)
 }
 
 fn delete_hardware(id: &str) -> anyhow::Result<bool> {

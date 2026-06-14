@@ -213,7 +213,12 @@ export function DevicesProvider({
         if (devices.some((d) => d.id !== id && d.baseUrl === baseUrl.baseUrl)) {
           return { ok: false, errors: { baseUrl: "Base URL already exists" } };
         }
-        return persistDevice({ id, name, baseUrl: baseUrl.baseUrl });
+        return persistDevice({
+          id,
+          name,
+          baseUrl: baseUrl.baseUrl,
+          transports: input.transports,
+        });
       },
       removeDevice: async (deviceId) => {
         if (agent) {

@@ -24,6 +24,7 @@ import {
   isWebSerialSupported,
   listLocalUsbSerialPorts,
   type SerialPortInfo,
+  stableLocalUsbDeviceId,
   WebSerialJsonlTransport,
 } from "../../domain/hardwareConsole";
 import { announceLocalUsbDeviceLink } from "../../domain/localUsbLinks";
@@ -555,6 +556,9 @@ export function AddDeviceDialog({
       id,
       name: existingName || hostname,
       baseUrl,
+      transports: fallback?.portPath
+        ? { localUsbDeviceId: stableLocalUsbDeviceId(fallback.portPath) }
+        : undefined,
     };
     const saved = ids.includes(id)
       ? await onUpsert(input)

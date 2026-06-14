@@ -71,6 +71,7 @@ use crate::device_contract::{
     PortTelemetryStatus as UsbPortTelemetryStatus, RuntimeSnapshot as UsbRuntimeSnapshot,
     WifiSnapshot as UsbWifiSnapshot, WifiState as UsbWifiState,
 };
+use crate::http_api_v1::ApiPendingAction;
 use crate::runtime_control::{
     apply_port_action, apply_wifi_clear_snapshot, apply_wifi_set_snapshot, tick_replug_countdowns,
     PortControlAction, PortRuntimeState,
@@ -919,6 +920,30 @@ fn service_usb_jsonl(
         }
     }
     last_action
+}
+
+fn apply_network_port_action(
+    action: ApiPendingAction,
+    manual_enabled: &mut [bool; 4],
+    port_enables: &mut [Output<'static>; 4],
+    ocp_latched: &mut [bool; 4],
+    ocp_safe_samples: &mut [u8; 4],
+    ocp_retry_wait: &mut [u8; 4],
+    replug_countdown: &mut [u8; 4],
+) {
+    let mut port_state = PortRuntimeState {
+        manual_enabled,
+        ocp_latched,
+        ocp_safe_samples,
+        ocp_retry_wait,
+        replug_countdown,
+    };
+    let _ = apply_port_action(
+        PortControlAction::from(action),
+        &mut port_state,
+        USB_REPLUG_HOLDOFF_TICKS,
+        |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
+    );
 }
 
 fn hub_power_mode_label(sideband_online: bool, upstream_powered: bool) -> &'static str {
@@ -1991,6 +2016,7 @@ async fn main(spawner: Spawner) {
         usb_mac,
         stored_wifi_credentials,
     );
+    let network_actions = network_runtime::action_receiver();
     let mut usb_wifi = match stored_wifi_credentials {
         Some(credentials) => UsbWifiSnapshot {
             configured: true,
@@ -2286,6 +2312,17 @@ async fn main(spawner: Spawner) {
             env!("CARGO_PKG_VERSION"),
             &mut usb_service,
         );
+        while let Ok(action) = network_actions.try_receive() {
+            apply_network_port_action(
+                action,
+                &mut manual_enabled,
+                &mut port_enables,
+                &mut ocp_latched,
+                &mut ocp_safe_samples,
+                &mut ocp_retry_wait,
+                &mut replug_countdown,
+            );
+        }
         match usb_action {
             Some(UsbAction::WifiSet { ssid, psk, .. }) => {
                 match WifiCredentials::new(ssid.as_str(), psk.as_str()) {

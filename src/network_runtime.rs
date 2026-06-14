@@ -8,7 +8,12 @@ use embassy_net::{
     tcp::TcpSocket, Config as NetConfig, ConfigV4, DhcpConfig, Ipv4Address, Ipv4Cidr, Stack,
     StackResources, StaticConfigV4,
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, signal::Signal};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    channel::{Channel, Receiver},
+    mutex::Mutex,
+    signal::Signal,
+};
 use embassy_time::{Duration, Timer};
 use embedded_io_async::Write as _;
 use esp_hal::{peripherals::WIFI, rng::Rng, timer::timg::TimerGroup};
@@ -17,11 +22,9 @@ use heapless::String;
 use heapless08::Vec;
 use static_cell::StaticCell;
 
-use crate::device_contract::{
-    render_info_result, render_ports_result, render_wifi_result, RuntimeSnapshot, WifiState,
-};
+use crate::device_contract::{render_wifi_result, RuntimeSnapshot, WifiState};
 use crate::device_identity::{fqdn_from_hostname, hostname_from_short_id, short_id_from_mac};
-use crate::http_api_v1::render_health_json;
+use crate::http_api_v1::{render_health_json, ApiOutcome, ApiPendingAction};
 use crate::mdns::{self, MdnsConfig};
 use crate::provisioning::WifiCredentials;
 
@@ -35,6 +38,7 @@ static WIFI_INIT: StaticCell<esp_wifi::EspWifiController<'static>> = StaticCell:
 static NETWORK_STATE: NetworkStateMutex = Mutex::new(NetworkState::new());
 static WIFI_APPLY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 static SNAPSHOT_SIGNAL: Signal<CriticalSectionRawMutex, RuntimeSnapshot> = Signal::new();
+static HTTP_ACTIONS: Channel<CriticalSectionRawMutex, ApiPendingAction, 8> = Channel::new();
 
 pub type NetworkStateMutex = Mutex<CriticalSectionRawMutex, NetworkState>;
 
@@ -61,6 +65,10 @@ pub fn request_wifi_runtime_apply() {
 
 pub fn publish_snapshot(snapshot: RuntimeSnapshot) {
     SNAPSHOT_SIGNAL.signal(snapshot);
+}
+
+pub fn action_receiver() -> Receiver<'static, CriticalSectionRawMutex, ApiPendingAction, 8> {
+    HTTP_ACTIONS.receiver()
 }
 
 pub fn spawn(
@@ -336,41 +344,34 @@ async fn handle_connection(
         write_preflight(socket, origin).await?;
         return Ok(());
     }
-    if method != "GET" {
-        write_json(socket, "405 Method Not Allowed", origin, "{\"error\":{\"code\":\"method_not_allowed\",\"message\":\"method not allowed\",\"retryable\":false}}").await?;
+
+    let path_only = path.split('?').next().unwrap_or(path);
+    if matches!(path_only, "/" | "/api/v1/health") {
+        write_json(socket, "200 OK", origin, render_health_json()).await?;
+        return Ok(());
+    }
+    if path_only == "/api/v1/wifi" && method == "GET" {
+        let wifi = current_wifi().await;
+        let body = render_wifi_result(wifi);
+        write_json(socket, "200 OK", origin, body.as_str()).await?;
         return Ok(());
     }
 
-    let path_only = path.split('?').next().unwrap_or(path);
-    match path_only {
-        "/" | "/api/v1/health" => {
-            write_json(socket, "200 OK", origin, render_health_json()).await?;
+    let Some(snapshot) = snapshot else {
+        write_json(socket, "503 Service Unavailable", origin, "{\"error\":{\"code\":\"not_ready\",\"message\":\"runtime snapshot is not ready\",\"retryable\":true}}").await?;
+        return Ok(());
+    };
+
+    match crate::http_api_v1::handle_request(method, path, snapshot, env!("CARGO_PKG_VERSION")) {
+        ApiOutcome::Response(response) => {
+            write_json(socket, response.status, origin, response.body.as_str()).await?;
         }
-        "/api/v1/info" => match snapshot {
-            Some(snapshot) => {
-                let body = render_info_result(snapshot, env!("CARGO_PKG_VERSION"));
-                write_json(socket, "200 OK", origin, body.as_str()).await?;
+        ApiOutcome::ResponseAndAction { response, action } => {
+            if HTTP_ACTIONS.try_send(action).is_err() {
+                write_json(socket, "409 Conflict", origin, "{\"error\":{\"code\":\"busy\",\"message\":\"runtime action queue is full\",\"retryable\":true}}").await?;
+            } else {
+                write_json(socket, response.status, origin, response.body.as_str()).await?;
             }
-            None => {
-                write_json(socket, "503 Service Unavailable", origin, "{\"error\":{\"code\":\"not_ready\",\"message\":\"runtime snapshot is not ready\",\"retryable\":true}}").await?;
-            }
-        },
-        "/api/v1/ports" => match snapshot {
-            Some(snapshot) => {
-                let body = render_ports_result(snapshot);
-                write_json(socket, "200 OK", origin, body.as_str()).await?;
-            }
-            None => {
-                write_json(socket, "503 Service Unavailable", origin, "{\"error\":{\"code\":\"not_ready\",\"message\":\"runtime snapshot is not ready\",\"retryable\":true}}").await?;
-            }
-        },
-        "/api/v1/wifi" => {
-            let wifi = current_wifi().await;
-            let body = render_wifi_result(wifi);
-            write_json(socket, "200 OK", origin, body.as_str()).await?;
-        }
-        _ => {
-            write_json(socket, "404 Not Found", origin, "{\"error\":{\"code\":\"not_found\",\"message\":\"not found\",\"retryable\":false}}").await?;
         }
     }
     Ok(())

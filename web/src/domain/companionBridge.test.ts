@@ -17,6 +17,16 @@ describe("resolveAgentBaseUrl", () => {
     ).toBe("http://127.0.0.1:14890");
   });
 
+  test("preserves same-origin payload path prefixes", () => {
+    expect(
+      resolveAgentBaseUrl(
+        "/hub/api/v1/bootstrap",
+        "http://127.0.0.1:14890/hub/",
+        "http://127.0.0.1:14890/devices",
+      ),
+    ).toBe("http://127.0.0.1:14890/hub/");
+  });
+
   test("keeps absolute same-origin bootstrap requests on the current origin", () => {
     expect(
       resolveAgentBaseUrl(

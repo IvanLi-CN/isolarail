@@ -21,8 +21,10 @@ export function resolveAgentBaseUrl(
   try {
     const current = new URL(currentLocationHref);
     const bootstrap = new URL(bootstrapUrl, current);
+    const payload = new URL(payloadAgentBaseUrl, current);
     if (bootstrap.origin === current.origin) {
-      return current.origin;
+      const hasPathPrefix = payload.pathname !== "/";
+      return hasPathPrefix ? payload.toString() : current.origin;
     }
   } catch {
     return payloadAgentBaseUrl;

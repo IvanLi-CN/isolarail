@@ -26,4 +26,4 @@ DEFMT_LOG = "info"
 EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "65536"
 
 [unstable]
-build-std = ["core"]
+build-std = ["core", "alloc"]

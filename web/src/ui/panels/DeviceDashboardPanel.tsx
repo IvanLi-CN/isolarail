@@ -1,0 +1,368 @@
+import { useMemo } from "react";
+import { useDeviceRuntime } from "../../app/device-runtime";
+import type { StoredDevice } from "../../domain/devices";
+import {
+  CANONICAL_PORT_IDS,
+  type CanonicalPortId,
+  type PortState,
+  type PortTelemetry,
+  portLabel,
+} from "../../domain/ports";
+import { PortCard } from "../cards/PortCard";
+import { formatTimeHms } from "../format/time";
+
+const fallbackTelemetry: PortTelemetry = {
+  status: "error",
+  voltage_mv: null,
+  current_ma: null,
+  power_mw: null,
+  sample_uptime_ms: 0,
+};
+
+const fallbackState: PortState = {
+  power_enabled: false,
+  data_connected: false,
+  replugging: false,
+  busy: true,
+  overcurrent: false,
+};
+
+function mergedPortState(
+  state: PortState | undefined,
+  pending: boolean,
+): PortState {
+  return {
+    power_enabled: state?.power_enabled ?? false,
+    data_connected: state?.data_connected ?? false,
+    replugging: state?.replugging ?? false,
+    busy: (state?.busy ?? true) || pending,
+    overcurrent: state?.overcurrent ?? false,
+  };
+}
+
+function statusBadge(state: "online" | "offline" | "unknown"): {
+  bg: string;
+  text: string;
+  width: string;
+} {
+  if (state === "online") {
+    return {
+      bg: "bg-[var(--badge-success-bg)]",
+      text: "text-[var(--badge-success-text)]",
+      width: "w-[96px]",
+    };
+  }
+  if (state === "offline") {
+    return {
+      bg: "bg-[var(--badge-error-bg)]",
+      text: "text-[var(--badge-error-text)]",
+      width: "w-[96px]",
+    };
+  }
+  return {
+    bg: "bg-[var(--badge-warning-bg)]",
+    text: "text-[var(--badge-warning-text)]",
+    width: "w-[96px]",
+  };
+}
+
+function upstreamBadge(upstreamConnected: boolean | null): {
+  bg: string;
+  text: string;
+  width: string;
+  label: string;
+} {
+  if (upstreamConnected === null) {
+    return {
+      bg: "bg-[var(--badge-warning-bg)]",
+      text: "text-[var(--badge-warning-text)]",
+      width: "w-[96px]",
+      label: "HOST —",
+    };
+  }
+  if (upstreamConnected) {
+    return {
+      bg: "bg-[var(--badge-success-bg)]",
+      text: "text-[var(--badge-success-text)]",
+      width: "w-[96px]",
+      label: "HOST LINK",
+    };
+  }
+  return {
+    bg: "bg-[var(--badge-error-bg)]",
+    text: "text-[var(--badge-error-text)]",
+    width: "w-[96px]",
+    label: "NO HOST",
+  };
+}
+
+function isolatedBadge(
+  value: boolean | null,
+  labels: { unknown: string; on: string; off: string },
+): {
+  bg: string;
+  text: string;
+  width: string;
+  label: string;
+} {
+  if (value === null) {
+    return {
+      bg: "bg-[var(--badge-warning-bg)]",
+      text: "text-[var(--badge-warning-text)]",
+      width: "w-[112px]",
+      label: labels.unknown,
+    };
+  }
+  if (value) {
+    return {
+      bg: "bg-[var(--badge-success-bg)]",
+      text: "text-[var(--badge-success-text)]",
+      width: "w-[112px]",
+      label: labels.on,
+    };
+  }
+  return {
+    bg: "bg-[var(--badge-error-bg)]",
+    text: "text-[var(--badge-error-text)]",
+    width: "w-[112px]",
+    label: labels.off,
+  };
+}
+
+function isolatedFaultBadge(value: boolean | null): {
+  bg: string;
+  text: string;
+  width: string;
+  label: string;
+} {
+  if (value === null) {
+    return {
+      bg: "bg-[var(--badge-warning-bg)]",
+      text: "text-[var(--badge-warning-text)]",
+      width: "w-[112px]",
+      label: "ISO FAULT —",
+    };
+  }
+  if (value) {
+    return {
+      bg: "bg-[var(--badge-error-bg)]",
+      text: "text-[var(--badge-error-text)]",
+      width: "w-[112px]",
+      label: "ISO FAULT",
+    };
+  }
+  return {
+    bg: "bg-[var(--badge-success-bg)]",
+    text: "text-[var(--badge-success-text)]",
+    width: "w-[112px]",
+    label: "ISO OK",
+  };
+}
+
+function transportLabel(transport: "http" | "local_usb" | "web_serial" | null) {
+  if (transport === "http") {
+    return "Wi-Fi / LAN";
+  }
+  if (transport === "web_serial") {
+    return "Web Serial";
+  }
+  if (transport === "local_usb") {
+    return "Local USB";
+  }
+  return "—";
+}
+
+function shortChannelState(state: "online" | "offline" | "unknown"): string {
+  if (state === "online") {
+    return "on";
+  }
+  if (state === "offline") {
+    return "off";
+  }
+  return "—";
+}
+
+export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
+  const runtime = useDeviceRuntime();
+
+  const connectionState = runtime.connectionState(device.id);
+  const badge = statusBadge(connectionState);
+  const hub = connectionState === "online" ? runtime.hub(device.id) : null;
+  const upstream = upstreamBadge(
+    connectionState === "online" ? (hub?.upstream_connected ?? null) : null,
+  );
+  const isolatedFault = isolatedFaultBadge(
+    connectionState === "online" ? (hub?.isolated_usb_fault ?? null) : null,
+  );
+  const isolatedReady = isolatedBadge(
+    connectionState === "online" ? (hub?.isolated_usb_ready ?? null) : null,
+    {
+      unknown: "ISO READY —",
+      on: "ISO READY",
+      off: "ISO WAIT",
+    },
+  );
+
+  const lastOkAt = runtime.lastOkAt(device.id);
+  const headerLastOk = lastOkAt === null ? "—" : formatTimeHms(lastOkAt);
+
+  const rawBuildSha =
+    (import.meta.env.VITE_BUILD_SHA as string | undefined) ?? "";
+  const buildSha =
+    rawBuildSha && rawBuildSha !== "dev" ? rawBuildSha.slice(0, 7) : "—";
+
+  const transport = runtime.transport(device.id);
+  const wifiState = runtime.channelState(device.id, "http");
+  const webSerialState = runtime.channelState(device.id, "web_serial");
+  const localUsbState = runtime.channelState(device.id, "local_usb");
+  const notes =
+    runtime.lastErrorLabel(device.id) ??
+    `Primary: ${transportLabel(transport)} · Wi-Fi ${shortChannelState(wifiState)} · Web Serial ${shortChannelState(webSerialState)} · Local USB ${shortChannelState(localUsbState)}`;
+
+  const writeDisabled =
+    connectionState !== "online" || !runtime.usbWriteTransport(device.id);
+
+  const items = useMemo(() => {
+    const isOnline = connectionState === "online";
+
+    const port = (portId: CanonicalPortId) => runtime.port(device.id, portId);
+    const pending = (portId: CanonicalPortId) =>
+      runtime.pending(device.id, portId);
+
+    const telemetry = (portId: CanonicalPortId): PortTelemetry =>
+      isOnline
+        ? (port(portId)?.telemetry ?? fallbackTelemetry)
+        : fallbackTelemetry;
+
+    const state = (portId: CanonicalPortId): PortState =>
+      isOnline
+        ? mergedPortState(port(portId)?.state ?? undefined, pending(portId))
+        : fallbackState;
+
+    return Object.fromEntries(
+      CANONICAL_PORT_IDS.map((portId) => [
+        portId,
+        {
+          label: portLabel(portId),
+          telemetry: telemetry(portId),
+          state: state(portId),
+          pending: isOnline ? pending(portId) : false,
+        },
+      ]),
+    ) as Record<
+      CanonicalPortId,
+      {
+        label: string;
+        telemetry: PortTelemetry;
+        state: PortState;
+        pending: boolean;
+      }
+    >;
+  }, [connectionState, device.id, runtime]);
+
+  return (
+    <div className="flex flex-col gap-6" data-testid="device-dashboard">
+      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+        <div className="grid grid-cols-1 gap-5 leading-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start">
+          <div className="grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
+            <div className="pt-[6px] text-[12px] font-semibold text-[var(--muted)]">
+              Status
+            </div>
+            <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4">
+              <div
+                className={[
+                  "flex h-[26px] items-center justify-center rounded-full",
+                  badge.width,
+                  badge.bg,
+                  badge.text,
+                  "text-[12px] font-semibold",
+                ].join(" ")}
+              >
+                {connectionState.toUpperCase()}
+              </div>
+              <div
+                className={[
+                  "flex h-[26px] items-center justify-center rounded-full",
+                  upstream.width,
+                  upstream.bg,
+                  upstream.text,
+                  "text-[12px] font-semibold",
+                ].join(" ")}
+              >
+                {upstream.label}
+              </div>
+              <div
+                className={[
+                  "flex h-[26px] items-center justify-center rounded-full",
+                  isolatedFault.width,
+                  isolatedFault.bg,
+                  isolatedFault.text,
+                  "text-[11px] font-semibold",
+                ].join(" ")}
+              >
+                {isolatedFault.label}
+              </div>
+              <div
+                className={[
+                  "flex h-[26px] items-center justify-center rounded-full",
+                  isolatedReady.width,
+                  isolatedReady.bg,
+                  isolatedReady.text,
+                  "text-[11px] font-semibold",
+                ].join(" ")}
+              >
+                {isolatedReady.label}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-x-4 gap-y-3">
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
+              Build
+            </div>
+            <div className="min-w-0 truncate font-mono text-[12px] font-semibold">
+              {buildSha}
+            </div>
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
+              Last ok
+            </div>
+            <div className="font-mono text-[12px] font-semibold">
+              {headerLastOk}
+            </div>
+            <div className="text-[12px] font-semibold text-[var(--muted)]">
+              Notes
+            </div>
+            <div
+              className="min-w-0 truncate text-[12px] font-semibold"
+              title={notes}
+            >
+              {notes}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+        {CANONICAL_PORT_IDS.map((portId) => (
+          <PortCard
+            key={portId}
+            portId={portId}
+            label={items[portId].label}
+            telemetry={items[portId].telemetry}
+            state={items[portId].state}
+            disabled={writeDisabled}
+            powerPending={items[portId].pending}
+            onTogglePower={() =>
+              void runtime.setPower(
+                device.id,
+                portId,
+                !items[portId].state.power_enabled,
+              )
+            }
+            onReplug={() => void runtime.replug(device.id, portId)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}

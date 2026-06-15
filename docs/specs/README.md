@@ -2,6 +2,24 @@
 
 本目录用于管理工作项的**规格与追踪**：记录范围、验收标准、任务清单与状态，作为交付依据；实现与验证应以对应 `SPEC.md` 为准。
 
+当前仓库的软件与硬件命名真相源由 `pw97u-control-plane-alignment/SPEC.md` 统一定义：
+
+- 固件 package / identity：`iso-usb-hub`
+- repo JS tooling package：`isohub-dev-tools`
+- CLI：`isohub`
+- daemon：`isohub-devd`
+- companion workspace：`tools/isohub-companion/`
+- internal support crates / tools：`gc9d01`、`dashboard_preview`、`icon2raw`、`png2raw`
+- vendored example packages：`gc9d01/examples/**` 下的示例包名仅用于驱动示例，不得进入本项目 owner-facing 命名
+- 开发者入口：`just`
+- owner-facing 端口模型：`port1..port4`
+- 当前硬件基线：`V3`
+- 主控与关键子系统名：`ESP32-S3`、`CH335F`、`M24C64@0x50`、`TPS2490`、`ISOUSB211 V1OK`、`PCA9545A@0x70`、`Mainboard TCA6408A@0x20`、`Front-panel TCA6408A@0x21`
+- legacy/scoped hardware names：`SC8815 + SW2303`、`PSTOP_CTL/PSTOP`、`VIN_ADC`、`PCA9545A INT/INTx`、scoped `RESET#` 只允许在硬件拓扑或迁移语境下出现
+- 参考硬件资料中的 `TPS82130SILR`、`RT9043GB`、`TCA6408APWR`、`TCA6408ARSVR`、`TCA9535RTWR` 等料号仅允许作为 reference-only 历史输入，不得覆盖当前 V3 控制面命名
+
+后续 spec、README、实现与 UI 文案不得偏离这套命名；BOM/netlist 精确料号只能作为电气资料别名，不能替代控制面 canonical 名称。
+
 > Legacy compatibility: historical repos may still contain `docs/plan/**/PLAN.md`. New entries must be created under `docs/specs/**/SPEC.md`.
 
 ## 快速新增一个规格
@@ -65,8 +83,9 @@
 |    ID | Title      | Status    | Spec                                     | Last       | Notes  |
 |------:|------------|-----------|------------------------------------------|------------|--------|
 | k3p8m | 示例：新增工作项规格 | 待设计       | `k3p8m-example-spec/SPEC.md`             | YYYY-MM-DD | -      |
+| pw97u | 四路 USB Hub 控制面对齐 | 部分完成（3/4） | `pw97u-control-plane-alignment/SPEC.md` | 2026-06-13 | 固件共享契约、companion tools、web 控制面与视觉证据已落地；剩余文档/review-proof/本地提交收口 |
 | 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
 | j6nvw | 硬件 V3 引脚与显示链路对齐 | 部分完成（2/3） | `j6nvw-hardware-v3-pin-assignment/SPEC.md` | 2026-04-27 | legacy `docs/plan/j6nvw-hw-v3-pin-assignment/**` 删除待确认 |
-| h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-04-29 | 固件与 host p1/p3/p4 控制已验证；PWREN1#/2# 硬件缺陷见 issue #18 |
+| h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-06-13 | 固件与上游侧 p1/p3/p4 控制已验证；命名已对齐到 `isohub` / 上游侧语义；PWREN1#/2# 硬件缺陷见 issue #18 |
 | e5nyr | 发布失败 Telegram 告警接入 | 已完成 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-04-12 | PR #12 |
 <!-- markdownlint-enable MD060 -->

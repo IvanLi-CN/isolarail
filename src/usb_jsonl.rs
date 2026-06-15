@@ -162,6 +162,36 @@ struct Request<'a> {
     params: RequestParams<'a>,
 }
 
+#[derive(Deserialize)]
+struct NumericIdRequest<'a> {
+    id: Option<i64>,
+    #[serde(borrow)]
+    method: Option<&'a str>,
+    #[serde(default)]
+    params: RequestParams<'a>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RequestId<'a> {
+    String(&'a str),
+    Number(i64),
+}
+
+impl RequestId<'_> {
+    fn write_json<const N: usize>(&self, out: &mut String<N>) {
+        match self {
+            Self::String(id) => {
+                let _ = out.push('"');
+                write_json_escaped(out, id);
+                let _ = out.push('"');
+            }
+            Self::Number(id) => {
+                let _ = write!(out, "{id}");
+            }
+        }
+    }
+}
+
 #[derive(Default, Deserialize)]
 struct RequestParams<'a> {
     #[serde(borrow)]
@@ -178,24 +208,20 @@ pub fn handle_request(
     snapshot: RuntimeSnapshot,
     version: &str,
 ) -> Result<UsbResponse, ProtocolError> {
-    let (request, _used) = serde_json_core::de::from_str::<Request<'_>>(line)
-        .map_err(|_| ProtocolError::InvalidJson)?;
-    let id = request.id.ok_or(ProtocolError::MissingField)?;
-    let method = request.method.ok_or(ProtocolError::MissingField)?;
-
-    match method {
+    let request = parse_request(line)?;
+    match request.method {
         "info" => Ok(UsbResponse {
-            response: render_info_response(id, snapshot, version),
+            response: render_info_response(request.id, snapshot, version),
             log: None,
             action: UsbAction::None,
         }),
         "ports.get" => Ok(UsbResponse {
-            response: render_ports_response(id, snapshot),
+            response: render_ports_response(request.id, snapshot),
             log: None,
             action: UsbAction::None,
         }),
         "wifi.get" => Ok(UsbResponse {
-            response: render_wifi_response(id, snapshot.wifi),
+            response: render_wifi_response(request.id, snapshot.wifi),
             log: None,
             action: UsbAction::None,
         }),
@@ -210,7 +236,7 @@ pub fn handle_request(
             );
             Ok(UsbResponse {
                 response: render_simple_ok(
-                    id,
+                    request.id,
                     r#"{"accepted":true,"reboot_required":false,"applied":false}"#,
                 ),
                 log: Some(log),
@@ -231,7 +257,7 @@ pub fn handle_request(
             );
             Ok(UsbResponse {
                 response: render_simple_ok(
-                    id,
+                    request.id,
                     r#"{"accepted":true,"reboot_required":false,"applied":false}"#,
                 ),
                 log: Some(log),
@@ -254,7 +280,7 @@ pub fn handle_request(
             );
             Ok(UsbResponse {
                 response: render_simple_ok(
-                    id,
+                    request.id,
                     if enabled {
                         r#"{"accepted":true,"power_enabled":true}"#
                     } else {
@@ -275,7 +301,7 @@ pub fn handle_request(
                 "port replug requested as power-cycle",
             );
             Ok(UsbResponse {
-                response: render_simple_ok(id, r#"{"accepted":true,"mode":"power_cycle"}"#),
+                response: render_simple_ok(request.id, r#"{"accepted":true,"mode":"power_cycle"}"#),
                 log: Some(log),
                 action: UsbAction::PortReplug { index },
             })
@@ -289,13 +315,36 @@ pub fn handle_request(
                 "software reboot accepted over USB",
             );
             Ok(UsbResponse {
-                response: render_simple_ok(id, r#"{"accepted":true}"#),
+                response: render_simple_ok(request.id, r#"{"accepted":true}"#),
                 log: Some(log),
                 action: UsbAction::Reboot,
             })
         }
         _ => Err(ProtocolError::UnsupportedMethod),
     }
+}
+
+struct ParsedRequest<'a> {
+    id: RequestId<'a>,
+    method: &'a str,
+    params: RequestParams<'a>,
+}
+
+fn parse_request(line: &str) -> Result<ParsedRequest<'_>, ProtocolError> {
+    if let Ok((request, _used)) = serde_json_core::de::from_str::<Request<'_>>(line) {
+        return Ok(ParsedRequest {
+            id: RequestId::String(request.id.ok_or(ProtocolError::MissingField)?),
+            method: request.method.ok_or(ProtocolError::MissingField)?,
+            params: request.params,
+        });
+    }
+    let (request, _used) = serde_json_core::de::from_str::<NumericIdRequest<'_>>(line)
+        .map_err(|_| ProtocolError::InvalidJson)?;
+    Ok(ParsedRequest {
+        id: RequestId::Number(request.id.ok_or(ProtocolError::MissingField)?),
+        method: request.method.ok_or(ProtocolError::MissingField)?,
+        params: request.params,
+    })
 }
 
 pub fn render_protocol_error(request_id: Option<&str>, error: ProtocolError) -> String<256> {
@@ -350,25 +399,27 @@ fn parse_port_index(port: Option<&str>) -> Result<usize, ProtocolError> {
     port_index_from_id(port.ok_or(ProtocolError::MissingField)?).ok_or(ProtocolError::InvalidPort)
 }
 
-fn render_simple_ok(id: &str, result_json: &str) -> String<2048> {
+fn render_simple_ok(id: RequestId<'_>, result_json: &str) -> String<2048> {
     let mut out = String::<2048>::new();
-    let _ = write!(
-        out,
-        "{{\"id\":\"{}\",\"ok\":true,\"result\":{}}}",
-        id, result_json
-    );
+    let _ = out.push_str("{\"id\":");
+    id.write_json(&mut out);
+    let _ = write!(out, ",\"ok\":true,\"result\":{}}}", result_json);
     out
 }
 
-fn render_info_response(id: &str, snapshot: RuntimeSnapshot, version: &str) -> String<2048> {
+fn render_info_response(
+    id: RequestId<'_>,
+    snapshot: RuntimeSnapshot,
+    version: &str,
+) -> String<2048> {
     render_simple_ok(id, render_info_result(snapshot, version).as_str())
 }
 
-fn render_ports_response(id: &str, snapshot: RuntimeSnapshot) -> String<2048> {
+fn render_ports_response(id: RequestId<'_>, snapshot: RuntimeSnapshot) -> String<2048> {
     render_simple_ok(id, render_ports_result(snapshot).as_str())
 }
 
-fn render_wifi_response(id: &str, wifi: WifiSnapshot) -> String<2048> {
+fn render_wifi_response(id: RequestId<'_>, wifi: WifiSnapshot) -> String<2048> {
     render_simple_ok(id, render_wifi_result(wifi).as_str())
 }
 
@@ -397,5 +448,63 @@ fn write_json_escaped<const N: usize>(out: &mut String<N>, value: &str) {
                 let _ = out.push(c);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device_contract::{HubSnapshot, PortSnapshot, PortTelemetryStatus, WifiState};
+
+    fn sample_snapshot() -> RuntimeSnapshot {
+        RuntimeSnapshot {
+            mac: [0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0xee],
+            uptime_ms: 42,
+            wifi: WifiSnapshot {
+                configured: false,
+                psk_configured: false,
+                state: WifiState::Idle,
+                ipv4: None,
+                is_static: false,
+                ssid: [0u8; 32],
+                ssid_len: 0,
+            },
+            hub: HubSnapshot {
+                upstream_connected: true,
+                isolated_usb_fault: false,
+                isolated_downstream_connected: true,
+                isolated_usb_ready: true,
+            },
+            ports: [PortSnapshot {
+                label: "Port",
+                status: PortTelemetryStatus::Ok,
+                voltage_mv: 5000,
+                current_ma: 0,
+                power_enabled: true,
+                data_connected: false,
+                replugging: false,
+                busy: false,
+                overcurrent: false,
+            }; 4],
+        }
+    }
+
+    #[test]
+    fn accepts_numeric_and_string_request_ids() {
+        let numeric = handle_request(
+            r#"{"id":7,"method":"info","params":{}}"#,
+            sample_snapshot(),
+            "0.1.0",
+        )
+        .expect("numeric id should parse");
+        assert!(numeric.response.contains(r#""id":7"#));
+
+        let string = handle_request(
+            r#"{"id":"devd-7","method":"info","params":{}}"#,
+            sample_snapshot(),
+            "0.1.0",
+        )
+        .expect("string id should parse");
+        assert!(string.response.contains(r#""id":"devd-7""#));
     }
 }

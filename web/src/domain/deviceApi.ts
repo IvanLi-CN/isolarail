@@ -91,7 +91,7 @@ function parseErrorEnvelope(value: unknown): ErrorEnvelope | null {
   return value as ErrorEnvelope;
 }
 
-function shouldUsePna(baseUrl: string): boolean {
+export function shouldUsePna(baseUrl: string): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -107,7 +107,17 @@ function shouldUsePna(baseUrl: string): boolean {
   if (url.protocol !== "http:") {
     return false;
   }
-  return url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+  return !isLoopbackHost(url.hostname);
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "[::1]" ||
+    normalized === "::1"
+  );
 }
 
 async function fetchJson<T>(

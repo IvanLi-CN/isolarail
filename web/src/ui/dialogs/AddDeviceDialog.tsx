@@ -373,7 +373,9 @@ export function AddDeviceDialog({
         if (!agent) {
           setLocalUsbPorts([]);
           setSelectedLocalUsbPort("");
-          setAddError("Local companion is not running.");
+          setAddError(
+            "Local USB needs an explicit isohub-devd web companion. Start `just devd-web` and retry.",
+          );
           return;
         }
         const ports = filterEsp32SerialPorts(
@@ -629,7 +631,7 @@ export function AddDeviceDialog({
         return;
       }
       if (!agent) {
-        setAddError("Local companion is not running.");
+        setAddError("isohub-devd web companion is not running.");
         return;
       }
       const ports =
@@ -1021,7 +1023,7 @@ export function AddDeviceDialog({
                   <div className="mt-3 text-[13px] font-semibold leading-6 text-[var(--muted)]">
                     {method === "web_serial"
                       ? "Select the hub in the browser serial picker. The app reads device info over USB and adds it here."
-                      : "Use the local companion service to read the connected hub over USB and add it here."}
+                      : "Use the explicit isohub-devd web companion to read the connected hub over Local USB and add it here."}
                   </div>
                   {method === "web_serial" && !isWebSerialSupported() ? (
                     <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-[12px] font-semibold text-[var(--warning)]">

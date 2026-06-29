@@ -83,7 +83,7 @@
 |    ID | Title      | Status    | Spec                                     | Last       | Notes  |
 |------:|------------|-----------|------------------------------------------|------------|--------|
 | k3p8m | 示例：新增工作项规格 | 待设计       | `k3p8m-example-spec/SPEC.md`             | YYYY-MM-DD | -      |
-| pw97u | 四路 USB Hub 控制面对齐 | 部分完成（3/4） | `pw97u-control-plane-alignment/SPEC.md` | 2026-06-13 | 固件共享契约、companion tools、web 控制面与视觉证据已落地；剩余文档/review-proof/本地提交收口 |
+| pw97u | 四路 USB Hub 控制面对齐 | 已完成 | `pw97u-control-plane-alignment/SPEC.md` | 2026-06-29 | 当前 HEAD 已完成本地 `PR-ready` 收口：Wi-Fi/LAN、USB CDC、companion、web、current-truth 文档与视觉证据已统一对齐 |
 | 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
 | j6nvw | 硬件 V3 引脚与显示链路对齐 | 部分完成（2/3） | `j6nvw-hardware-v3-pin-assignment/SPEC.md` | 2026-04-27 | legacy `docs/plan/j6nvw-hw-v3-pin-assignment/**` 删除待确认 |
 | h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-06-13 | 固件与上游侧 p1/p3/p4 控制已验证；命名已对齐到 `isohub` / 上游侧语义；PWREN1#/2# 硬件缺陷见 issue #18 |

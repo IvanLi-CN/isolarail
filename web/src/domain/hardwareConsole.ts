@@ -22,8 +22,10 @@ const ESP32_USB_SERIAL_JTAG_PRODUCT_ID = 0x1001;
 export const DEFAULT_LOCAL_USB_FLASH_ADDRESS = 0x10000;
 const DEFAULT_JSONL_TIMEOUT_MS = 5_000;
 const LOCAL_USB_BUSY_RETRIES = 5;
+const DEVD_DEVICE_REGISTRATION_TTL_MS = 5_000;
 let jsonlRequestSeq = 1;
 const localUsbRequestQueues: Record<string, Promise<void>> = {};
+const devdRegisteredDeviceExpiryById: Record<string, number> = {};
 
 export class LocalUsbAgentHttpError extends Error {
   readonly status: number;
@@ -324,6 +326,10 @@ async function ensureDevdLocalUsbDeviceRegistered(
   agent: CompanionBridge,
   deviceId: string,
 ): Promise<void> {
+  const cachedUntil = devdRegisteredDeviceExpiryById[deviceId] ?? 0;
+  if (cachedUntil > Date.now()) {
+    return;
+  }
   const res = await agentFetch(agent, "/api/v1/devices/scan", {
     method: "POST",
   });
@@ -332,6 +338,7 @@ async function ensureDevdLocalUsbDeviceRegistered(
     error?: { code?: string; message?: string; retryable?: boolean };
   } | null;
   if (!res.ok) {
+    delete devdRegisteredDeviceExpiryById[deviceId];
     throw new LocalUsbAgentHttpError(
       json?.error?.message ?? "Local USB scan failed",
       res.status,
@@ -340,8 +347,11 @@ async function ensureDevdLocalUsbDeviceRegistered(
     );
   }
   if (!json?.devices?.some((device) => device.id === deviceId)) {
+    delete devdRegisteredDeviceExpiryById[deviceId];
     throw new Error(`Local USB device is not available: ${deviceId}`);
   }
+  devdRegisteredDeviceExpiryById[deviceId] =
+    Date.now() + DEVD_DEVICE_REGISTRATION_TTL_MS;
 }
 
 async function sendLocalUsbJsonlRequestNow(

@@ -447,8 +447,8 @@ export function DeviceRuntimeProvider({
       return devdDeviceId
         ? uniqueTransports([
             active,
-            "local_usb",
             httpLinked ? "http" : null,
+            "local_usb",
             "web_serial",
           ])
         : uniqueTransports([
@@ -470,7 +470,13 @@ export function DeviceRuntimeProvider({
       try {
         let res: Result<PortsResponse> | null = null;
         let transport: DeviceTransport | null = null;
-        for (const candidate of orderedTransports(deviceId)) {
+        const pollOrder = uniqueTransports([
+          "http",
+          ...orderedTransports(deviceId).filter(
+            (candidate) => candidate !== "http",
+          ),
+        ]);
+        for (const candidate of pollOrder) {
           const candidateRes = await requestTransport<PortsResponse>(
             deviceId,
             candidate === "http"

@@ -160,10 +160,10 @@ jobs:
 
           ## Hardware
           - ESP32‑S3 development board
-      files: |
-        target/xtensa-esp32s3-none-elf/release/iso-usb-hub
-        target/xtensa-esp32s3-none-elf/release/examples/*
-      prerelease: ${{ github.event.inputs.prerelease }}
-      draft: false
+        files: |
+          target/xtensa-esp32s3-none-elf/release/iso-usb-hub
+          target/xtensa-esp32s3-none-elf/release/examples/*
+        prerelease: ${{ github.event.inputs.prerelease }}
+        draft: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

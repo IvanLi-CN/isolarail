@@ -83,6 +83,22 @@ USB_PORT=/dev/cu.usbmodem2123101 just isohub --help
 
 `USB_PORT` is forwarded to `ISOHUB_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
 
+Recommended HIL sequence for one board:
+
+```bash
+USB_PORT=/dev/cu.usbmodem21234101 just discover
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just status
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just ports
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just wifi-show
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just monitor
+```
+
+Notes:
+
+- Run Local USB commands sequentially against one board. The companion enforces per-port mutual exclusion, so overlapping `status` / `ports` / `wifi-show` / `port-power` runs can legitimately return `device busy`.
+- Mutating commands such as `port-power` and `port-replug` may need a short settle window before a follow-up `just ports` reflects the new state.
+- `just reset` reboots the board and temporarily drops the USB session. Treat it as a standalone command, then wait for re-enumeration before the next `discover` / `status`.
+
 Selector rules:
 
 - Use `SELECTOR='--device <device-id>'` for a currently connected temporary USB target.
@@ -144,7 +160,7 @@ cargo install espflash
 
 ## Validation status
 
-The following software-only checks are currently expected to pass in a correctly prepared dev environment:
+Re-verified on the current `HEAD` in this dev environment:
 
 - `just --list`
 - `just tools-build`
@@ -155,6 +171,14 @@ The following software-only checks are currently expected to pass in a correctly
 - `just isohub --help`
 - `just devd-help`
 - `just firmware-check`
+- `just firmware-contract-test`
+- `cargo +esp check --release`
+
+Additional quality gates that remain part of the expected developer workflow, but were not re-run in this pass:
+
+- `just web-test-companion-bridge`
+- `just web-test-e2e`
+- `just web-test-storybook`
 
 ## Reference docs
 

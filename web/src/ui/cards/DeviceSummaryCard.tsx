@@ -72,32 +72,35 @@ export function DeviceSummaryCard({
 
   return (
     <div
-      className="iso-card h-[272px] w-full rounded-[18px] bg-[var(--panel)] shadow-[inset_0_0_0_1px_var(--border)]"
+      className="iso-card w-full rounded-[18px] bg-[var(--panel)] shadow-[inset_0_0_0_1px_var(--border)]"
       data-testid={`device-summary-${device.id}`}
     >
-      <div className="flex h-full flex-col pb-[18px] pl-6 pr-6 pt-[14px]">
-        <div className="h-[62px]">
-          <div className="flex items-start justify-between gap-4">
-            <div className="text-[16px] font-bold leading-5">{device.name}</div>
-            <div
-              className={[
-                "flex h-6 items-center justify-center rounded-full",
-                badge.width,
-                badge.bg,
-                badge.text,
-                "text-[12px] font-semibold",
-              ].join(" ")}
-            >
-              {connection.state}
+      <div className="flex flex-col gap-4 px-5 py-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="truncate text-[16px] font-bold leading-5">
+              {device.name}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] font-semibold leading-[18px] text-[var(--muted)]">
+              <span>id: {shortId}</span>
+              <span>last ok: {lastOkLabel}</span>
+              <span>upstream: {upstreamLabel}</span>
             </div>
           </div>
-
-          <div className="mt-3 font-mono text-[12px] font-semibold leading-[18px] text-[var(--muted)]">
-            id: {shortId} • last ok: {lastOkLabel} • upstream: {upstreamLabel}
+          <div
+            className={[
+              "flex h-6 shrink-0 items-center justify-center rounded-full px-3",
+              badge.width,
+              badge.bg,
+              badge.text,
+              "text-[12px] font-semibold",
+            ].join(" ")}
+          >
+            {connection.state}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {CANONICAL_PORT_IDS.map((portId) => (
             <PortMiniCard
               key={portId}
@@ -106,6 +109,7 @@ export function DeviceSummaryCard({
               telemetry={ports[portId].telemetry}
               state={ports[portId].state}
               disabled={writeDisabled}
+              compact
               onSetPower={(enabled) => onSetPower(device.id, portId, enabled)}
               onReplug={() => onDataReplug(device.id, portId)}
             />
@@ -113,7 +117,7 @@ export function DeviceSummaryCard({
         </div>
 
         <button
-          className="mt-3 flex h-[34px] w-full flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
+          className="flex h-[34px] w-full flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
           type="button"
           onClick={() => onOpenDashboard(device.id)}
         >

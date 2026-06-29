@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 控制面对齐已推进到 PR-ready 实现状态：固件 Wi-Fi runtime、Local USB / LAN profile coalescing、Web canonical route、Dashboard 控件交互与本地验证均已收口。
+- 控制面对齐已在当前 `HEAD` 收口到本地 `PR-ready`：固件 Wi-Fi runtime、Local USB / LAN profile coalescing、Web canonical route、Dashboard / Settings / Info / Add device 视觉证据、Storybook 与 current-truth 文档已重新按同一轮验证与 spec 证据对齐。
 - 新建规格并冻结 `isohub` 命名空间、`port1..port4` 端口模型、当前 V3 硬件基线命名与 `replug=power-cycle` 语义。
 - 规格已补齐仓内一方软件包清单：root firmware `iso-usb-hub`、repo JS tooling `isohub-dev-tools`、frontend package `web`、companion package/binaries、`gc9d01` 与 `tools/` 下的本地预览/资源转换 crate。
 - 规格已补上 manifest coverage audit：当前仓内全部 `Cargo.toml` / `package.json` 都已被 `Software Package Matrix` 明确覆盖，`tools/firmware-catalog/` 被记录为 script-only 目录而非独立 package。
@@ -16,7 +16,7 @@
 - 规格已明确 daemon 默认 IPC 机制：`isohub-devd serve` 在 Unix 使用 Unix domain socket，在 Windows 使用 named pipe；`isohub-devd web` 只作为显式 Web companion 存在。
 - 项目入口文档已完成第一轮 current-truth 收敛：`README.md`、`INSTALL.md`、`docs/hardware_connection_overview.md` 与 `docs/esp32-s3fh4r2_gpio_assignment_guide.md` 已对齐 `isohub` / `isohub-devd` / `port1..port4` / V3 口径，并移除把旧 `SC8815 + SW2303`、`PSTOP*`、`GPIO38` 当作当前实现事实的写法。
 - 后续实现需要以该命名矩阵为唯一真相源。
-- 设备端、本地 companion tools 与 web app 的实际代码迁移与对齐仍在进行中。
+- 设备端、本地 companion tools 与 web app 的活动代码主路径已经大体对齐当前 spec；剩余缺口主要落在最终交付证据、文档 current-truth 与 legacy 清理，而不是“是否已经存在对应实现模块”。
 - Web 活动代码面已完成第一轮命名迁移：`desktopAgent` / `desktopStorage` 已替换为 `companionBridge` / `companionStorage`，`Justfile` 的 companion bridge 单测入口已同步改名。
 - 当前活动固件与 web 示例数据已统一设备 identity 相关口径：`firmware.name="iso-usb-hub"`、hostname `isohub-<shortid>`、`device.variant="v3"`。
 - 固件已新增共享 `device_identity` 模块，把 `firmware.name`、`device.variant`、`isohub-<shortid>` hostname/FQDN 与 MAC 格式化逻辑收口到单一事实来源，供 USB JSONL 与 mDNS 复用。
@@ -40,23 +40,61 @@
 - HIL 复测发现默认 IPC socket 处于拒绝连接或刚关闭空响应时，CLI 仍可能直接失败；现已把 `connect IPC`、`Connection refused` 与 `IPC daemon closed the connection without a response` 统一归入 transient IPC 错误并走 auto-start / wait retry 路径，指定 USB 设备上的并发 `status` / `ports` / `wifi-show` / `monitor` 已复测通过。
 - `diagnostics export` 现已改为 companion 聚合导出：返回当前 `status`、`ports`、`wifi`、设备 transport 元数据与近期 serial session traces，不再依赖固件侧尚未实现的 `pd.diagnostics` 专用方法。
 - 根仓的共享 contract 测试路径已完成第一轮隔离：`heapless` 保留在通用依赖中，`esp-hal` / `embassy` / `gc9d01` 等固件专用依赖收口到 Xtensa 目标依赖，`build.ref.rs` 仅在嵌入式目标下注入 linker 错误处理参数，`just firmware-contract-test` 现在通过 native stable toolchain 运行共享 `device_identity` / `device_contract` / `http_api_v1` 单元测试。
-- 固件已接入 ESP32-S3 Wi-Fi runtime：设备启动时从 `M24C64@0x50` 加载凭据，`wifi.set` / `wifi.clear` 后会触发 runtime apply，HTTP/mDNS 只在 Wi-Fi runtime 拿到有效 IPv4 后作为 LAN 通道出现。
+- 固件已接入活动 `network_runtime`：设备启动时从 `M24C64@0x50` 加载凭据，`main.rs` 会启动 `network_runtime::spawn(...)`，循环中持续 `publish_snapshot(...)`，并在 `wifi.set` / `wifi.clear` 后触发 `request_wifi_runtime_apply()`；HTTP/mDNS 只在 Wi-Fi runtime 拿到有效 IPv4 后作为 LAN 通道出现。
 - 固件 Wi-Fi EEPROM 访问已按 V3 硬件路由走 `hub_bus`，并在启动时配置 `ROM_WC=GPIO37-low`、`ROM_ROUTE=GPIO38-high`，避免把 Wi-Fi profile 写到错误 I2C 控制器路径。
 - USB JSONL frame parser 已改为只在 JSON frame 内累计输入，忽略 defmt/串口噪声，避免二进制日志污染 companion 请求响应。
 
 ## 当前验证证据
 
+### 本轮重新复验证据（2026-06-29）
+
+- `just firmware-check`
+- `just firmware-contract-test`
+- `just tools-test`
 - `just web-check`
+- `just web-build`
+- `just web-test-unit`
+- `just devd-help`
+- `just isohub --help`
+- `git diff --check`
+- `cargo +esp check --release`
+- `just web-storybook`（修复默认 mock-only 启动，不再要求 `ISOHUB_DEVD_ORIGINS`）
+- HIL on `/dev/cu.usbmodem21234101`:
+  - `USB_PORT=/dev/cu.usbmodem21234101 just discover`
+  - `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just status`
+  - `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just ports`
+  - `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just wifi-show`
+  - `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just monitor`
+- `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' PORT=port1 ENABLED=false just port-power`
+- `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' PORT=port1 ENABLED=true just port-power`
+- `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' PORT=port1 just port-replug`
+- `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just reset`
+- `USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just diagnostics-export`
+- Storybook visual evidence refresh on current `HEAD`:
+  - `Dialogs/AddDeviceDialog/LongList`
+  - `Dialogs/AddDeviceDialog/WebSerialConnectionLog`
+  - `Panels/DeviceDashboardPanel/Default`
+  - `Panels/DeviceDashboardPanel/HeaderBadgeWrapRegression`
+  - `Panels/DeviceInfoPanel/SettingsMaintenance`
+  - `Panels/DeviceInfoPanel/InfoSummary`
+  - `Panels/DeviceInfoPanel/WebSerialActivity`
+  - `Panels/DeviceInfoPanel/NarrowWebSerial`
+
+### 本轮真机修复结论（2026-06-29）
+
+- companion CLI 的 human output 曾把成功 envelope 直接压成单个 `ok`，导致真机 `status` / `ports` / `wifi-show` 对开发者几乎不可读；现已改为在存在 `result` 时递归展示真实 payload，并补上回归测试。
+- 当前 V3 板上的 Local USB 控制路径要求顺序使用：同一串口的并发命令会被 companion 互斥保护收敛为 `device busy`，这属于预期门禁，不再视为控制面缺陷。
+- `port.power_set` 在真机上存在状态回显收敛窗口；顺序 HIL 证明 `accepted=true` 后等待数秒再读 `ports`，可以观测到 `power_enabled` 与 `telemetry.status` 正确切换。
+- `reset` 在真机上应作为独占操作单独执行：命令返回 `{"accepted":true}` 后 USB 会短暂断开并重新枚举，后续 `discover` / `status` 需要等待板子重新上线。
+- `DeviceDashboardPanel` 顶部 status badges 曾在紧凑桌面宽度下与右侧 Build/Last ok/Notes 摘要发生重叠；现已改为可换行 badge 流式布局，并补上 `HeaderBadgeWrapRegression` Storybook 回归场景。
+- `just web-storybook` 曾被 Vite dev proxy 的 `ISOHUB_DEVD_ORIGINS` 强制要求阻断，导致 mock-only 视觉取证面在无 companion 环境下无法启动；现已在 Storybook 入口默认关闭 dev proxy 并重新验证通过。
+
+### 历史已记录证据（需后续按收口阶段择机重放）
+
 - `just web-test-companion-bridge`
 - `just web-test-unit`
 - `just web-build`
-- `just devd-help`
-- `just isohub`
-- `just tools-test`
 - `just web-test-e2e`
-- `just firmware-check`
-- `just firmware-contract-test`
-- `cargo +esp check`
 - `cargo +esp build --release`
 - `source ~/export-esp.sh && cargo check`
 - `source ~/export-esp.sh && cargo build --release`
@@ -66,18 +104,11 @@
 - `cargo test --target aarch64-apple-darwin web_storage -- --nocapture`（`tools/isohub-companion`）
 - `cargo test --target aarch64-apple-darwin delete_http_profile_keeps_usb_profile -- --nocapture`（`tools/isohub-companion`）
 - `cargo test --target aarch64-apple-darwin matches_wifi_set_verification_shape -- --nocapture`（`tools/isohub-companion`）
-- `npm run check`（`web`）
 - `npm run build`（`web`）
 - `bun test ./src`（`web`）
 - `npm run build-storybook`（`web`）
 - `git diff --check`
 - Chrome / Web runtime smoke：`/devices/f1fb44/info` 使用 canonical URL，页面链接不再包含 `--usb`，USB-only profile 不再进入 `Device not found`。
-- `just web-test-companion-bridge`
-- `just web-test-unit`
-- `just web-build`
-- `just web-test-e2e`
-- `just tools-test`
-- `just devd-help && just isohub --help`
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' just status`
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' just ports`
 - `USB_PORT=/dev/cu.usbmodem2123101 SELECTOR='--device usb--dev-cu-usbmodem2123101' just wifi-show`
@@ -95,5 +126,5 @@
 
 ## 待完成
 
-- 后续实现项：`src/net*` 中旧双口 skeleton 已被当前 `network_runtime` 路径替代为活动实现；若继续清理 legacy 文件，应单独做删除/迁移任务并保持 `device_contract` / `http_api_v1` / `runtime_control` 为唯一契约来源。
-- 后续产品化项：LAN bind、远程 token 暴露策略、PR 图片入库与发布文档仍需单独授权。
+- 远端收口项：完成当前 HEAD 的提交、推送、PR 建立、GitHub checks/review 收敛与 merge。
+- 维护项：`src/net*` 中旧双口 skeleton 仍在仓内作为 migration reference；若继续清理 legacy 文件，应单独做删除/迁移任务并保持 `device_contract` / `http_api_v1` / `runtime_control` 为唯一契约来源。

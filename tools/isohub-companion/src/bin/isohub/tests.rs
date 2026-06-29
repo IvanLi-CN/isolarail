@@ -48,6 +48,24 @@ mod power_output_tests {
     }
 
     #[test]
+    fn human_output_renders_envelope_result_instead_of_plain_ok() {
+        let output = json!({
+            "ok": true,
+            "result": {
+                "device": {
+                    "device_id": "f1fb44",
+                    "hostname": "isohub-f1fb44"
+                }
+            }
+        });
+
+        let rendered = format_human_output(&output);
+        assert!(rendered.contains("\"device_id\": \"f1fb44\""));
+        assert!(rendered.contains("\"hostname\": \"isohub-f1fb44\""));
+        assert!(!rendered.trim().eq("ok"));
+    }
+
+    #[test]
     fn maps_http_port_mutation_endpoints() {
         let (_, path, body) =
             map_http_endpoint(Method::POST, "/ports/port1/power?enabled=false", None)

@@ -49,20 +49,20 @@ function statusBadge(state: "online" | "offline" | "unknown"): {
     return {
       bg: "bg-[var(--badge-success-bg)]",
       text: "text-[var(--badge-success-text)]",
-      width: "w-[96px]",
+      width: "min-w-[96px]",
     };
   }
   if (state === "offline") {
     return {
       bg: "bg-[var(--badge-error-bg)]",
       text: "text-[var(--badge-error-text)]",
-      width: "w-[96px]",
+      width: "min-w-[96px]",
     };
   }
   return {
     bg: "bg-[var(--badge-warning-bg)]",
     text: "text-[var(--badge-warning-text)]",
-    width: "w-[96px]",
+    width: "min-w-[96px]",
   };
 }
 
@@ -76,7 +76,7 @@ function upstreamBadge(upstreamConnected: boolean | null): {
     return {
       bg: "bg-[var(--badge-warning-bg)]",
       text: "text-[var(--badge-warning-text)]",
-      width: "w-[96px]",
+      width: "min-w-[96px]",
       label: "HOST —",
     };
   }
@@ -84,14 +84,14 @@ function upstreamBadge(upstreamConnected: boolean | null): {
     return {
       bg: "bg-[var(--badge-success-bg)]",
       text: "text-[var(--badge-success-text)]",
-      width: "w-[96px]",
+      width: "min-w-[96px]",
       label: "HOST LINK",
     };
   }
   return {
     bg: "bg-[var(--badge-error-bg)]",
     text: "text-[var(--badge-error-text)]",
-    width: "w-[96px]",
+    width: "min-w-[96px]",
     label: "NO HOST",
   };
 }
@@ -109,7 +109,7 @@ function isolatedBadge(
     return {
       bg: "bg-[var(--badge-warning-bg)]",
       text: "text-[var(--badge-warning-text)]",
-      width: "w-[112px]",
+      width: "min-w-[112px]",
       label: labels.unknown,
     };
   }
@@ -117,14 +117,14 @@ function isolatedBadge(
     return {
       bg: "bg-[var(--badge-success-bg)]",
       text: "text-[var(--badge-success-text)]",
-      width: "w-[112px]",
+      width: "min-w-[112px]",
       label: labels.on,
     };
   }
   return {
     bg: "bg-[var(--badge-error-bg)]",
     text: "text-[var(--badge-error-text)]",
-    width: "w-[112px]",
+    width: "min-w-[112px]",
     label: labels.off,
   };
 }
@@ -139,7 +139,7 @@ function isolatedFaultBadge(value: boolean | null): {
     return {
       bg: "bg-[var(--badge-warning-bg)]",
       text: "text-[var(--badge-warning-text)]",
-      width: "w-[112px]",
+      width: "min-w-[112px]",
       label: "ISO FAULT —",
     };
   }
@@ -147,14 +147,14 @@ function isolatedFaultBadge(value: boolean | null): {
     return {
       bg: "bg-[var(--badge-error-bg)]",
       text: "text-[var(--badge-error-text)]",
-      width: "w-[112px]",
+      width: "min-w-[112px]",
       label: "ISO FAULT",
     };
   }
   return {
     bg: "bg-[var(--badge-success-bg)]",
     text: "text-[var(--badge-success-text)]",
-    width: "w-[112px]",
+    width: "min-w-[112px]",
     label: "ISO OK",
   };
 }
@@ -221,6 +221,43 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
 
   const writeDisabled =
     connectionState !== "online" || !runtime.usbWriteTransport(device.id);
+  const headerBadges = [
+    {
+      key: "connection",
+      label: connectionState.toUpperCase(),
+      className: [badge.width, badge.bg, badge.text, "text-[12px]"].join(" "),
+    },
+    {
+      key: "upstream",
+      label: upstream.label,
+      className: [
+        upstream.width,
+        upstream.bg,
+        upstream.text,
+        "text-[12px]",
+      ].join(" "),
+    },
+    {
+      key: "isolated-fault",
+      label: isolatedFault.label,
+      className: [
+        isolatedFault.width,
+        isolatedFault.bg,
+        isolatedFault.text,
+        "text-[11px]",
+      ].join(" "),
+    },
+    {
+      key: "isolated-ready",
+      label: isolatedReady.label,
+      className: [
+        isolatedReady.width,
+        isolatedReady.bg,
+        isolatedReady.text,
+        "text-[11px]",
+      ].join(" "),
+    },
+  ];
 
   const items = useMemo(() => {
     const isOnline = connectionState === "online";
@@ -263,60 +300,27 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
   return (
     <div className="flex flex-col gap-6" data-testid="device-dashboard">
       <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
-        <div className="grid grid-cols-1 gap-5 leading-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start">
-          <div className="grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
-            <div className="pt-[6px] text-[12px] font-semibold text-[var(--muted)]">
+        <div className="grid grid-cols-1 gap-5 leading-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] xl:items-start">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-[54px_minmax(0,1fr)] sm:items-start sm:gap-x-4">
+            <div className="pt-[6px] text-[12px] font-semibold text-[var(--muted)] sm:pt-[4px]">
               Status
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4">
-              <div
-                className={[
-                  "flex h-[26px] items-center justify-center rounded-full",
-                  badge.width,
-                  badge.bg,
-                  badge.text,
-                  "text-[12px] font-semibold",
-                ].join(" ")}
-              >
-                {connectionState.toUpperCase()}
-              </div>
-              <div
-                className={[
-                  "flex h-[26px] items-center justify-center rounded-full",
-                  upstream.width,
-                  upstream.bg,
-                  upstream.text,
-                  "text-[12px] font-semibold",
-                ].join(" ")}
-              >
-                {upstream.label}
-              </div>
-              <div
-                className={[
-                  "flex h-[26px] items-center justify-center rounded-full",
-                  isolatedFault.width,
-                  isolatedFault.bg,
-                  isolatedFault.text,
-                  "text-[11px] font-semibold",
-                ].join(" ")}
-              >
-                {isolatedFault.label}
-              </div>
-              <div
-                className={[
-                  "flex h-[26px] items-center justify-center rounded-full",
-                  isolatedReady.width,
-                  isolatedReady.bg,
-                  isolatedReady.text,
-                  "text-[11px] font-semibold",
-                ].join(" ")}
-              >
-                {isolatedReady.label}
-              </div>
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
+              {headerBadges.map((item) => (
+                <div
+                  key={item.key}
+                  className={[
+                    "flex h-[26px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3 font-semibold",
+                    item.className,
+                  ].join(" ")}
+                >
+                  {item.label}
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-x-4 gap-y-3">
+          <div className="grid min-w-0 gap-y-3 sm:grid-cols-[72px_minmax(0,1fr)] sm:gap-x-4">
             <div className="text-[12px] font-semibold text-[var(--muted)]">
               Build
             </div>

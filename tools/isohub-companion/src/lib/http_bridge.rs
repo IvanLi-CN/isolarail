@@ -175,6 +175,7 @@ fn reconcile_scanned_usb_devices(inner: &mut DevdState, ports: Vec<UsbTarget>) {
                 usb: Some(port),
                 http: None,
                 identity: None,
+                firmware_info: None,
                 session: DeviceSession::default(),
             });
     }
@@ -202,7 +203,12 @@ async fn device_status(
         return *response;
     }
     match require_compatible_project_firmware(&state, &id).await {
-        Ok(value) => Json(redact_sensitive(&value)).into_response(),
+        Ok(value) => {
+            if let Err(err) = cache_project_firmware_info(&state, &id, &value).await {
+                tracing::debug!(device_id = %id, "could not cache project firmware info: {err}");
+            }
+            Json(redact_sensitive(&value)).into_response()
+        }
         Err(err) => error_from_anyhow(err),
     }
 }
@@ -330,7 +336,7 @@ async fn device_ports(
     if let Err(response) = require_auth(&headers, &state) {
         return *response;
     }
-    if let Err(err) = require_compatible_project_firmware(&state, &id).await {
+    if let Err(err) = require_compatible_project_firmware_fast(&state, &id).await {
         return error_from_anyhow(err);
     }
     match usb_jsonl_request(&state, &id, "ports.get", None).await {
@@ -348,7 +354,7 @@ async fn port_power(
     if let Err(response) = require_auth(&headers, &state) {
         return *response;
     }
-    if let Err(err) = require_compatible_project_firmware(&state, &id).await {
+    if let Err(err) = require_compatible_project_firmware_fast(&state, &id).await {
         return error_from_anyhow(err);
     }
     let enabled = match query.get("enabled").map(String::as_str) {
@@ -377,7 +383,7 @@ async fn port_replug(
     if let Err(response) = require_auth(&headers, &state) {
         return *response;
     }
-    if let Err(err) = require_compatible_project_firmware(&state, &id).await {
+    if let Err(err) = require_compatible_project_firmware_fast(&state, &id).await {
         return error_from_anyhow(err);
     }
     match usb_jsonl_request(&state, &id, "port.replug", Some(json!({"port": port_id}))).await {

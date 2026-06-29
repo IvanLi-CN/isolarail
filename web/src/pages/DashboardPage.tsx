@@ -124,7 +124,7 @@ export function DashboardPage() {
 
         <button
           className={[
-            "iso-card flex h-[272px] w-full flex-col items-center justify-center",
+            "iso-card flex min-h-[248px] w-full flex-col items-center justify-center",
             "rounded-[18px] border border-dashed border-[var(--border)]",
             "bg-[var(--add-placeholder-bg)] text-center",
             addDeviceCardSpan,

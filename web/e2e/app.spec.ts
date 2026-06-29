@@ -126,7 +126,7 @@ test("opens add device modal with supported connection methods (web)", async ({
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Use the local companion service to read the connected hub over USB and add it here.",
+      "Use the explicit isohub-devd web companion to read the connected hub over Local USB and add it here.",
       { exact: true },
     ),
   ).toBeVisible();

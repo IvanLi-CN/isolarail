@@ -82,6 +82,7 @@ export type PortMiniCardProps = {
   telemetry: PortTelemetry;
   state: PortState;
   disabled: boolean;
+  compact?: boolean;
   className?: string;
   onSetPower: (enabled: boolean) => void;
   onReplug: () => void;
@@ -93,6 +94,7 @@ export function PortMiniCard({
   telemetry,
   state,
   disabled,
+  compact = false,
   className,
   onSetPower,
   onReplug,
@@ -103,11 +105,16 @@ export function PortMiniCard({
   const powerEnabled = state.power_enabled;
   const actionDisabled = disabled || busy;
 
-  const powerWidth = "w-[100px]";
-  const replugWidth = portId === "port4" ? "w-[104px]" : "w-[112px]";
+  const powerWidth = compact ? "w-[84px]" : "w-[100px]";
+  const replugWidth = compact
+    ? "w-[84px]"
+    : portId === "port4"
+      ? "w-[104px]"
+      : "w-[112px]";
 
   const valueClass = [
-    "text-[16px] font-bold",
+    compact ? "text-[14px]" : "text-[16px]",
+    "font-bold",
     "font-mono",
     actionDisabled ? "text-[var(--muted)]" : "text-[var(--text)]",
   ].join(" ");
@@ -115,16 +122,30 @@ export function PortMiniCard({
   return (
     <div
       className={[
-        "relative h-[132px] rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-5 py-4",
+        compact
+          ? "relative rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3"
+          : "relative h-[132px] rounded-[16px] border border-[var(--border)] bg-[var(--panel)] px-5 py-4",
         className ?? "",
       ].join(" ")}
     >
       <div className="flex items-center gap-2">
-        <div className="text-[12px] font-semibold text-[var(--muted)]">
+        <div
+          className={
+            compact
+              ? "text-[11px] font-semibold text-[var(--muted)]"
+              : "text-[12px] font-semibold text-[var(--muted)]"
+          }
+        >
           {label}
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between gap-4">
+      <div
+        className={
+          compact
+            ? "mt-3 flex items-center justify-between gap-3"
+            : "mt-4 flex items-center justify-between gap-4"
+        }
+      >
         <div className={valueClass}>
           {formatValue(telemetry.voltage_mv, "V")}
         </div>
@@ -133,11 +154,19 @@ export function PortMiniCard({
         </div>
         <div className={valueClass}>{formatValue(telemetry.power_mw, "W")}</div>
       </div>
-      <div className="mt-[18px] flex items-center gap-2">
+      <div
+        className={
+          compact
+            ? "mt-3 flex items-center gap-2"
+            : "mt-[18px] flex items-center gap-2"
+        }
+      >
         <div className="relative">
           <button
             className={[
-              "flex h-[34px] items-center justify-center rounded-[10px] text-[12px] font-bold",
+              compact
+                ? "flex h-[32px] items-center justify-center rounded-[10px] text-[11px] font-bold"
+                : "flex h-[34px] items-center justify-center rounded-[10px] text-[12px] font-bold",
               powerWidth,
               actionDisabled
                 ? "bg-[var(--btn-disabled-fill)] text-[var(--btn-disabled-text)]"
@@ -166,7 +195,9 @@ export function PortMiniCard({
         </div>
         <button
           className={[
-            "flex h-[34px] items-center justify-center rounded-[10px] border border-[var(--border)] text-[12px] font-bold",
+            compact
+              ? "flex h-[32px] items-center justify-center rounded-[10px] border border-[var(--border)] text-[11px] font-bold"
+              : "flex h-[34px] items-center justify-center rounded-[10px] border border-[var(--border)] text-[12px] font-bold",
             replugWidth,
             actionDisabled
               ? "bg-[var(--btn-disabled-fill-soft)] text-[var(--btn-disabled-text)]"

@@ -189,9 +189,14 @@ async fn dispatch_ipc_request(
         "devices.scan" => ipc_scan_devices(state).await,
         "device.status" => {
             let req: DeviceIdRequest = serde_json::from_value(params)?;
-            Ok(redact_sensitive(
-                &require_compatible_project_firmware(state, &req.device_id).await?,
-            ))
+            let value = require_compatible_project_firmware(state, &req.device_id).await?;
+            if let Err(err) = cache_project_firmware_info(state, &req.device_id, &value).await {
+                tracing::debug!(
+                    device_id = %req.device_id,
+                    "could not cache project firmware info: {err}"
+                );
+            }
+            Ok(redact_sensitive(&value))
         }
         "device.session" => {
             let req: DeviceSessionRequest = serde_json::from_value(params)?;
@@ -271,14 +276,14 @@ async fn dispatch_ipc_request(
         }
         "device.ports.get" => {
             let req: DeviceIdRequest = serde_json::from_value(params)?;
-            require_compatible_project_firmware(state, &req.device_id).await?;
+            require_compatible_project_firmware_fast(state, &req.device_id).await?;
             Ok(redact_sensitive(
                 &usb_jsonl_request(state, &req.device_id, "ports.get", None).await?,
             ))
         }
         "device.port.power" => {
             let req: DevicePortPowerRequest = serde_json::from_value(params)?;
-            require_compatible_project_firmware(state, &req.device_id).await?;
+            require_compatible_project_firmware_fast(state, &req.device_id).await?;
             Ok(redact_sensitive(
                 &usb_jsonl_request(
                     state,
@@ -291,7 +296,7 @@ async fn dispatch_ipc_request(
         }
         "device.port.replug" => {
             let req: DevicePortRequest = serde_json::from_value(params)?;
-            require_compatible_project_firmware(state, &req.device_id).await?;
+            require_compatible_project_firmware_fast(state, &req.device_id).await?;
             Ok(redact_sensitive(
                 &usb_jsonl_request(
                     state,

@@ -189,3 +189,23 @@ export const MobileIsolationBadges: Story = {
     },
   },
 };
+
+export const HeaderBadgeWrapRegression: Story = {
+  parameters: {
+    layout: "centered",
+  },
+  decorators: [
+    mockFetchDecorator(mockDeviceApi),
+    (Story, context) => (
+      <ToastProvider>
+        <DevicesProvider initialDevices={[context.args.device ?? demoDevice]}>
+          <DeviceRuntimeProvider>
+            <div className="w-[760px] max-w-full">
+              <Story />
+            </div>
+          </DeviceRuntimeProvider>
+        </DevicesProvider>
+      </ToastProvider>
+    ),
+  ],
+};

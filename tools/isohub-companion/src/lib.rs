@@ -251,6 +251,8 @@ pub struct DeviceRecord {
     pub http: Option<HttpTarget>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware_info: Option<Value>,
     #[serde(default)]
     pub session: DeviceSession,
 }
@@ -824,6 +826,7 @@ mod tests {
                     base_url: "http://isohub.local".to_string(),
                 }),
                 identity: None,
+                firmware_info: None,
                 session: DeviceSession::default(),
             },
         );
@@ -1250,6 +1253,69 @@ mod tests {
         let firmware = project_firmware_metadata(&old_version).expect("firmware metadata");
         validate_project_firmware_name(firmware)
             .expect("upgrade path accepts old project firmware");
+    }
+
+    #[tokio::test]
+    async fn caches_project_firmware_info_on_device_record() {
+        let state = AppState::new("ipc://test");
+        {
+            let mut inner = state.inner.lock().await;
+            inner.devices.insert(
+                "usb--dev-cu-usbmodem21234101".to_string(),
+                DeviceRecord {
+                    id: "usb--dev-cu-usbmodem21234101".to_string(),
+                    display_name: "ESP32-S3 USB JTAG".to_string(),
+                    connection: "available".to_string(),
+                    usb: Some(UsbTarget {
+                        port_path: "/dev/cu.usbmodem21234101".to_string(),
+                        label: "ESP32-S3 USB JTAG".to_string(),
+                        vendor_id: Some(0x303a),
+                        product_id: Some(0x1001),
+                        serial_number: None,
+                    }),
+                    http: None,
+                    identity: None,
+                    firmware_info: None,
+                    session: DeviceSession::default(),
+                },
+            );
+        }
+
+        let info = json!({
+            "ok": true,
+            "result": {
+                "device": {
+                    "device_id": "f1fb44",
+                    "hostname": "isohub-f1fb44",
+                    "mac": "a0:f2:62:f1:fb:44",
+                    "firmware": {
+                        "name": "iso-usb-hub",
+                        "version": "0.1.0"
+                    }
+                }
+            }
+        });
+
+        cache_project_firmware_info(&state, "usb--dev-cu-usbmodem21234101", &info)
+            .await
+            .expect("cache should succeed");
+        let cached = cached_project_firmware_info(&state, "usb--dev-cu-usbmodem21234101")
+            .await
+            .expect("cached info should be available");
+
+        assert_eq!(cached, info);
+        let inner = state.inner.lock().await;
+        assert_eq!(
+            inner
+                .devices
+                .get("usb--dev-cu-usbmodem21234101")
+                .and_then(|device| device.firmware_info.as_ref())
+                .and_then(|identity| identity.get("result"))
+                .and_then(|result| result.get("device"))
+                .and_then(|device| device.get("device_id"))
+                .and_then(Value::as_str),
+            Some("f1fb44")
+        );
     }
 
     #[test]

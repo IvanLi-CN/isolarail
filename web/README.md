@@ -64,16 +64,18 @@ BIND=127.0.0.1:51200 just devd-web
 Then start the Vite dev server:
 
 ```bash
-DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
+just web-dev
 ```
 
 Development behavior:
 
 - Vite proxies `/api/v1/*` to the first explicit `DEVD_ORIGINS` entry.
 - This keeps the browser on a same-origin API path during development, so Local USB flows do not require `--allow-dev-cors`.
-- Put the mDNS URL first and an IP or localhost URL second, for example `DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200`.
+- `just web-dev` defaults `ISOHUB_DEVD_ORIGINS` to `http://isohub-devd.local:51200,http://127.0.0.1:51200`.
+- Put the mDNS URL first and an IP or localhost URL second only when overriding the default.
 - The Web app never scans localhost ports; every fallback origin must be explicitly configured.
 - Disable the proxy only for deliberate diagnostics with `ISOHUB_DEV_PROXY=0`.
+- `just web-storybook` always disables the dev proxy and stays mock-only; it must not require a running `isohub-devd web`.
 
 If `Local USB` still reports the service as unavailable:
 

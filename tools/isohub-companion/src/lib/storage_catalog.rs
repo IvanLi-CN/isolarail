@@ -246,6 +246,32 @@ async fn require_compatible_project_firmware(
     Ok(info)
 }
 
+async fn cached_project_firmware_info(state: &AppState, device_id: &str) -> anyhow::Result<Value> {
+    let device = state
+        .inner
+        .lock()
+        .await
+        .devices
+        .get(device_id)
+        .cloned()
+        .ok_or_else(|| anyhow!("device not found"))?;
+    let info = device
+        .firmware_info
+        .ok_or_else(|| anyhow!("device firmware identity is not cached yet"))?;
+    validate_project_firmware(&info)?;
+    Ok(info)
+}
+
+async fn require_compatible_project_firmware_fast(
+    state: &AppState,
+    device_id: &str,
+) -> anyhow::Result<Value> {
+    match cached_project_firmware_info(state, device_id).await {
+        Ok(info) => Ok(info),
+        Err(_) => require_compatible_project_firmware(state, device_id).await,
+    }
+}
+
 fn validate_project_firmware(info: &Value) -> anyhow::Result<()> {
     let firmware = project_firmware_metadata(info)?;
     validate_project_firmware_name(firmware)?;
@@ -430,6 +456,32 @@ async fn persist_captured_identity(
     if changed {
         write_hardware_registry(&registry)?;
     }
+    Ok(())
+}
+
+async fn cache_project_firmware_info(
+    state: &AppState,
+    device_id: &str,
+    info: &Value,
+) -> anyhow::Result<()> {
+    let identity = extract_device_identity(info)?;
+    let mut inner = state.inner.lock().await;
+    let device = inner
+        .devices
+        .get_mut(device_id)
+        .ok_or_else(|| anyhow!("device not found"))?;
+    device.firmware_info = Some(info.clone());
+    device.display_name = info
+        .get("result")
+        .and_then(|result| result.get("device"))
+        .or_else(|| info.get("device"))
+        .and_then(|device| device.get("hostname"))
+        .and_then(Value::as_str)
+        .filter(|hostname| !hostname.trim().is_empty())
+        .unwrap_or(&device.display_name)
+        .to_string();
+    drop(inner);
+    persist_captured_identity(state, device_id, &identity).await?;
     Ok(())
 }
 

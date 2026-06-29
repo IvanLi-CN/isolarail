@@ -48,6 +48,10 @@ fn format_human_output(output: &Value) -> String {
         return format!("{path}\n");
     }
 
+    if let Some(result) = output.get("result") {
+        return format_human_output(result);
+    }
+
     if let Some(ok) = output.get("ok").and_then(Value::as_bool) {
         return format!("{}\n", if ok { "ok" } else { "failed" });
     }

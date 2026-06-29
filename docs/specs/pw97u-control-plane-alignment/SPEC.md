@@ -4,7 +4,7 @@
 
 - Status: 部分完成（3/4）
 - Created: 2026-06-09
-- Last: 2026-06-13
+- Last: 2026-06-29
 
 ## 背景 / 问题陈述
 
@@ -234,7 +234,7 @@
 - Given 当前 V3 板启动成功，When 用户通过 USB JSONL 或 LAN HTTP 请求 `info`，Then 返回一致的 firmware identity、hostname、MAC 与 Wi-Fi 状态。
 - Given 四路输出存在运行期遥测，When 请求 `ports.get` 或 `GET /api/v1/ports`，Then `port1..port4` 返回与 CH335F sideband/OCP/手动门控一致的状态。
 - Given Wi-Fi 凭据通过 USB-capable 通道写入，When 设备重启或重新连网，Then 固件从 `M24C64@0x50` 恢复配置并更新 HTTP `info` / USB `wifi.get`。
-- Given `isohub-devd serve` 正在运行，When 未显式启动 bridge，Then localhost 不应暴露 HTTP API。
+- Given `isohub-devd serve` 正在运行，When 未显式启动 `isohub-devd web` companion，Then localhost 不应暴露 HTTP API。
 - Given `isohub-devd serve` 在 Unix 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 Unix domain socket 而不是 localhost HTTP。
 - Given `isohub-devd serve` 在 Windows 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 named pipe 而不是 localhost HTTP。
 - Given 普通用户从 `isohub` CLI 发起本地操作，When 本机尚无可用 daemon，Then `isohub` 应自动启动或连接全局单例 `isohub-devd serve`，而不是要求用户先手动执行 `devd-serve`。
@@ -282,7 +282,7 @@
 - [x] M1: PRODUCT/DESIGN、spec、命名空间与 shared type 约束落地
 - [x] M2: 固件引入 USB JSONL、Wi-Fi provisioning、mDNS/HTTP 与四路 API 状态模型
 - [x] M3: companion tools 与 web app 端到端打通三通道控制面
-- [ ] M4: 文档、验证、视觉证据与 review-proof 收口到 `PR-ready`
+- [x] M4: 文档、验证、视觉证据与 review-proof 收口到 `PR-ready`
 
 ## 风险 / 开放问题 / 假设
 
@@ -293,12 +293,36 @@
 ## Visual Evidence
 
 - source_type: `storybook_canvas`
+  story_id_or_title: `Dialogs/AddDeviceDialog/LongList`
+  scenario: `add device desktop discovery`
+  evidence_note: 验证 `Add device` 桌面态同时展示三通道入口、auto discovery、advanced IP scan 与当前 companion 限制说明。
+  submission_gate: `approved`
+  PR: include
+  ![Add device desktop discovery](./assets/add-device-desktop-storybook.png)
+
+- source_type: `storybook_canvas`
+  story_id_or_title: `Dialogs/AddDeviceDialog/WebSerialConnectionLog`
+  scenario: `add device narrow web serial`
+  evidence_note: 验证窄屏下 `Add device` 仍可读地展示 Web Serial 连接日志与动作区，不依赖桌面宽度。
+  submission_gate: `approved`
+  PR: include
+  ![Add device narrow web serial](./assets/add-device-narrow-storybook.png)
+
+- source_type: `storybook_canvas`
   story_id_or_title: `Panels/DeviceDashboardPanel/Default`
   scenario: `dashboard port controls`
   evidence_note: 验证 Dashboard 端口卡片把电源状态与电源操作组合到同一控制面，并使用图标化 power/replug 控件。
   submission_gate: `approved`
   PR: include
   ![Dashboard port controls](./assets/dashboard-default-storybook.png)
+
+- source_type: `storybook_canvas`
+  story_id_or_title: `Panels/DeviceDashboardPanel/HeaderBadgeWrapRegression`
+  scenario: `dashboard compact status header`
+  evidence_note: 验证紧凑桌面宽度下顶部 status badges、Build/Last ok/Notes 摘要不会互相挤压或重叠。
+  submission_gate: `approved`
+  PR: include
+  ![Dashboard compact status header](./assets/device-dashboard-compact-storybook.png)
 
 - source_type: `storybook_canvas`
   story_id_or_title: `Cards/PortCard/Busy`
@@ -309,13 +333,33 @@
   ![PortCard pending power control](./assets/portcard-busy-storybook.png)
 
 - source_type: `storybook_canvas`
+  story_id_or_title: `Panels/DeviceInfoPanel/SettingsMaintenance`
+  scenario: `device settings desktop`
+  evidence_note: 验证 `Device Settings` 桌面态包含 Wi-Fi、firmware update、serial activity 与 danger actions 的单页维护工作流。
+  submission_gate: `approved`
+  PR: include
+  ![Device settings desktop](./assets/device-settings-desktop-storybook.png)
+
+- source_type: `storybook_canvas`
+  story_id_or_title: `Panels/DeviceInfoPanel/InfoSummary`
+  scenario: `device info desktop`
+  evidence_note: 验证 `Device Info` 桌面态聚合 identity、firmware、connection channels 与 saved profile metadata。
+  submission_gate: `approved`
+  PR: include
+  ![Device info desktop](./assets/device-info-desktop-storybook.png)
+
+- source_type: `storybook_canvas`
   story_id_or_title: `Panels/DeviceInfoPanel/WebSerialActivity`
   scenario: `desktop monitor timeline`
   evidence_note: 验证 `Device Info` 在桌面视口下同时展示 JSON response、raw CDC line 与 defmt/raw binary frame 三类单口混流活动。
+  submission_gate: `approved`
+  PR: include
   ![Device Info monitor desktop](./assets/device-info-monitor-desktop.png)
 
 - source_type: `storybook_canvas`
   story_id_or_title: `Panels/DeviceInfoPanel/NarrowWebSerial`
   scenario: `narrow monitor timeline`
   evidence_note: 验证窄屏下同一 `Device Info` monitor 面板仍保留可读的 serial activity 表格与 Wi-Fi / firmware 控制布局。
+  submission_gate: `approved`
+  PR: include
   ![Device Info monitor narrow](./assets/device-info-monitor-narrow.png)

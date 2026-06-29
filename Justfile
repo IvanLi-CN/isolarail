@@ -151,7 +151,7 @@ web-install:
   bun install --cwd web
 
 web-dev:
-  ISOHUB_DEVD_ORIGINS="${DEVD_ORIGINS:-}" bun run --cwd web dev
+  ISOHUB_DEVD_ORIGINS="${DEVD_ORIGINS:-http://isohub-devd.local:51200,http://127.0.0.1:51200}" bun run --cwd web dev
 
 web-storybook:
   bun run --cwd web storybook

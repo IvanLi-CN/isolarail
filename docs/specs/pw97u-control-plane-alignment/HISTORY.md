@@ -5,7 +5,7 @@
 - 创建控制面对齐主题规格，确定本项目采用参考项目的控制面架构路线，但保持四路 Hub 硬件语义。
 - 明确当前 V3 板上的 `replug` 仅表示受控断电再上电，不承诺真 per-port data disconnect。
 - 修正 topic spec 的命名真相：当前项目 owner-facing 命名为 `isohub` / `isohub-devd`，参考项目 `isolapurr` 仅作为架构来源，不再混入本项目软件包与门户命名。
-- 补充开发环境启动规范要求：开发者统一通过 `just` 入口使用 companion/web 命令；`isohub-devd` 默认进入 `serve` 原生 IPC 模式，Web 联调仅在显式启动 `bridge-http` 时开放 localhost HTTP bridge。
+- 补充开发环境启动规范要求：开发者统一通过 `just` 入口使用 companion/web 命令；`isohub-devd` 默认进入 `serve` 原生 IPC 模式，Web 联调只有在显式启动浏览器 companion 时才开放 localhost HTTP 面。
 - 澄清控制面门户语义：当前普通用户默认通过 `isohub` CLI 操作设备；未来若引入 desktop 程序，也必须发现或自启全局单例 `isohub-devd`；手动直启 `devd` 仅用于开发与诊断路径。
 
 ## 2026-06-13
@@ -23,7 +23,7 @@
 - 进一步把 `INA226` 与 `TMP112` 家族名提升为受控 canonical hardware naming，防止软件设计文档与后续控制面实现对同一遥测器件继续各写各的。
 - 把 `TPS82130SILR`、`RT9043GB`、`TCA6408APWR`、`TCA6408ARSVR`、`TCA9535RTWR` 纳入 reference-only 料号策略，明确它们只能停留在历史方案、选型比较或局部电路说明中。
 - 继续补齐当前文档和网表里真实使用的板级网络名，把 `USB D+` / `USB D-`、`HUB_SDA` / `HUB_SCL`、`I2C_INT` / `I2C_RESET`、`ISO_OK`、`LCD_CS` / `LCD_RST` / `LCD_RES` / `LCD_BLK`、`BUZZER`、`FAN_PWM` / `FAN_EN` / `FAN_TACH` 纳入 spec 的受控命名和别名策略。
-- 在控制面对齐 spec 中补上默认 IPC transport 约束：`isohub-devd serve` 必须走 Unix domain socket / Windows named pipe，localhost HTTP 只允许由显式 `bridge-http` 暴露。
+- 在控制面对齐 spec 中补上默认 IPC transport 约束：`isohub-devd serve` 必须走 Unix domain socket / Windows named pipe，localhost HTTP 只允许由显式浏览器 companion 暴露；后续该 companion 命令已冻结为 `isohub-devd web`。
 - 把 `gc9d01/examples/**` 的示例 manifest 明确归类为 vendored example package，并补充 `SC8815 + SW2303`、`PCA9545A INT/INTx`、`PSTOP_CTL/PSTOP`、`VIN_ADC`、scoped `RESET#` 等 legacy/scoped 名称的受限使用规则，避免它们漂移进 V3 owner-facing 控制面命名。
 - 为主 spec 增补 `Documentation Truth Boundary`，明确 `pw97u` 持有 owner-facing 命名真相，`j6nvw` 持有 V3 pin-level / display / reset 真相；随后将 `docs/hardware_connection_overview.md` 提升为当前 V3 硬件总览，并把 `docs/esp32-s3fh4r2_gpio_assignment_guide.md` 降级为历史 GPIO 参考。
 - 完成 Web 活动代码面第一轮命名迁移：`desktopAgent` / `desktopStorage` 替换为 `companionBridge` / `companionStorage`，`Justfile` 中的 companion bridge 单测入口与相关 stories/mock 数据同步改名。
@@ -52,3 +52,18 @@
 - companion storage 以 firmware identity `device_id` 作为 Web-visible canonical hardware id，合并 HTTP/LAN 与 Local USB profile；internal `--usb` id 不再进入 Web URL，非法 profile-suffixed route 不做兼容。
 - companion 会在 USB Wi-Fi 状态显示 connected IPv4 后刷新 HTTP profile，Wi-Fi clear 只删除 HTTP profile 并保留 Local USB profile。
 - Web runtime 在 Wi-Fi connected 回读后自动刷新设备列表补齐 LAN 通道；Dashboard 端口卡片改为图标化 power/replug 控件，pending 图标保持到状态回显匹配。
+
+## 2026-06-29
+
+- 重新核对 `pw97u` spec 与当前代码真相，确认活动固件已经通过 `network_runtime::spawn(...)`、`publish_snapshot(...)` 与 `request_wifi_runtime_apply()` 真正接上 Wi-Fi/LAN runtime，不再只是“有孤立模块但未接线”。
+- 重新执行当前 HEAD 的关键开发者入口：`just firmware-check`、`just firmware-contract-test`、`just tools-test`、`just web-check`、`just devd-help`、`just isohub --help` 与 `cargo +esp check --release` 均已通过。
+- 收回 `IMPLEMENTATION.md` 中过早宣称“PR-ready 已收口”的表述，并将验证证据拆分为“本轮重新复验证据”和“历史已记录证据”，避免旧轮次结论继续伪装成当前 HEAD 的直接证明。
+- 基于真机 `/dev/cu.usbmodem21234101` 完成一轮顺序 HIL：`discover`、`status`、`ports`、`wifi-show`、`monitor`、`diagnostics-export`、`port-power` 与 `port-replug` 均已验证走通。
+- 继续补上 `reset` 真机验证：顺序单独执行时返回 `{"accepted":true}`，随后设备会重新枚举并再次被 `discover` / `status` 捕获。
+- 修复 companion CLI 的 human output 回退缺口：此前成功 envelope 会被打印成单个 `ok`，现已改为在 `result` 存在时显示真实 payload，并补上回归测试。
+- 澄清开发阶段的 Local USB 操作规范：同一串口的并发命令会被 companion 串口互斥收敛为 `device busy`；`port-power` / `port-replug` 后需要短暂收敛窗口再读 `ports` 才能看到稳定状态回显。
+- 修复 `DeviceDashboardPanel` 顶部 status badge 在紧凑桌面宽度下与右侧摘要重叠的问题，并补上 `HeaderBadgeWrapRegression` story 作为回归门禁。
+- 修复 `just web-storybook` 默认被 `ISOHUB_DEVD_ORIGINS` 阻断的问题：Storybook 现在默认以 mock-only 模式启动，不再要求 companion dev proxy 环境变量。
+- 补齐 `Add device`、`Device Dashboard`、`Device Settings`、`Device Info` 的桌面/窄屏视觉证据，并写回 `pw97u` spec 的 `## Visual Evidence`。
+- 重写 `docs/hardware_connection_overview.md` 为当前 V3 current-truth，去除旧 V2 `SC8815 + SW2303` / `PSTOP*` 口径，改以 `ESP32-S3 + CH335F + M24C64@0x50 + EN1..EN4 + PWREN#/OVCUR# + 160x50 LCD + front panel` 为基线。
+- 重新跑通当前 HEAD 的本地收口验证：`web-build`、`web-test-unit`、`web-test-companion-bridge`、`web-test-e2e`、`web-test-storybook`、`cargo +esp fmt --check`、`cargo +esp clippy -D warnings`、`cargo +esp build --release` 与 `cargo +esp build --examples --release` 已按本轮重新通过，`pw97u` 达到本地 `PR-ready`。

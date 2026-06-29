@@ -14,7 +14,7 @@ extern crate alloc;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use defmt::{info, warn};
 use embassy_executor::Spawner;
-use embassy_time::{with_timeout, Duration, Timer};
+use embassy_time::{with_timeout, Duration, Instant, Timer};
 // Note: use fully-qualified trait calls for embedded-hal to avoid unused-import lints under clippy -D warnings
 use esp_backtrace as _;
 use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
@@ -203,6 +203,8 @@ const PORT_OCP_LOW_VBUS_MIN_CURRENT_MA: u32 = 100;
 const PORT_OCP_HIGH_CURRENT_MA: u32 = 5300;
 const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
 const USB_REPLUG_HOLDOFF_TICKS: u8 = 2;
+const RUNTIME_SAMPLE_PERIOD_MS: u64 = 500;
+const RUNTIME_IDLE_SLICE_MS: u64 = 20;
 const FRONT_DIAG_FRONT_MASK: u8 = 1 << 0;
 const FRONT_DIAG_HUB_MASK: u8 = 1 << 1;
 const FRONT_DIAG_INPUT_INA_MASK: u8 = 1 << 2;
@@ -2038,6 +2040,7 @@ async fn main(spawner: Spawner) {
         usb_wifi = network.state.lock().await.wifi;
     }
     let mut port_output_active = boot_snapshot.gates.allow_port;
+    let mut next_runtime_sample = Instant::now();
     loop {
         while let Ok(event) = front_events.try_receive() {
             handle_front_key_event(
@@ -2368,16 +2371,67 @@ async fn main(spawner: Spawner) {
         // Draw and flush
         draw_dashboard_frame(&mut disp, &view);
         let _ = disp.flush().await;
-        if let Ok(event) = with_timeout(Duration::from_millis(500), front_events.receive()).await {
-            handle_front_key_event(
-                event,
-                &mut selected_port,
-                &mut manual_enabled,
-                &mut port_enables,
+
+        next_runtime_sample += Duration::from_millis(RUNTIME_SAMPLE_PERIOD_MS);
+        loop {
+            if let Ok(event) = with_timeout(
+                Duration::from_millis(RUNTIME_IDLE_SLICE_MS),
+                front_events.receive(),
+            )
+            .await
+            {
+                handle_front_key_event(
+                    event,
+                    &mut selected_port,
+                    &mut manual_enabled,
+                    &mut port_enables,
+                );
+                apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);
+                draw_dashboard_frame(&mut disp, &view);
+                let _ = disp.flush().await;
+            }
+
+            let now = Instant::now();
+            if now >= next_runtime_sample {
+                break;
+            }
+
+            let mut usb_service = UsbJsonlServiceContext {
+                manual_enabled: &mut manual_enabled,
+                port_enables: &mut port_enables,
+                ocp_latched: &mut ocp_latched,
+                ocp_safe_samples: &mut ocp_safe_samples,
+                ocp_retry_wait: &mut ocp_retry_wait,
+                replug_countdown: &mut replug_countdown,
+                wifi: &mut usb_wifi,
+            };
+            let usb_action = service_usb_jsonl(
+                &mut usb_serial,
+                &mut usb_jsonl,
+                runtime_snapshot,
+                env!("CARGO_PKG_VERSION"),
+                &mut usb_service,
             );
-            apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);
-            draw_dashboard_frame(&mut disp, &view);
-            let _ = disp.flush().await;
+            if !matches!(usb_action, Some(UsbAction::None) | None) {
+                break;
+            }
+
+            let mut applied_network_action = false;
+            while let Ok(action) = network_actions.try_receive() {
+                apply_network_port_action(
+                    action,
+                    &mut manual_enabled,
+                    &mut port_enables,
+                    &mut ocp_latched,
+                    &mut ocp_safe_samples,
+                    &mut ocp_retry_wait,
+                    &mut replug_countdown,
+                );
+                applied_network_action = true;
+            }
+            if applied_network_action {
+                break;
+            }
         }
     }
 }

@@ -74,7 +74,7 @@ identify:
     echo "  PORT=/dev/cu.xxx just identify" >&2; \
     exit 2; \
   fi; \
-  device_id="usb-${PORT//\//-}"; \
+  device_id="usb-$(printf '%s' "$PORT" | sed 's/[^A-Za-z0-9]/-/g')"; \
   tmp="$(mktemp)"; \
   trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
   USB_PORT="$PORT" just isohub --json discover --scan > "$tmp"; \
@@ -140,7 +140,7 @@ _selected-device:
     exit 2; \
   fi; \
   device="$(sed -n 's/^device=//p' .esp32-port | head -1)"; \
-  if [[ -z "$device" ]]; then device="usb-${port//\//-}"; fi; \
+  if [[ -z "$device" ]]; then device="usb-$(printf '%s' "$port" | sed 's/[^A-Za-z0-9]/-/g')"; fi; \
   print -r -- "$device"
 
 _expected-flash-args:
@@ -171,7 +171,7 @@ flash-first-time:
     exit 2; \
   fi; \
   just firmware-bin
-  device="usb-${PORT//\//-}"; \
+  device="usb-$(printf '%s' "$PORT" | sed 's/[^A-Za-z0-9]/-/g')"; \
   USB_PORT="$PORT" just isohub discover --scan >/dev/null || true; \
   USB_PORT="$PORT" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time
 

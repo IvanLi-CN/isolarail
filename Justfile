@@ -162,8 +162,10 @@ _expected-flash-args:
 flash:
   @device="$(just _selected-device)" || exit $?; \
   expected="$(just _expected-flash-args)" || exit $?; \
+  expected_args=("${(@z)expected}"); \
+  port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
   just firmware-bin; \
-  USB_PORT="$(sed -n 's/^port=//p' .esp32-port | head -1)" eval "just isohub flash --device '$device' --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real $expected"
+  USB_PORT="$port" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
 
 flash-first-time:
   @if [[ -z "${PORT:-}" ]]; then \

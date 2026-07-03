@@ -125,7 +125,7 @@ firmware-bin:
     --elf {{FIRMWARE_ELF}}
 
 _selected-device:
-  if [[ ! -f .esp32-port ]]; then \
+  @if [[ ! -f .esp32-port ]]; then \
     echo "error: no port selected for this repo (.esp32-port missing)." >&2; \
     echo "Run:" >&2; \
     echo "  just select-port" >&2; \
@@ -144,7 +144,7 @@ _selected-device:
   print -r -- "$device"
 
 _expected-flash-args:
-  args=(); \
+  @args=(); \
   device_id="$(sed -n 's/^device_id=//p' .esp32-port | head -1)"; \
   mac="$(sed -n 's/^mac=//p' .esp32-port | head -1)"; \
   if [[ -n "$device_id" ]]; then args+=(--expected-device-id "$device_id"); fi; \
@@ -160,7 +160,7 @@ _expected-flash-args:
   printf '%q ' "${args[@]}"
 
 flash:
-  device="$(just _selected-device)" || exit $?; \
+  @device="$(just _selected-device)" || exit $?; \
   expected="$(just _expected-flash-args)" || exit $?; \
   just firmware-bin; \
   USB_PORT="$(sed -n 's/^port=//p' .esp32-port | head -1)" eval "just isohub flash --device '$device' --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real $expected"
@@ -176,19 +176,19 @@ flash-first-time:
   USB_PORT="$PORT" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time
 
 reset:
-  device="$(just _selected-device)" || exit $?; \
+  @device="$(just _selected-device)" || exit $?; \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
   USB_PORT="$port" just isohub reset --device "$device"
 
 monitor:
-  device="$(just _selected-device)" || exit $?; \
+  @device="$(just _selected-device)" || exit $?; \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
   USB_PORT="$port" just isohub monitor --device "$device" --tail "${TAIL:-200}"
 
 flash-monitor:
-  just flash
-  just reset
-  just monitor
+  @just flash
+  @just reset
+  @just monitor
 
 discover:
   if [[ "${SCAN:-1}" == '1' ]]; then \

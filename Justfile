@@ -166,14 +166,33 @@ flash:
   USB_PORT="$(sed -n 's/^port=//p' .esp32-port | head -1)" eval "just isohub flash --device '$device' --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real $expected"
 
 flash-first-time:
-  if [[ -z "${PORT:-}" ]]; then \
+  @if [[ -z "${PORT:-}" ]]; then \
     echo "error: PORT is required for first-time/download-mode flashing." >&2; \
     exit 2; \
   fi; \
   just firmware-bin
+  @set -o pipefail; \
   device="usb-$(printf '%s' "$PORT" | sed 's/[^A-Za-z0-9]/-/g')"; \
+  tmp="$(mktemp)"; \
+  trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
   USB_PORT="$PORT" just isohub discover --scan >/dev/null || true; \
-  USB_PORT="$PORT" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time
+  USB_PORT="$PORT" just isohub --json flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time | tee "$tmp"; \
+  project_device_id="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); identity=data.get("identity") or (data.get("result") or {}).get("identity") or {}; print(identity.get("deviceId") or identity.get("device_id") or "")' "$tmp")"; \
+  mac="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); identity=data.get("identity") or (data.get("result") or {}).get("identity") or {}; print(identity.get("mac") or "")' "$tmp")"; \
+  if [[ -z "$project_device_id" && -z "$mac" ]]; then \
+    echo "error: first-time flash completed but no device identity was captured." >&2; \
+    echo "Run after reboot:" >&2; \
+    echo "  PORT=$PORT just identify" >&2; \
+    exit 2; \
+  fi; \
+  { \
+    print -r -- "$PORT"; \
+    print -r -- "port=$PORT"; \
+    print -r -- "device=$device"; \
+    if [[ -n "$project_device_id" ]]; then print -r -- "device_id=$project_device_id"; fi; \
+    if [[ -n "$mac" ]]; then print -r -- "mac=$mac"; fi; \
+  } > .esp32-port; \
+  echo "cached: .esp32-port"
 
 reset:
   @device="$(just _selected-device)" || exit $?; \

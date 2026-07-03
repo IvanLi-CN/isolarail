@@ -18,15 +18,18 @@ Use `just` as the only normal developer entrypoint.
 ```bash
 just firmware-check
 just firmware-build
-PORT=/dev/tty.usbmodem1101 BAUD=115200 just firmware-run
-PORT=/dev/tty.usbmodem1101 BAUD=115200 just firmware-attach
+just ports
+PORT=/dev/cu.usbmodem1101 just identify
+just firmware-bin
+just flash-monitor
 just firmware-ports
 ```
 
 Notes:
 
-- `just firmware-run` flashes and opens the defmt monitor.
-- `just firmware-attach` only attaches the monitor and expects an existing build.
+- `just flash-monitor` builds the app image, validates the selected device identity, flashes at `0x10000`, resets, and opens the monitor path.
+- `cargo run --release` uses `tools/isohub-runner` and follows the same Local USB safety boundary.
+- `just flash-first-time` is the explicit download-mode/non-project firmware path and requires typed confirmation from `isohub`.
 - No hardware command should be run against an unrelated board.
 
 ### Local companion tools
@@ -54,23 +57,23 @@ just devices
 just hardware-available
 
 SELECTOR='--device <device-id>' just status
-SELECTOR='--device <device-id>' just ports
+SELECTOR='--device <device-id>' just device-ports
 SELECTOR='--device <device-id>' just wifi-show
 
 SELECTOR='--device <device-id>' PORT=port1 ENABLED=true just port-power
 SELECTOR='--device <device-id>' PORT=port1 just port-replug
-SELECTOR='--device <device-id>' just reset
+SELECTOR='--device <device-id>' just device-reset
 
 SELECTOR='--device <device-id>' SSID='Lab WiFi' PSK='secret' just wifi-set
 SELECTOR='--device <device-id>' just wifi-clear
 
-SELECTOR='--device <device-id>' TAIL=200 just monitor
+SELECTOR='--device <device-id>' TAIL=200 just device-monitor
 SELECTOR='--device <device-id>' just diagnostics-export
 ```
 
 Notes:
 
-- `just monitor` reads the recent Local USB serial activity timeline from `isohub-devd`.
+- `just device-monitor` reads the recent Local USB serial activity timeline from `isohub-devd`.
 - `just diagnostics-export` exports a companion-aggregated diagnostics snapshot built from the current `status`, `ports`, `wifi`, and recent serial session traces for the selected device.
 
 To restrict companion discovery and Local USB operations to one specific serial device during development, pass `USB_PORT`:
@@ -88,16 +91,16 @@ Recommended HIL sequence for one board:
 ```bash
 USB_PORT=/dev/cu.usbmodem21234101 just discover
 USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just status
-USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just ports
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just device-ports
 USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' just wifi-show
-USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just monitor
+USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just device-monitor
 ```
 
 Notes:
 
 - Run Local USB commands sequentially against one board. The companion enforces per-port mutual exclusion, so overlapping `status` / `ports` / `wifi-show` / `port-power` runs can legitimately return `device busy`.
-- Mutating commands such as `port-power` and `port-replug` may need a short settle window before a follow-up `just ports` reflects the new state.
-- `just reset` reboots the board and temporarily drops the USB session. Treat it as a standalone command, then wait for re-enumeration before the next `discover` / `status`.
+- Mutating commands such as `port-power` and `port-replug` may need a short settle window before a follow-up `just device-ports` reflects the new state.
+- `just device-reset` reboots the board and temporarily drops the USB session. Treat it as a standalone command, then wait for re-enumeration before the next `discover` / `status`.
 
 Selector rules:
 

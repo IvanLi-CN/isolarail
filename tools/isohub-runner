@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+PORT_FILE="$REPO_ROOT/.esp32-port"
+
+err() { printf '%s\n' "$1" >&2; }
+
+ELF_PATH="${1:-}"
+if [[ -z "$ELF_PATH" ]]; then
+  err "error: cargo did not provide an ELF path."
+  exit 2
+fi
+
+if [[ "$ELF_PATH" == *"/debug/"* ]]; then
+  err "error: cargo produced a debug ELF, but this project flashes the release ELF."
+  err "Use: cargo run --release"
+  err "Or:  just flash-monitor"
+  exit 2
+fi
+
+if [[ ! -f "$PORT_FILE" ]] || ! grep -Eq '^(device_id|deviceId|mac)=' "$PORT_FILE"; then
+  err "error: Local USB port and identity are not confirmed in .esp32-port."
+  err "Run:"
+  err "  just ports"
+  err "  PORT=/dev/cu.xxx just identify"
+  exit 2
+fi
+
+PORT_VALUE="$(head -n 1 "$PORT_FILE" 2>/dev/null || true)"
+PORT_VALUE="$(printf '%s' "$PORT_VALUE" | tr -d '\r' | xargs)"
+if [[ -z "$PORT_VALUE" ]] || [[ ! -e "$PORT_VALUE" ]]; then
+  err "error: cached port '$PORT_VALUE' is not available."
+  err "Run:"
+  err "  just select-port"
+  exit 2
+fi
+
+cd "$REPO_ROOT"
+exec env PORT="$PORT_VALUE" just flash-monitor

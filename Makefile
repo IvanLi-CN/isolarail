@@ -1,9 +1,9 @@
-## ESP32-S3 (Xtensa) workflow helpers
+## ESP32-S3 (Xtensa) compatibility helpers
 ## Usage examples:
 ##   make build              # Build (release by default)
-##   make run PORT=/dev/tty.usbmodem1101 BAUD=115200
-##   make attach PORT=/dev/tty.usbmodem1101 BAUD=115200
-##   make ports              # List serial ports detected by espflash
+##   make run                # Delegate to just flash-monitor
+##   make attach             # Delegate to just monitor
+##   make ports              # List Local USB candidates through isohub/devd
 ##   make env                # Show resolved variables
 
 # -------- Configuration (override via environment) --------
@@ -31,7 +31,7 @@ endif
 BINDIR := target/$(TARGET)/$(PROFILE)
 ELF    := $(BINDIR)/$(BIN)
 
-# Compose espflash flags
+# Legacy variables retained for compatibility with older invocations.
 PORT_FLAG   := $(if $(PORT),--port $(PORT),)
 BAUD_FLAG   := -B $(BAUD)
 CHIP_FLAG   := --chip $(CHIP)
@@ -43,9 +43,9 @@ ESPFLASH_ARGS ?=
 help:
 	@echo "Makefile targets:"
 	@echo "  make build                 Build firmware ($(PROFILE))"
-	@echo "  make run   [PORT=/dev/ttyX] [BAUD=115200]  Flash and monitor with defmt decode"
-	@echo "  make attach[PORT=/dev/ttyX] [BAUD=115200]  Attach monitor to existing firmware (defmt)"
-	@echo "  make ports                 List serial ports detected by espflash"
+	@echo "  make run                   Delegate to just flash-monitor"
+	@echo "  make attach                Delegate to just monitor"
+	@echo "  make ports                 List Local USB candidates through isohub/devd"
 	@echo "  make env                   Show resolved variables"
 	@echo "Variables (override via env): TARGET BIN PROFILE PORT BAUD CHIP LOGFMT"
 
@@ -61,23 +61,23 @@ env:
 	@echo LOGFMT = $(LOGFMT)
 
 ports:
-	espflash scan-ports || espflash list-ports || true
+	just ports
 
 # Ensure the xtensa target is honored (also set in .cargo/config.toml)
 build:
-	cargo build $(CARGO_FLAGS)
+	cargo +esp build $(CARGO_FLAGS)
 
 clean:
 	cargo clean
 
-# Flash and then monitor (defmt decoded). Works even if monitor/attach is run separately.
+# Flash and then monitor through the Local USB CLI/devd path.
 run: build
-	espflash flash $(ELF) --monitor $(PORT_FLAG) $(BAUD_FLAG) $(CHIP_FLAG) $(LOGFMT_FLAG) $(ESPFLASH_ARGS)
+	just flash-monitor
 
-# Attach only to serial monitor with defmt decoding.
+# Attach only to serial monitor through the Local USB CLI/devd path.
 # Requires a recent build so that $(ELF) exists for defmt symbol decoding.
 attach: $(ELF)
-	espflash monitor $(PORT_FLAG) $(BAUD_FLAG) $(CHIP_FLAG) $(LOGFMT_FLAG) --elf $(ELF) $(ESPFLASH_ARGS)
+	just monitor
 
 # Alias: monitor (same as attach)
 monitor: attach

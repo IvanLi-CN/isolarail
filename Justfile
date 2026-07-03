@@ -1,6 +1,12 @@
 set shell := ["zsh", "-cu"]
 
 companion_devd_bin := justfile_directory() + "/tools/isohub-companion/scripts/devd-bin.sh"
+TARGET := "xtensa-esp32s3-none-elf"
+BIN := "iso-usb-hub"
+FIRMWARE_ELF := justfile_directory() + "/target/" + TARGET + "/release/" + BIN
+FIRMWARE_BIN := justfile_directory() + "/target/" + TARGET + "/release/" + BIN + ".app.bin"
+FIRMWARE_CATALOG := justfile_directory() + "/target/" + TARGET + "/release/firmware-catalog.json"
+FIRMWARE_ARTIFACT := "local-app"
 
 default:
   @just --list
@@ -22,13 +28,19 @@ firmware-build:
   make build
 
 firmware-run:
-  PORT="${PORT:-}" BAUD="${BAUD:-115200}" make run
+  just flash-monitor
 
 firmware-attach:
-  PORT="${PORT:-}" BAUD="${BAUD:-115200}" make attach
+  just monitor
 
 firmware-ports:
-  make ports
+  just ports
+
+host-tools-build:
+  just tools-build
+
+host-tools-test:
+  just tools-test
 
 devd-serve:
   cd tools/isohub-companion && \
@@ -49,6 +61,134 @@ devd-help:
 
 isohub +ARGS='--help':
   cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- {{ARGS}}
+
+ports:
+  USB_PORT="${USB_PORT:-}" just isohub --json discover --scan | python3 -c 'import json,sys; data=json.load(sys.stdin); rows=["{}\t{}\tdevice={}".format((d.get("transport") or {}).get("portPath") or "", d.get("displayName") or d.get("id") or "iso-usb-hub", d.get("id") or "") for d in data.get("devices", []) if (d.get("transport") or {}).get("kind") == "usb" and (d.get("transport") or {}).get("portPath")]; print("\n".join(rows) if rows else "No ESP32-S3 USB Serial/JTAG candidates found.")'
+
+identify:
+  if [[ -z "${PORT:-}" ]]; then \
+    echo "error: PORT is required." >&2; \
+    echo "List candidates:" >&2; \
+    echo "  just ports" >&2; \
+    echo "Then confirm explicitly:" >&2; \
+    echo "  PORT=/dev/cu.xxx just identify" >&2; \
+    exit 2; \
+  fi; \
+  device_id="usb-${PORT//\//-}"; \
+  tmp="$(mktemp)"; \
+  trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+  USB_PORT="$PORT" just isohub --json discover --scan > "$tmp"; \
+  identity="$(python3 -c 'import json,sys; device_id=sys.argv[1]; data=json.load(open(sys.argv[2], encoding="utf-8")); matches=[d for d in data.get("devices", []) if d.get("id") == device_id]; (print(json.dumps(matches[0])) if matches else sys.exit(f"device {device_id} not found in discovery output"))' "$device_id" "$tmp")"; \
+  project_device_id="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print(v.get("deviceId") or v.get("device_id") or "")' "$identity")"; \
+  mac="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print(v.get("mac") or "")' "$identity")"; \
+  firmware="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); f=v.get("firmware") or {}; print(f.get("name") or "")' "$identity")"; \
+  if [[ "$firmware" != "iso-usb-hub" ]]; then \
+    echo "error: selected port is not running iso-usb-hub firmware." >&2; \
+    exit 2; \
+  fi; \
+  { \
+    print -r -- "$PORT"; \
+    print -r -- "port=$PORT"; \
+    print -r -- "device=$device_id"; \
+    if [[ -n "$project_device_id" ]]; then print -r -- "device_id=$project_device_id"; fi; \
+    if [[ -n "$mac" ]]; then print -r -- "mac=$mac"; fi; \
+  } > .esp32-port; \
+  echo "port: $PORT"; \
+  echo "device: $device_id"; \
+  if [[ -n "$project_device_id" ]]; then echo "device_id: $project_device_id"; fi; \
+  if [[ -n "$mac" ]]; then echo "mac: $mac"; fi; \
+  echo "cached: .esp32-port"
+
+select-port:
+  tmp="$(mktemp)"; \
+  trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
+  just ports | awk -F '\t' '$1 ~ /^\/dev\// || $1 ~ /^[Cc][Oo][Mm][0-9]+$/ { print $1 }' > "$tmp"; \
+  if [[ ! -s "$tmp" ]]; then echo "error: no ESP32-S3 USB Serial/JTAG candidates found." >&2; exit 2; fi; \
+  nl -w1 -s'  ' "$tmp"; \
+  printf "Select target by number or full port path: "; read choice; \
+  case "$choice" in /dev/*) port="$choice" ;; *[!0-9]*|"") echo "error: invalid selection '$choice'." >&2; exit 2 ;; *) port="$(sed -n "${choice}p" "$tmp")" ;; esac; \
+  if [[ -z "$port" ]]; then echo "error: no target port selected." >&2; exit 2; fi; \
+  printf "Confirm target port %s? Type 'yes' to continue: " "$port"; read confirm; \
+  if [[ "$confirm" != "yes" ]]; then echo "aborted"; exit 2; fi; \
+  PORT="$port" just identify
+
+firmware-bin:
+  cargo +esp build --release
+  espflash save-image --chip esp32s3 {{FIRMWARE_ELF}} {{FIRMWARE_BIN}}
+  python3 tools/firmware-catalog/build-catalog.py \
+    --out {{FIRMWARE_CATALOG}} \
+    --artifact-id {{FIRMWARE_ARTIFACT}} \
+    --version "$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \
+    --git-sha "$(git rev-parse HEAD)" \
+    --build-id "local" \
+    --app-bin {{FIRMWARE_BIN}} \
+    --elf {{FIRMWARE_ELF}}
+
+_selected-device:
+  if [[ ! -f .esp32-port ]]; then \
+    echo "error: no port selected for this repo (.esp32-port missing)." >&2; \
+    echo "Run:" >&2; \
+    echo "  just select-port" >&2; \
+    exit 2; \
+  fi; \
+  port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
+  if [[ -z "$port" ]]; then port="$(head -n 1 .esp32-port | tr -d '\r' | xargs)"; fi; \
+  if [[ -z "$port" ]] || [[ ! -e "$port" ]]; then \
+    echo "error: cached port '$port' is not available." >&2; \
+    echo "Run:" >&2; \
+    echo "  just select-port" >&2; \
+    exit 2; \
+  fi; \
+  device="$(sed -n 's/^device=//p' .esp32-port | head -1)"; \
+  if [[ -z "$device" ]]; then device="usb-${port//\//-}"; fi; \
+  print -r -- "$device"
+
+_expected-flash-args:
+  args=(); \
+  device_id="$(sed -n 's/^device_id=//p' .esp32-port | head -1)"; \
+  mac="$(sed -n 's/^mac=//p' .esp32-port | head -1)"; \
+  if [[ -n "$device_id" ]]; then args+=(--expected-device-id "$device_id"); fi; \
+  if [[ -n "$mac" ]]; then args+=(--expected-mac "$mac"); fi; \
+  if [[ "${#args[@]}" -eq 0 ]]; then \
+    echo "error: no confirmed device identity in .esp32-port." >&2; \
+    echo "Run:" >&2; \
+    echo "  PORT=/dev/cu.xxx just identify" >&2; \
+    echo "For first-time/download-mode flashing, run:" >&2; \
+    echo "  PORT=/dev/cu.xxx just flash-first-time" >&2; \
+    exit 2; \
+  fi; \
+  printf '%q ' "${args[@]}"
+
+flash:
+  device="$(just _selected-device)" || exit $?; \
+  expected="$(just _expected-flash-args)" || exit $?; \
+  just firmware-bin; \
+  USB_PORT="$(sed -n 's/^port=//p' .esp32-port | head -1)" eval "just isohub flash --device '$device' --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real $expected"
+
+flash-first-time:
+  if [[ -z "${PORT:-}" ]]; then \
+    echo "error: PORT is required for first-time/download-mode flashing." >&2; \
+    exit 2; \
+  fi; \
+  just firmware-bin
+  device="usb-${PORT//\//-}"; \
+  USB_PORT="$PORT" just isohub discover --scan >/dev/null || true; \
+  USB_PORT="$PORT" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time
+
+reset:
+  device="$(just _selected-device)" || exit $?; \
+  port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
+  USB_PORT="$port" just isohub reset --device "$device"
+
+monitor:
+  device="$(just _selected-device)" || exit $?; \
+  port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
+  USB_PORT="$port" just isohub monitor --device "$device" --tail "${TAIL:-200}"
+
+flash-monitor:
+  just flash
+  just reset
+  just monitor
 
 discover:
   if [[ "${SCAN:-1}" == '1' ]]; then \
@@ -75,7 +215,7 @@ status:
   selector=(${=SELECTOR}); \
   cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- status "${selector[@]}"
 
-ports:
+device-ports:
   if [[ -z "${SELECTOR:-}" ]]; then \
     echo "Set SELECTOR='--device <device-id>' or '--hardware <saved-id>'." >&2; \
     exit 1; \
@@ -123,7 +263,7 @@ wifi-clear:
   selector=(${=SELECTOR}); \
   cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- wifi clear "${selector[@]}"
 
-reset:
+device-reset:
   if [[ -z "${SELECTOR:-}" ]]; then \
     echo "Set SELECTOR='--device <device-id>' or '--hardware <saved-id>'." >&2; \
     exit 1; \
@@ -131,7 +271,7 @@ reset:
   selector=(${=SELECTOR}); \
   cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- reset "${selector[@]}"
 
-monitor:
+device-monitor:
   if [[ -z "${SELECTOR:-}" ]]; then \
     echo "Set SELECTOR='--device <device-id>' or '--hardware <saved-id>'." >&2; \
     exit 1; \
@@ -180,3 +320,10 @@ web-test-e2e:
 web-test-storybook:
   bun run --cwd web build-storybook
   bun run --cwd web test:storybook
+
+legacy-agentd +ARGS:
+  if ! command -v mcu-agentd >/dev/null 2>&1; then \
+    echo "error: mcu-agentd is not installed. It is legacy/emergency only; use just ports / just flash-monitor." >&2; \
+    exit 127; \
+  fi; \
+  exec mcu-agentd {{ARGS}}

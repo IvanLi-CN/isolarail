@@ -32,7 +32,7 @@
 - 构建：`cargo build` 或 `cargo build --release`。
 - 推荐烧录与串口监视：`just flash-monitor`。首次使用先执行 `just ports`，再用 `PORT=/dev/cu.xxx just identify` 写入 `.esp32-port`。
 - `cargo run --release` 会通过 `tools/isohub-runner` 复用同一 Local USB 身份校验和烧录路径。
-- `mcu-agentd` 仅作为 legacy/emergency passthrough，不再作为默认开发烧录入口。
+- 旧烧录入口已完全退役：不得使用 Makefile、裸 `espflash flash --monitor` 或 `mcu-agentd` 作为本仓烧录路径。
 
 ## 代码与修改约定
 

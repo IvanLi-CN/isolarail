@@ -22,7 +22,6 @@ just ports
 PORT=/dev/cu.usbmodem1101 just identify
 just firmware-bin
 just flash-monitor
-just firmware-ports
 ```
 
 Notes:
@@ -30,6 +29,7 @@ Notes:
 - `just flash-monitor` builds the app image, validates the selected device identity, flashes at `0x10000`, resets, and opens the monitor path.
 - `cargo run --release` uses `tools/isohub-runner` and follows the same Local USB safety boundary.
 - `just flash-first-time` is the explicit download-mode/non-project firmware path and requires typed confirmation from `isohub`.
+- The previous Makefile, direct `espflash flash --monitor`, and `mcu-agentd` flashing entrypoints are retired.
 - No hardware command should be run against an unrelated board.
 
 ### Local companion tools
@@ -160,6 +160,8 @@ espup install
 source ~/export-esp.sh
 cargo install espflash
 ```
+
+`espflash` is an internal backend used by `isohub-devd`; do not use it as the firmware flashing entrypoint.
 
 ## Validation status
 

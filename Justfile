@@ -25,16 +25,7 @@ firmware-contract-test:
   cargo +stable test --lib --target "$native_target"
 
 firmware-build:
-  make build
-
-firmware-run:
-  just flash-monitor
-
-firmware-attach:
-  just monitor
-
-firmware-ports:
-  just ports
+  cargo +esp build --release
 
 host-tools-build:
   just tools-build
@@ -341,10 +332,3 @@ web-test-e2e:
 web-test-storybook:
   bun run --cwd web build-storybook
   bun run --cwd web test:storybook
-
-legacy-agentd +ARGS:
-  if ! command -v mcu-agentd >/dev/null 2>&1; then \
-    echo "error: mcu-agentd is not installed. It is legacy/emergency only; use just ports / just flash-monitor." >&2; \
-    exit 127; \
-  fi; \
-  exec mcu-agentd {{ARGS}}

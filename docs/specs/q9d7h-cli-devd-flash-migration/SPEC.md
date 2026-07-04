@@ -17,7 +17,7 @@
 - 复用并收紧现有 `isohub-devd` 本地 IPC daemon 与 `isohub` CLI。
 - 建立端口枚举、端口选择、身份确认、app `.bin` 生成、普通烧录、首次 full flash、reset 与 monitor 的闭环。
 - 固件通过既有 USB Serial/JTAG JSONL `info` 方法返回稳定身份与固件信息。
-- 将默认开发入口迁移到 `just` + `isohub`，并把 `mcu-agentd` 降为 legacy/emergency。
+- 将开发入口迁移到 `just` + `isohub`，并完全退役 Makefile、裸 `espflash flash --monitor` 与 `mcu-agentd` 烧录入口。
 
 ### Non-goals
 
@@ -54,7 +54,7 @@
 ### SHOULD
 
 - `cargo run --release` 通过 `tools/isohub-runner` 复用同一 Local USB 安全边界。
-- `mcu-agentd` 只通过 legacy/emergency passthrough 暴露，不作为 README 默认路径。
+- Makefile、裸 `espflash flash --monitor` 与 `mcu-agentd` 不得作为本仓烧录入口继续暴露。
 
 ## 验收标准
 
@@ -81,7 +81,7 @@
 
 - [x] M1: 固件 USB JSONL `info` 合同确认
 - [x] M2: `isohub` / `isohub-devd` host tools 复用
-- [x] M3: Justfile、runner、legacy passthrough 与文档同步
+- [x] M3: Justfile、runner、旧入口退役与文档同步
 - [ ] M4: 真机 `identify` / `flash-monitor` 验证
 
 ## 风险 / 开放问题 / 假设

@@ -2,7 +2,7 @@
 
 ## Firmware toolchain
 
-Install the ESP Rust toolchain and flashing tools:
+Install the ESP Rust toolchain and backend tools:
 
 ```bash
 cargo install espup
@@ -11,6 +11,8 @@ source ~/export-esp.sh
 cargo install espflash
 cargo install just
 ```
+
+`espflash` is required because `isohub-devd` invokes it internally. Firmware flashing still goes through `just flash-monitor` or `PORT=/dev/cu.xxx just flash-first-time`, not through direct `espflash` commands.
 
 Verify the setup:
 

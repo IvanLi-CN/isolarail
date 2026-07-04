@@ -38,4 +38,4 @@ if [[ -z "$PORT_VALUE" ]] || [[ ! -e "$PORT_VALUE" ]]; then
 fi
 
 cd "$REPO_ROOT"
-exec env PORT="$PORT_VALUE" just flash-monitor
+exec env PORT="$PORT_VALUE" CARGO_ELF_PATH="$ELF_PATH" just _flash-monitor-cargo-elf

@@ -115,6 +115,29 @@ firmware-bin:
     --app-bin {{FIRMWARE_BIN}} \
     --elf {{FIRMWARE_ELF}}
 
+_firmware-bin-from-cargo-elf:
+  @if [[ -z "${CARGO_ELF_PATH:-}" ]]; then \
+    echo "error: CARGO_ELF_PATH is required." >&2; \
+    exit 2; \
+  fi; \
+  elf="$CARGO_ELF_PATH"; \
+  if [[ ! -f "$elf" ]]; then \
+    echo "error: Cargo-provided ELF does not exist: $elf" >&2; \
+    exit 2; \
+  fi; \
+  app_bin="${elf}.app.bin"; \
+  catalog="$(dirname "$elf")/firmware-catalog.$(basename "$elf").json"; \
+  espflash save-image --chip esp32s3 "$elf" "$app_bin"; \
+  python3 tools/firmware-catalog/build-catalog.py \
+    --out "$catalog" \
+    --artifact-id {{FIRMWARE_ARTIFACT}} \
+    --version "$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \
+    --git-sha "$(git rev-parse HEAD)" \
+    --build-id "cargo-run" \
+    --app-bin "$app_bin" \
+    --elf "$elf"; \
+  print -r -- "$catalog"
+
 _selected-device:
   @if [[ ! -f .esp32-port ]]; then \
     echo "error: no port selected for this repo (.esp32-port missing)." >&2; \
@@ -158,6 +181,14 @@ flash:
   just firmware-bin; \
   USB_PORT="$port" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
 
+_flash-cargo-elf:
+  @device="$(just _selected-device)" || exit $?; \
+  expected="$(just _expected-flash-args)" || exit $?; \
+  expected_args=("${(@z)expected}"); \
+  port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
+  catalog="$(just _firmware-bin-from-cargo-elf)" || exit $?; \
+  USB_PORT="$port" just isohub flash --device "$device" --catalog "$catalog" --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
+
 flash-first-time:
   @if [[ -z "${PORT:-}" ]]; then \
     echo "error: PORT is required for first-time/download-mode flashing." >&2; \
@@ -199,6 +230,11 @@ monitor:
 
 flash-monitor:
   @just flash
+  @just reset
+  @just monitor
+
+_flash-monitor-cargo-elf:
+  @just _flash-cargo-elf
   @just reset
   @just monitor
 

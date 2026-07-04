@@ -1016,6 +1016,12 @@ fn play_port_power_tone(enabled: bool) {
     });
 }
 
+fn reset_channel_audio_tracker(index: usize, port_audio: &mut [PortAudioTracker; 4]) {
+    if index < port_audio.len() {
+        let _ = port_audio[index].update(0, 0, true);
+    }
+}
+
 fn clear_channel_audio_state(
     index: usize,
     ocp_reason: &mut [PortOcpDecision; 4],
@@ -1023,7 +1029,7 @@ fn clear_channel_audio_state(
 ) {
     if index < ocp_reason.len() {
         ocp_reason[index] = PortOcpDecision::None;
-        let _ = port_audio[index].update(0, 0, true);
+        reset_channel_audio_tracker(index, port_audio);
     }
 }
 
@@ -1040,7 +1046,7 @@ fn handle_usb_action_audio(
             play_port_power_tone(*enabled);
         }
         Some(UsbAction::PortReplug { index }) => {
-            clear_channel_audio_state(*index, ocp_reason, port_audio);
+            reset_channel_audio_tracker(*index, port_audio);
             play_port_power_tone(false);
         }
         _ => {}
@@ -1060,7 +1066,7 @@ fn handle_network_action_audio(
             play_port_power_tone(enabled);
         }
         ApiPendingAction::PortReplug { index } => {
-            clear_channel_audio_state(index, ocp_reason, port_audio);
+            reset_channel_audio_tracker(index, port_audio);
             play_port_power_tone(false);
         }
     }

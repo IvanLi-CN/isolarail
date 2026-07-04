@@ -600,10 +600,11 @@ fn handle_front_key_event_with_context(
         front_panel::KeyEvent::Center => {
             let idx = *selected_port;
             let next_enabled = !manual_enabled[idx];
-            let can_toggle = context.target == PowerSwitchTarget::Closed
-                && context.port_ready[idx]
-                && context.hub_output_allowed[idx]
-                && !context.ocp_latched[idx];
+            let can_toggle = !next_enabled
+                || (context.target == PowerSwitchTarget::Closed
+                    && context.port_ready[idx]
+                    && context.hub_output_allowed[idx]
+                    && !context.ocp_latched[idx]);
             let tone = center_button_tone(can_toggle, next_enabled);
             if !can_toggle {
                 warn!(
@@ -2425,7 +2426,14 @@ async fn main(spawner: Spawner) {
             next_input_over_power(input_over_power_alarm, input_status.vin_v, input_status.i_a);
         let channel_short = ocp_reason.contains(&PortOcpDecision::LowVbus);
         let channel_over_5a = ocp_reason.contains(&PortOcpDecision::HighCurrent)
-            || view.iter().any(|sample| sample.ich_ma >= 5000);
+            || view.iter().any(|sample| {
+                sample.en_enabled
+                    && matches!(
+                        sample.ui_state,
+                        UiPortState::Normal | UiPortState::Overcurrent
+                    )
+                    && sample.ich_ma >= 5000
+            });
         let alarm = choose_alarm(
             channel_short,
             fan::over_temp_alarm_active(),

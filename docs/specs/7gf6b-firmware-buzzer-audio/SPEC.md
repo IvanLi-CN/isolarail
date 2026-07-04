@@ -54,11 +54,11 @@
 - 开机音必须在 boot self-check 非 Fatal、进入 Runtime 后播放。
 - Left/Right 按键成功移动选中通道时必须播放操作提示音。
 - Center 成功切换通道电源时必须播放通道上电音或通道断电音。
-- Center 因 OCP、全局关断、sideband 门控或端口未就绪被拒绝时必须播放操作拒绝音。
+- Center 尝试启用通道但因 OCP、全局关断、sideband 门控或端口未就绪被拒绝时必须播放操作拒绝音。
 - Up/Down 没有定义动作时不得播放声音。
 - 告警优先级必须为 `channel_short` > `over_temp` > `input_over_power` > `channel_over_5a` > one-shot。
 - `channel_short` 必须复用低 VBUS 软件 OCP 条件。
-- `channel_over_5a` 必须在任一通道 `current_ma >= 5000` 或 high-current OCP latch 时以长间隔循环。
+- `channel_over_5a` 必须在任一 active 通道的新鲜遥测 `current_ma >= 5000` 或 high-current OCP latch 时以长间隔循环。
 - 过温告警必须使用 80C 触发、75C 清除。
 - 输入过功率告警必须使用 100W 触发、90W 清除。
 - 通道提示音必须使用插入 `vbus_mv >= 3300`、拔出 `< 3000`、3A set/clear `3000/2800mA`、5A set/clear `5000/4800mA` 的 hysteresis。
@@ -109,7 +109,7 @@
 ### Alarm mapping
 
 - `channel_short`：现有 `vbus < 3000mV && current > 100mA` OCP latch。
-- `channel_over_5a`：现有 high-current OCP latch，或运行期任意通道 `current_ma >= 5000`。
+- `channel_over_5a`：现有 high-current OCP latch，或运行期任意 active 通道的新鲜遥测 `current_ma >= 5000`。
 - `over_temp`：fan 温度 EMA 达到 `80C` 置位，低于等于 `75C` 清除。
 - `input_over_power`：输入 VIN 与电流的绝对值乘积达到 `100W` 置位，低于 `90W` 清除。
 
@@ -135,7 +135,7 @@ None
 - Given 前面板 Left/Right 触发，When 选中通道发生移动，Then 播放 `operation_ok`。
 - Given 前面板 Center 启用通道且 gate 允许，When 手动输出切换成功，Then 播放 `channel_power_on`。
 - Given 前面板 Center 禁用通道，When 手动输出切换成功，Then 播放 `channel_power_off`。
-- Given 前面板 Center 启用通道但被 OCP、global off、sideband gate 或 port not ready 拒绝，When 状态不变，Then 播放 `operation_denied` 并记录拒绝原因。
+- Given 前面板 Center 尝试启用通道但被 OCP、global off、sideband gate 或 port not ready 拒绝，When 状态不变，Then 播放 `operation_denied` 并记录拒绝原因。
 - Given 多个告警同时存在，When runtime reducer 计算当前告警，Then 按 `channel_short` > `over_temp` > `input_over_power` > `channel_over_5a` 选择唯一循环告警。
 - Given 保护关断在同一 tick 发生，When 端口电压跌落，Then 普通拔出提示被抑制。
 - Given 端口电流跨越 3A 或 5A 阈值，When 未低于对应 clear 阈值，Then 每个阈值只提示一次。

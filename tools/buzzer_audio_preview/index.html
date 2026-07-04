@@ -961,6 +961,10 @@
         },
         events: candidate.events
       };
+      if (!navigator.clipboard?.writeText) {
+        statusText.textContent = "当前浏览器上下文不支持剪贴板写入，请使用页面源码中的 tone-data。";
+        return;
+      }
       navigator.clipboard.writeText(JSON.stringify(score, null, 2)).then(
         () => { statusText.textContent = `已复制 score.json：${tone.title} / ${candidate.label}`; },
         () => { statusText.textContent = "浏览器阻止了剪贴板写入，请使用页面源码中的 tone-data。"; }

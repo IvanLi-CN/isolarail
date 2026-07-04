@@ -492,11 +492,11 @@ enum PortOcpDecision {
 }
 
 fn port_overcurrent(vbus_mv: u32, current_ma: u32) -> PortOcpDecision {
-    if current_ma > PORT_OCP_HIGH_CURRENT_MA {
-        return PortOcpDecision::HighCurrent;
-    }
     if vbus_mv < PORT_OCP_LOW_VBUS_MV && current_ma > PORT_OCP_LOW_VBUS_MIN_CURRENT_MA {
         return PortOcpDecision::LowVbus;
+    }
+    if current_ma > PORT_OCP_HIGH_CURRENT_MA {
+        return PortOcpDecision::HighCurrent;
     }
     PortOcpDecision::None
 }

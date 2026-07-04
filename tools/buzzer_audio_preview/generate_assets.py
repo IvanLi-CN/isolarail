@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import html.parser
 import json
+import math
 import shutil
-import subprocess
-import sys
+import struct
+import wave
 from pathlib import Path
 
 
@@ -72,20 +73,109 @@ def score_for(data: dict, events: list[dict]) -> dict:
     }
 
 
+def varlen(value: int) -> bytes:
+    if value < 0:
+        raise ValueError("MIDI delta cannot be negative")
+    out = bytearray([value & 0x7F])
+    value >>= 7
+    while value:
+        out.insert(0, 0x80 | (value & 0x7F))
+        value >>= 7
+    return bytes(out)
+
+
+def midi_event(delta_ticks: int, payload: bytes) -> bytes:
+    return varlen(delta_ticks) + payload
+
+
+def freq_to_nearest_midi(freq_hz: float) -> int:
+    if freq_hz <= 0:
+        raise ValueError(f"freq_hz must be > 0, got {freq_hz}")
+    return max(0, min(127, int(round(69 + 12 * math.log2(freq_hz / 440.0)))))
+
+
+def write_midi(path: Path, score: dict) -> None:
+    tempo_bpm = float(score["tempo_bpm"])
+    ppqn = 480
+    channel = int(score["midi"]["channel"])
+    program = int(score["midi"]["program"])
+    velocity = int(score["midi"]["velocity"])
+    tempo_us_per_quarter = int(round(60_000_000 / tempo_bpm))
+
+    track = bytearray()
+    track.extend(midi_event(0, b"\xFF\x51\x03" + tempo_us_per_quarter.to_bytes(3, "big")))
+    track.extend(midi_event(0, bytes([0xC0 | channel, program])))
+
+    pending_delta = 0
+    for event in score["events"]:
+        duration_ms = int(event.get("ms") or event.get("rest_ms") or 0)
+        ticks = int(round((duration_ms / 1000.0) * tempo_bpm * ppqn / 60.0))
+        if "rest_ms" in event:
+            pending_delta += max(0, ticks)
+            continue
+
+        midi_note = freq_to_nearest_midi(float(event["freq_hz"]))
+        track.extend(midi_event(pending_delta, bytes([0x90 | channel, midi_note, velocity])))
+        track.extend(midi_event(max(0, ticks), bytes([0x80 | channel, midi_note, 0])))
+        pending_delta = 0
+
+    track.extend(midi_event(pending_delta, b"\xFF\x2F\x00"))
+    header = (
+        b"MThd"
+        + (6).to_bytes(4, "big")
+        + (0).to_bytes(2, "big")
+        + (1).to_bytes(2, "big")
+        + ppqn.to_bytes(2, "big")
+    )
+    track_chunk = b"MTrk" + len(track).to_bytes(4, "big") + bytes(track)
+    path.write_bytes(header + track_chunk)
+
+
+def envelope(index: int, total: int, fade_samples: int) -> float:
+    if fade_samples <= 0 or total <= 1:
+        return 1.0
+    start = index / fade_samples if index < fade_samples else 1.0
+    end = (total - 1 - index) / fade_samples if index >= total - fade_samples else 1.0
+    return max(0.0, min(1.0, start, end))
+
+
+def write_wav(path: Path, score: dict) -> None:
+    audio = score["audio"]
+    sample_rate = int(audio["sample_rate_hz"])
+    volume = max(0.0, min(1.0, float(audio["volume"]))) * 0.9
+    fade_samples = max(0, int(round(sample_rate * int(audio["fade_ms"]) / 1000.0)))
+
+    frames = bytearray()
+    phase = 0.0
+    for event in score["events"]:
+        duration_ms = int(event.get("ms") or event.get("rest_ms") or 0)
+        count = max(0, int(round(duration_ms * sample_rate / 1000.0)))
+        if "rest_ms" in event:
+            frames.extend(b"\x00\x00" * count)
+            continue
+
+        freq_hz = float(event["freq_hz"])
+        increment = freq_hz / sample_rate
+        for index in range(count):
+            amp = envelope(index, count, fade_samples) * volume
+            sample = amp if phase < 0.5 else -amp
+            frames.extend(struct.pack("<h", int(sample * 32767)))
+            phase += increment
+            if phase >= 1.0:
+                phase -= 1.0
+
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(frames)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", type=Path, default=Path(__file__).with_name("index.html"))
     parser.add_argument("--out-dir", type=Path, default=Path(__file__).with_name("out"))
-    parser.add_argument(
-        "--generator",
-        type=Path,
-        default=Path.home() / ".codex/skills/buzzer-audio-preview/scripts/buzzer_preview.py",
-    )
     args = parser.parse_args()
-
-    if not args.generator.exists():
-        print(f"missing buzzer preview generator: {args.generator}", file=sys.stderr)
-        return 2
 
     data = load_tone_data(args.index)
     scores_dir = args.out_dir / "scores"
@@ -100,21 +190,12 @@ def main() -> int:
         for candidate in tone["candidates"]:
             name = f"{slug(tone['id'])}__{slug(candidate['id'])}"
             score_path = scores_dir / f"{name}.json"
-            score_path.write_text(
-                json.dumps(score_for(data, candidate["events"]), ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(args.generator),
-                    "--in",
-                    str(score_path),
-                    "--out-dir",
-                    str(media_dir / name),
-                ],
-                check=True,
-            )
+            score = score_for(data, candidate["events"])
+            score_path.write_text(json.dumps(score, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            candidate_dir = media_dir / name
+            candidate_dir.mkdir()
+            write_midi(candidate_dir / f"{name}.mid", score)
+            write_wav(candidate_dir / f"{name}.wav", score)
             generated += 1
 
     print(f"generated {generated} score/MIDI/WAV preview sets under {args.out_dir}")

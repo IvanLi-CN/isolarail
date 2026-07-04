@@ -837,6 +837,7 @@
     let audioContext;
     let loopTimer = null;
     let loopKey = null;
+    let sequenceTimers = [];
     let activeNodes = [];
 
     function ensureAudio() {
@@ -858,6 +859,10 @@
         clearTimeout(loopTimer);
         loopTimer = null;
       }
+      for (const timer of sequenceTimers) {
+        clearTimeout(timer);
+      }
+      sequenceTimers = [];
       loopKey = null;
       for (const node of activeNodes) {
         try {
@@ -1056,7 +1061,10 @@
       let delay = 0;
       for (const tone of toneData.tones) {
         const candidate = tone.candidates[0];
-        setTimeout(() => playEvents(candidate.events, `${tone.title} / 推荐`), delay);
+        const timer = setTimeout(() => {
+          playEvents(candidate.events, `${tone.title} / 推荐`);
+        }, delay);
+        sequenceTimers.push(timer);
         delay += sequenceDurationMs(candidate.events) + 420;
       }
     });

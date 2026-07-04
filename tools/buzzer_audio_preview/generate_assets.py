@@ -174,12 +174,19 @@ def write_wav(path: Path, score: dict) -> None:
 
 def prepare_out_dir(out_dir: Path, default_out_dir: Path) -> None:
     marker_name = ".buzzer-preview-generated"
-    out_dir = out_dir.resolve()
-    default_out_dir = default_out_dir.resolve()
+    out_dir = out_dir.expanduser()
+    default_out_dir = default_out_dir.expanduser()
+
+    if out_dir.is_symlink():
+        raise ValueError(f"refusing to use symlink output directory: {out_dir}")
+
     marker = out_dir / marker_name
+    is_default_out_dir = out_dir.resolve(strict=False) == default_out_dir.resolve(strict=False)
 
     if out_dir.exists():
-        if out_dir == default_out_dir or marker.exists():
+        if not out_dir.is_dir():
+            raise ValueError(f"output path is not a directory: {out_dir}")
+        if is_default_out_dir or marker.exists():
             shutil.rmtree(out_dir)
         elif any(out_dir.iterdir()):
             raise ValueError(

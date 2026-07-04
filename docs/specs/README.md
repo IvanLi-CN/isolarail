@@ -87,6 +87,7 @@
 | 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
 | j6nvw | 硬件 V3 引脚与显示链路对齐 | 部分完成（2/3） | `j6nvw-hardware-v3-pin-assignment/SPEC.md` | 2026-04-27 | legacy `docs/plan/j6nvw-hw-v3-pin-assignment/**` 删除待确认 |
 | h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-06-13 | 固件与上游侧 p1/p3/p4 控制已验证；命名已对齐到 `isohub` / 上游侧语义；PWREN1#/2# 硬件缺陷见 issue #18 |
+| 7gf6b | 固件蜂鸣器音效 | 已完成 | `7gf6b-firmware-buzzer-audio/SPEC.md` | 2026-07-05 | PR #25 |
 | e5nyr | 发布失败 Telegram 告警接入 | 已完成 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-04-12 | PR #12 |
 | q9d7h | CLI/devd 烧录迁移 | 部分完成（3/4） | `q9d7h-cli-devd-flash-migration/SPEC.md` | 2026-07-04 | source workflow 已完成，旧烧录入口已退役；真机 flash-monitor 验证待硬件确认 |
 <!-- markdownlint-enable MD060 -->

@@ -1,3 +1,4 @@
+use core::sync::atomic::{AtomicBool, Ordering};
 use defmt::info;
 use embassy_executor::{task, SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -50,22 +51,28 @@ const TEMP_FAN_START_C: f32 = 40.0; // begin ramp here
                                     // 满速温度改为 50°C：要求“将温度控制在 50 度以内”。
 const TEMP_FAN_FULL_C: f32 = 50.0; // full speed here
 const TEMP_FORCE_FULL_C: f32 = 80.0; // safety: 强制满速阈值
-                                     // 移除未使用的温度/占空比常量，避免无用代码
-                                     // TSENS conversion constants (ESP32-S3):
-                                     // General linear model from Espressif docs:
-                                     //   T(°C) = 0.4386 * raw - 27.88 * dac_offset - 20.52
-                                     // 其中 dac_offset 由硬件寄存器 I2C_SARADC_TSENS_DAC(3:0) 决定。
-                                     // 我们不做“校准”，而是：
-                                     //   1) 上电将 TSENS_DAC 设为 1（常用量程，对应 dac_offset = -1）
-                                     //   2) 计算时从寄存器读回 TSENS_DAC，并按 dac_offset = - (reg & 0x0F) 使用。
+const TEMP_ALARM_CLEAR_C: f32 = 75.0;
+// 移除未使用的温度/占空比常量，避免无用代码
+// TSENS conversion constants (ESP32-S3):
+// General linear model from Espressif docs:
+//   T(°C) = 0.4386 * raw - 27.88 * dac_offset - 20.52
+// 其中 dac_offset 由硬件寄存器 I2C_SARADC_TSENS_DAC(3:0) 决定。
+// 我们不做“校准”，而是：
+//   1) 上电将 TSENS_DAC 设为 1（常用量程，对应 dac_offset = -1）
+//   2) 计算时从寄存器读回 TSENS_DAC，并按 dac_offset = - (reg & 0x0F) 使用。
 const TSENS_ADC_FACTOR: f32 = 0.4386;
 const TSENS_DAC_FACTOR: f32 = 27.88;
 const TSENS_SYS_OFFSET: f32 = 20.52;
 
 static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static OVER_TEMP_ALARM: AtomicBool = AtomicBool::new(false);
 
 pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &BOOTSTRAP_SIG
+}
+
+pub fn over_temp_alarm_active() -> bool {
+    OVER_TEMP_ALARM.load(Ordering::Relaxed)
 }
 
 fn fail_bootstrap() {
@@ -279,6 +286,14 @@ async fn task(
             Some(prev) => 0.3 * t_c + 0.7 * prev,
         });
         let t = ema_temp.unwrap();
+        let over_temp_alarm = OVER_TEMP_ALARM.load(Ordering::Relaxed);
+        if !over_temp_alarm && t >= TEMP_FORCE_FULL_C {
+            OVER_TEMP_ALARM.store(true, Ordering::Relaxed);
+            info!("fan.safety: over_temp_alarm=true T={}.1C", t as i32);
+        } else if over_temp_alarm && t <= TEMP_ALARM_CLEAR_C {
+            OVER_TEMP_ALARM.store(false, Ordering::Relaxed);
+            info!("fan.safety: over_temp_alarm=false T={}.1C", t as i32);
+        }
 
         // Target speed percentage from temperature（含安全阈值）
         let target_pct = if t >= TEMP_FORCE_FULL_C {

@@ -60,6 +60,12 @@ pub struct BootstrapStatus {
 }
 
 static STATUS_CH: Channel<CriticalSectionRawMutex, Status, 8> = Channel::new();
+static LATEST_STATUS: Mutex<CriticalSectionRawMutex, Status> = Mutex::new(Status {
+    vin_v: 0.0,
+    i_a: 0.0,
+    pg_good: false,
+    vin_on: false,
+});
 static VIN_ON_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, BootstrapStatus> = Signal::new();
 
@@ -130,6 +136,15 @@ pub fn status_receiver() -> Receiver<'static, CriticalSectionRawMutex, Status, 8
     STATUS_CH.receiver()
 }
 
+pub async fn latest_status() -> Status {
+    *LATEST_STATUS.lock().await
+}
+
+async fn publish_status(status: Status) {
+    *LATEST_STATUS.lock().await = status;
+    STATUS_CH.send(status).await;
+}
+
 #[allow(dead_code)]
 pub fn vin_on_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &VIN_ON_SIG
@@ -196,14 +211,13 @@ async fn task(
             });
             VIN_ON_SIG.signal(false);
             loop {
-                STATUS_CH
-                    .send(Status {
-                        vin_v: 0.0,
-                        i_a: 0.0,
-                        pg_good: in_pg.is_high(),
-                        vin_on: false,
-                    })
-                    .await;
+                publish_status(Status {
+                    vin_v: 0.0,
+                    i_a: 0.0,
+                    pg_good: in_pg.is_high(),
+                    vin_on: false,
+                })
+                .await;
                 Timer::after(Duration::from_secs(10)).await;
             }
         }
@@ -235,8 +249,7 @@ async fn task(
         });
         VIN_ON_SIG.signal(false);
         loop {
-            STATUS_CH
-                .send(sample_status(&mut ina, &in_pg, shunt_res_ohms, limits, false).await)
+            publish_status(sample_status(&mut ina, &in_pg, shunt_res_ohms, limits, false).await)
                 .await;
             Timer::after(Duration::from_secs(10)).await;
         }
@@ -313,7 +326,7 @@ async fn task(
         }
         vin_on_state.vin_on |= status.vin_on;
 
-        STATUS_CH.send(status).await;
+        publish_status(status).await;
         Timer::after(Duration::from_secs(10)).await;
     }
 }

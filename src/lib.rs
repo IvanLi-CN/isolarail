@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
+pub mod audio_logic;
 pub mod device_contract;
 pub mod device_identity;
 pub mod http_api_v1;

@@ -84,7 +84,7 @@
 
 - `cargo +esp check`
 - `cargo +esp build --release`
-- 真机 `mcu-agentd flash` 与 `mcu-agentd monitor` 验证可用时执行。
+- 真机 `just flash-monitor` 或 `cargo run --release` 验证可用时执行，二者均通过 `isohub` / `isohub-devd` 路径。
 
 ### UI / Visual Evidence
 

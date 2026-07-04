@@ -167,7 +167,7 @@ cargo install espflash
 
 Re-verified on the current `HEAD` in this dev environment:
 
-- `just --list`
+- `just --summary`
 - `just tools-build`
 - `just tools-test`
 - `just web-check`
@@ -177,7 +177,10 @@ Re-verified on the current `HEAD` in this dev environment:
 - `just devd-help`
 - `just firmware-check`
 - `just firmware-contract-test`
-- `cargo +esp check --release`
+- `cargo +esp check`
+- `cargo +esp build --release`
+- `just firmware-build`
+- `just firmware-bin`
 
 Additional quality gates that remain part of the expected developer workflow, but were not re-run in this pass:
 

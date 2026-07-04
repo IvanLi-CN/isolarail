@@ -4,7 +4,7 @@
 
 - Status: 部分完成（3/4）
 - Created: 2026-07-03
-- Last: 2026-07-03
+- Last: 2026-07-04
 
 ## 背景 / 问题陈述
 
@@ -61,7 +61,7 @@
 - Given 无 `.esp32-port`，When 运行 `just flash`、`just reset` 或 `just monitor`，Then 命令失败并提示选择/确认端口。
 - Given 固件运行且端口已确认，When `PORT=/dev/cu.xxx just identify`，Then `.esp32-port` 写入端口、`device_id` 与 `mac`。
 - Given `.esp32-port` 身份与设备 `info` 匹配，When `just flash-monitor`，Then 生成 app `.bin`，写入 `0x10000`，reset 后进入 monitor。
-- Given 端口身份未确认，When 首次 `just flash`，Then 只有 typed confirmation 后才执行 full ELF flash，并在重启后尝试回填身份。
+- Given 端口身份未确认，When `PORT=/dev/cu.xxx just flash-first-time`，Then 只有 typed confirmation 后才执行 full ELF flash，并在重启后尝试回填身份。
 
 ## 非功能性验收 / 质量门槛
 

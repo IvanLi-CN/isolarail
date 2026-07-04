@@ -6,7 +6,7 @@
 
 - 语言与目标：Rust，目标 `xtensa-esp32s3-none-elf`（ESP32‑S3）。
 - 入口与结构：`src/main.rs` 为示例程序，使用 `esp-hal` + `embassy` 异步框架。
-- 运行器：由 `.cargo/config.toml` 指定 `runner = "espflash flash --monitor"`。
+- 运行器：由 `.cargo/config.toml` 指定 `runner = "bash tools/isohub-runner"`，复用本仓 Local USB CLI/devd 烧录路径。
 - 打印与日志：使用 defmt + `esp-println`；默认 `DEFMT_LOG=info`，可通过该环境变量调整日志级别。
 - 提交规范：必须使用 Conventional Commits；不得绕过校验；不得擅自 push。
 - 钩子与工具：`lefthook.yml` 使用 `cargo +esp fmt/clippy` 与 `bunx` 的 commitlint/markdownlint。
@@ -22,15 +22,17 @@
 - 推荐使用 `espup` 安装 ESP Rust 工具链：
   1) 安装 `espup` 后执行 `espup install`；
   2) 在 shell 中 `source ~/export-esp.sh` 以导出 `esp` 工具链与 Xtensa 目标；
-  3) 安装 `espflash`：`cargo install espflash`。
+  3) 安装 `espflash`：`cargo install espflash`（由 `isohub-devd` 后端调用）；
+  4) 安装 `just`：`cargo install just` 或使用系统包管理器。
 - 本仓库的 pre-commit 钩子使用 `cargo +esp`，要求本机存在名为 `esp` 的 Rust 工具链（`rustup toolchain list` 可查看）。
 - 若运行 markdown/commit 校验，需要本机安装 `bun`（`bunx` 用于运行 `commitlint` 与 `markdownlint-cli2`）。
 
 ## 构建与烧录
 
 - 构建：`cargo build` 或 `cargo build --release`。
-- 烧录与串口监视：`cargo run` 或 `cargo run --release`（由 `.cargo/config.toml` 的 runner 触发 `espflash flash --monitor`）。
-- 若串口/芯片未自动识别，请按 `espflash` 文档传入端口与芯片参数。
+- 推荐烧录与串口监视：`just flash-monitor`。首次使用先执行 `just ports`，再用 `PORT=/dev/cu.xxx just identify` 写入 `.esp32-port`。
+- `cargo run --release` 会通过 `tools/isohub-runner` 复用同一 Local USB 身份校验和烧录路径。
+- 旧烧录入口已完全退役：不得使用 Makefile、裸 `espflash flash --monitor` 或 `mcu-agentd` 作为本仓烧录路径。
 
 ## 代码与修改约定
 
@@ -66,12 +68,12 @@
 ## 测试与验证
 
 - 目前仓库未提供 Rust 单元/集成测试框架；如确需新增，需最小化引入并与现有结构保持一致。
-- 运行时验证以 `cargo run`（`espflash`）串口日志为主；请在 PR/变更说明中给出期望输出或观测结果。
+- 运行时验证以 `just flash-monitor` 或 `cargo run --release`（通过 `isohub` / `isohub-devd`）串口日志为主；请在 PR/变更说明中给出期望输出或观测结果。
 
 ## 常见问题
 
 - `cargo +esp` 无法运行：确认已通过 `espup install` 安装 `esp` 工具链并 `source ~/export-esp.sh`。
-- `espflash` 未找到设备：明确端口、供电与下载模式，必要时指定 `--port` 参数。
+- `isohub` 未找到设备：先运行 `just ports`，再用 `PORT=/dev/cu.xxx just identify` 明确端口；全新硬件或下载模式需经 `PORT=/dev/cu.xxx just flash-first-time` 的 typed confirmation。
 - Markdown/提交校验失败：确认本机安装 `bun`，并以 `bunx` 调用对应工具；根据报错修复格式或提交信息。
 
 ---

@@ -2,20 +2,24 @@
 
 ## Firmware toolchain
 
-Install the ESP Rust toolchain and flashing tools:
+Install the ESP Rust toolchain and backend tools:
 
 ```bash
 cargo install espup
 espup install
 source ~/export-esp.sh
 cargo install espflash
+cargo install just
 ```
+
+`espflash` is required because `isohub-devd` invokes it internally. Firmware flashing still goes through `just flash-monitor` or `PORT=/dev/cu.xxx just flash-first-time`, not through direct `espflash` commands.
 
 Verify the setup:
 
 ```bash
 rustup toolchain list
 just firmware-check
+just tools-build
 ```
 
 ## Web workspace
@@ -48,6 +52,23 @@ Notes:
 - To constrain companion discovery and Local USB operations to one serial device, set `USB_PORT=/dev/cu.usbmodem...` on the `just` command. The workspace forwards it as `ISOHUB_USB_PORT`.
 - `just wifi-set` and `just wifi-clear` only support `--device` or USB-backed `--hardware`; Wi-Fi/LAN `--url` selectors remain read-only.
 - `just diagnostics-export` emits a companion-side diagnostics bundle derived from the current Local USB `status`, `ports`, `wifi`, and recent serial session activity.
+
+## Firmware flashing
+
+Use the Local USB CLI/devd path for normal firmware work:
+
+```bash
+just ports
+PORT=/dev/cu.xxx just identify
+just firmware-bin
+just flash-monitor
+```
+
+First-time or download-mode flashing is explicit:
+
+```bash
+PORT=/dev/cu.xxx just flash-first-time
+```
 
 ## Local browser development
 

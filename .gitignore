@@ -42,3 +42,4 @@ docs/assets/*.ppm
 # Local MCU tooling state
 .esp32-port
 .mcu-agentd/
+.isohub-devd/

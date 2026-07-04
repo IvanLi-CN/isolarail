@@ -2440,8 +2440,7 @@ async fn main(spawner: Spawner) {
             input_over_power_alarm,
             channel_over_5a,
         );
-        if alarm != last_alarm {
-            buzzer::set_alarm(alarm);
+        if alarm != last_alarm && buzzer::set_alarm(alarm) {
             last_alarm = alarm;
         }
         let idle_front_key_context = FrontKeyContext {

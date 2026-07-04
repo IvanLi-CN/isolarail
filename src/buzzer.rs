@@ -72,9 +72,12 @@ pub fn play(tone: Tone) {
     }
 }
 
-pub fn set_alarm(alarm: Option<AlarmTone>) {
+pub fn set_alarm(alarm: Option<AlarmTone>) -> bool {
     if COMMANDS.try_send(Command::SetAlarm(alarm)).is_err() {
         warn!("buzzer.queue: drop alarm reason=full");
+        false
+    } else {
+        true
     }
 }
 

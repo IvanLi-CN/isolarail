@@ -145,18 +145,35 @@ async fn task(mut pin: Output<'static>) {
     pin.set_low();
     let rx = COMMANDS.receiver();
     let mut alarm: Option<AlarmTone> = None;
+    let mut pending_tone: Option<Tone> = None;
 
     loop {
+        if alarm.is_none() {
+            if let Some(tone) = pending_tone.take() {
+                info!("buzzer.play: tone={}", tone.label());
+                play_events(&mut pin, events_for_tone(tone)).await;
+                continue;
+            }
+        }
+
         if alarm.is_some() {
             while let Ok(command) = rx.try_receive() {
-                let _ = apply_command(command, &mut alarm);
+                if let Some(tone) = apply_command(command, &mut alarm) {
+                    pending_tone = Some(tone);
+                    break;
+                }
+            }
+            if alarm.is_none() && pending_tone.is_some() {
+                continue;
             }
             if let Some(active_alarm) = alarm {
                 info!("buzzer.alarm.play: tone={}", active_alarm.label());
                 play_events(&mut pin, events_for_alarm(active_alarm)).await;
                 match select(rx.receive(), Timer::after(alarm_gap(active_alarm))).await {
                     Either::First(command) => {
-                        let _ = apply_command(command, &mut alarm);
+                        if let Some(tone) = apply_command(command, &mut alarm) {
+                            pending_tone = Some(tone);
+                        }
                     }
                     Either::Second(()) => {}
                 }

@@ -189,7 +189,7 @@ None
 - [x] M2: 接入 boot、front panel、USB JSONL 与 network 端口动作音
 - [x] M3: 接入持续/间隔告警 reducer 与通道提示 hysteresis
 - [x] M4: 补齐纯逻辑单元测试与文档 current truth
-- [ ] M5: 完成本地构建、PR CI 与 review proof
+- [x] M5: 完成本地构建、PR CI 与 review proof
 
 ## 方案概述（Approach, high-level）
 

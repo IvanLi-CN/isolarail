@@ -1,0 +1,51 @@
+---
+title: ISO USB Hub Docs
+description: Choose Chinese or English documentation.
+pageType: custom
+---
+
+<section className="isohub-hero">
+  <div className="isohub-hero-copy">
+    <div className="isohub-kicker">ISO USB Hub documentation</div>
+    <h1>Choose your documentation language.</h1>
+    <div className="isohub-hero-lede">
+      The documentation site is available in Chinese and English. Both routes cover the product entry, quick start, hardware topology, firmware runtime, control plane, dashboard contract, and specs index.
+    </div>
+    <div className="isohub-actions">
+      <a className="isohub-button primary" href="zh/">进入中文文档</a>
+      <a className="isohub-button secondary" href="en/">Read English docs</a>
+    </div>
+  </div>
+  <div className="isohub-visual" aria-label="ISO USB Hub system boundary diagram">
+    <div className="isohub-map">
+      <div className="isohub-node isohub-node-core">
+        <span>Control</span>
+        <strong>ESP32-S3</strong>
+        <em>boot, self-check, front panel</em>
+      </div>
+      <div className="isohub-node isohub-node-hub">
+        <span>USB hub</span>
+        <strong>CH335F</strong>
+        <em>sideband power control</em>
+      </div>
+      <div className="isohub-map-bus">
+        <span>I2C buses and monitors</span>
+        <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
+      </div>
+      <div className="isohub-port-strip" aria-label="Four controlled USB power ports">
+        <span>port1</span>
+        <span>port2</span>
+        <span>port3</span>
+        <span>port4</span>
+      </div>
+      <div className="isohub-panel-link">
+        <span>160x50 display</span>
+        <strong>dashboard state surface</strong>
+      </div>
+      <div className="isohub-photo-reserve">
+        <strong>Real photo reserved</strong>
+        <span>This root entry keeps the custom-domain homepage usable while hardware photography waits for real device evidence.</span>
+      </div>
+    </div>
+  </div>
+</section>

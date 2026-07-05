@@ -1,0 +1,26 @@
+[
+  {
+    "text": "Home",
+    "link": "/en/"
+  },
+  {
+    "text": "Quick Start",
+    "link": "/en/start/quick-start"
+  },
+  {
+    "text": "Hardware",
+    "link": "/en/hardware/topology"
+  },
+  {
+    "text": "Firmware",
+    "link": "/en/firmware/boot-runtime"
+  },
+  {
+    "text": "Control Plane",
+    "link": "/en/control-plane/interfaces"
+  },
+  {
+    "text": "Specs",
+    "link": "/en/reference/specs"
+  }
+]

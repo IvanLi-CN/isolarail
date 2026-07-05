@@ -1,0 +1,13 @@
+{
+  "name": "isohub-docs-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rspress dev --host 127.0.0.1 --port ${DOCS_PORT:-50885}",
+    "build": "rspress build",
+    "preview": "rspress preview --host 127.0.0.1 --port ${DOCS_PORT:-50885}"
+  },
+  "devDependencies": {
+    "@rspress/core": "2.0.16"
+  }
+}

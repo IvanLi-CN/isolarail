@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iso USB Hub 蜂鸣器音效预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: oklch(97% 0.008 230);
+      --panel: oklch(100% 0 0);
+      --panel-2: oklch(94% 0.012 230);
+      --ink: oklch(21% 0.035 250);
+      --muted: oklch(43% 0.028 245);
+      --line: oklch(86% 0.018 235);
+      --accent: oklch(54% 0.145 222);
+      --accent-ink: oklch(99% 0.004 230);
+      --warn: oklch(59% 0.16 58);
+      --danger: oklch(55% 0.19 27);
+      --ok: oklch(53% 0.13 154);
+      --focus: oklch(67% 0.16 222);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    button,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      min-height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button:focus-visible,
+    select:focus-visible {
+      outline: 3px solid color-mix(in oklch, var(--focus), transparent 58%);
+      outline-offset: 2px;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    button.primary:hover {
+      background: oklch(48% 0.15 222);
+      color: var(--accent-ink);
+    }
+
+    button.looping {
+      background: color-mix(in oklch, var(--warn), white 84%);
+      border-color: var(--warn);
+      color: oklch(31% 0.09 55);
+    }
+
+    button.stop {
+      background: color-mix(in oklch, var(--danger), white 88%);
+      border-color: color-mix(in oklch, var(--danger), white 40%);
+      color: oklch(35% 0.13 27);
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      align-items: end;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.18;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .lede {
+      margin: 10px 0 0;
+      max-width: 76ch;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0 20px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.1rem;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .filters {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 0 0 16px;
+      padding: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    select {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      padding: 0 10px;
+    }
+
+    main {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tone-card {
+      display: grid;
+      grid-template-columns: minmax(210px, 0.85fr) minmax(0, 2fr);
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px;
+    }
+
+    .tone-card[data-kind="continuous"] {
+      border-color: color-mix(in oklch, var(--danger), white 45%);
+    }
+
+    .tone-card[data-kind="interval"] {
+      border-color: color-mix(in oklch, var(--warn), white 35%);
+    }
+
+    .tone-head {
+      min-width: 0;
+    }
+
+    .tone-head h2 {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .tone-head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 0.82rem;
+      background: var(--panel-2);
+      color: var(--muted);
+    }
+
+    .tag.danger {
+      background: color-mix(in oklch, var(--danger), white 88%);
+      color: oklch(35% 0.13 27);
+    }
+
+    .tag.warn {
+      background: color-mix(in oklch, var(--warn), white 86%);
+      color: oklch(33% 0.09 55);
+    }
+
+    .tag.ok {
+      background: color-mix(in oklch, var(--ok), white 88%);
+      color: oklch(30% 0.09 154);
+    }
+
+    .candidate-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .candidate {
+      display: grid;
+      grid-template-columns: minmax(160px, 0.55fr) minmax(180px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: oklch(99% 0.003 230);
+    }
+
+    .candidate-title {
+      min-width: 0;
+    }
+
+    .candidate-title strong {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .candidate-title span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .bar {
+      display: flex;
+      gap: 2px;
+      width: 100%;
+      height: 22px;
+      overflow: hidden;
+      border-radius: 6px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+    }
+
+    .segment {
+      min-width: 4px;
+      background: var(--accent);
+    }
+
+    .segment.rest {
+      background: color-mix(in oklch, var(--line), white 52%);
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.84rem;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      white-space: nowrap;
+    }
+
+    .rule-card {
+      border: 1px dashed color-mix(in oklch, var(--muted), white 35%);
+      border-radius: 8px;
+      background: color-mix(in oklch, var(--panel-2), white 45%);
+      padding: 14px;
+      color: var(--muted);
+    }
+
+    .rule-card strong {
+      color: var(--ink);
+    }
+
+    .status {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-top: 18px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .status span {
+      color: var(--muted);
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 860px) {
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        justify-content: flex-start;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .tone-card,
+      .candidate {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .shell {
+        width: min(100% - 20px, 1180px);
+        padding-top: 18px;
+      }
+
+      h1 {
+        font-size: 1.55rem;
+      }
+
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .filters,
+      .status {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Iso USB Hub 蜂鸣器音效预览</h1>
+        <p class="lede">用于先试听和挑选无源蜂鸣器提示音。所有候选都按方波 PWM 近似，使用毫秒级时序描述；这里只确认旋律、节奏和优先级，不触碰固件接线或告警状态机。</p>
+      </div>
+      <div class="toolbar">
+        <button class="primary" type="button" id="playRecommended">播放全部推荐</button>
+        <button class="stop" type="button" id="stopAll">停止</button>
+      </div>
+    </header>
+
+    <section class="summary" aria-label="音效总览">
+      <div class="metric"><strong id="toneCount">0</strong><span>有声音事件</span></div>
+      <div class="metric"><strong>2</strong><span>每项候选</span></div>
+      <div class="metric"><strong>GPIO7</strong><span>PWM 蜂鸣器</span></div>
+      <div class="metric"><strong>方波</strong><span>浏览器合成预览</span></div>
+    </section>
+
+    <section class="filters" aria-label="筛选">
+      <label for="groupFilter">显示分组</label>
+      <select id="groupFilter">
+        <option value="all">全部</option>
+      </select>
+    </section>
+
+    <main id="toneList"></main>
+
+    <section class="rule-card" aria-label="无声音规则">
+      <strong>无定义时不播放声音。</strong>
+      按键事件如果没有映射到实际操作，预览页不提供默认 beep；后续固件实现也应把这个规则作为静默分支处理。
+    </section>
+
+    <div class="status" role="status" aria-live="polite">
+      <span id="statusText">点击任意播放按钮后，浏览器会解锁音频输出。</span>
+      <button class="stop" type="button" id="statusStop">停止</button>
+    </div>
+  </div>
+
+  <script id="tone-data" type="application/json">
+{
+  "version": 1,
+  "audio": {
+    "waveform": "square",
+    "volume": 0.34,
+    "fadeMs": 3
+  },
+  "tones": [
+    {
+      "id": "boot",
+      "group": "系统",
+      "kind": "one-shot",
+      "title": "开机音",
+      "policy": "上电后自检进入可运行阶段时播放一次。",
+      "tags": ["system", "startup"],
+      "candidates": [
+        {
+          "id": "boot-rise",
+          "label": "推荐",
+          "intent": "短促上扬，表示设备已醒来。",
+          "events": [
+            { "freq_hz": 660, "ms": 70 },
+            { "rest_ms": 35 },
+            { "freq_hz": 880, "ms": 85 },
+            { "rest_ms": 35 },
+            { "freq_hz": 1320, "ms": 120 }
+          ]
+        },
+        {
+          "id": "boot-soft",
+          "label": "备选",
+          "intent": "更温和的双音开机反馈。",
+          "events": [
+            { "freq_hz": 587, "ms": 90 },
+            { "rest_ms": 45 },
+            { "freq_hz": 988, "ms": 150 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "operation-ok",
+      "group": "按键",
+      "kind": "one-shot",
+      "title": "操作提示音",
+      "policy": "按键触发且确实产生操作时播放。",
+      "tags": ["button", "accepted"],
+      "candidates": [
+        {
+          "id": "op-ok-tick",
+          "label": "推荐",
+          "intent": "轻快确认，不抢告警优先级。",
+          "events": [
+            { "freq_hz": 1047, "ms": 45 },
+            { "rest_ms": 25 },
+            { "freq_hz": 1319, "ms": 60 }
+          ]
+        },
+        {
+          "id": "op-ok-single",
+          "label": "备选",
+          "intent": "单个清脆短音。",
+          "events": [
+            { "freq_hz": 1175, "ms": 70 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "operation-denied",
+      "group": "按键",
+      "kind": "one-shot",
+      "title": "操作拒绝音",
+      "policy": "按键触发但操作被安全策略拒绝时播放。",
+      "tags": ["button", "denied"],
+      "candidates": [
+        {
+          "id": "op-denied-low",
+          "label": "推荐",
+          "intent": "下行双音，明确但不刺耳。",
+          "events": [
+            { "freq_hz": 440, "ms": 80 },
+            { "rest_ms": 35 },
+            { "freq_hz": 330, "ms": 110 }
+          ]
+        },
+        {
+          "id": "op-denied-buzz",
+          "label": "备选",
+          "intent": "短促双脉冲，偏强硬。",
+          "events": [
+            { "freq_hz": 260, "ms": 55 },
+            { "rest_ms": 35 },
+            { "freq_hz": 260, "ms": 55 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "channel-power-on",
+      "group": "通道电源",
+      "kind": "one-shot",
+      "title": "通道上电音",
+      "policy": "某通道输出从关闭变为打开时播放。",
+      "tags": ["channel", "power-on"],
+      "candidates": [
+        {
+          "id": "ch-on-rise",
+          "label": "推荐",
+          "intent": "短上扬，区别于开机音。",
+          "events": [
+            { "freq_hz": 784, "ms": 60 },
+            { "rest_ms": 30 },
+            { "freq_hz": 1175, "ms": 90 }
+          ]
+        },
+        {
+          "id": "ch-on-pop",
+          "label": "备选",
+          "intent": "单个高音，动作感更强。",
+          "events": [
+            { "freq_hz": 1480, "ms": 80 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "channel-power-off",
+      "group": "通道电源",
+      "kind": "one-shot",
+      "title": "通道断电音",
+      "policy": "某通道输出从打开变为关闭时播放。",
+      "tags": ["channel", "power-off"],
+      "candidates": [
+        {
+          "id": "ch-off-fall",
+          "label": "推荐",
+          "intent": "短下行，和上电音成对。",
+          "events": [
+            { "freq_hz": 1175, "ms": 55 },
+            { "rest_ms": 35 },
+            { "freq_hz": 784, "ms": 95 }
+          ]
+        },
+        {
+          "id": "ch-off-low",
+          "label": "备选",
+          "intent": "低频单音，表示断开。",
+          "events": [
+            { "freq_hz": 392, "ms": 95 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarm-over-temp",
+      "group": "持续告警",
+      "kind": "continuous",
+      "title": "过温告警",
+      "policy": "短间隔循环，直到过温解除。",
+      "loopGapMs": 280,
+      "tags": ["alarm", "temperature"],
+      "candidates": [
+        {
+          "id": "temp-alarm-triplet",
+          "label": "推荐",
+          "intent": "三连中高音，持续但不混同短路。",
+          "events": [
+            { "freq_hz": 1320, "ms": 70 },
+            { "rest_ms": 50 },
+            { "freq_hz": 1320, "ms": 70 },
+            { "rest_ms": 50 },
+            { "freq_hz": 988, "ms": 120 }
+          ]
+        },
+        {
+          "id": "temp-alarm-saw",
+          "label": "备选",
+          "intent": "高低摆动，提示热保护。",
+          "events": [
+            { "freq_hz": 1568, "ms": 80 },
+            { "rest_ms": 45 },
+            { "freq_hz": 1047, "ms": 80 },
+            { "rest_ms": 45 },
+            { "freq_hz": 1568, "ms": 80 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarm-input-over-power",
+      "group": "持续告警",
+      "kind": "continuous",
+      "title": "输入过功率告警",
+      "policy": "短间隔循环，直到输入功率恢复安全。",
+      "loopGapMs": 300,
+      "tags": ["alarm", "input-power"],
+      "candidates": [
+        {
+          "id": "input-power-steady",
+          "label": "推荐",
+          "intent": "两个等长强提示，表达总输入压力。",
+          "events": [
+            { "freq_hz": 740, "ms": 120 },
+            { "rest_ms": 70 },
+            { "freq_hz": 740, "ms": 120 }
+          ]
+        },
+        {
+          "id": "input-power-descend",
+          "label": "备选",
+          "intent": "短下行，偏严重。",
+          "events": [
+            { "freq_hz": 880, "ms": 80 },
+            { "rest_ms": 45 },
+            { "freq_hz": 660, "ms": 80 },
+            { "rest_ms": 45 },
+            { "freq_hz": 494, "ms": 110 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarm-channel-short",
+      "group": "持续告警",
+      "kind": "continuous",
+      "title": "通道短路告警",
+      "policy": "电压很低且电流很大时短间隔循环。",
+      "loopGapMs": 220,
+      "tags": ["alarm", "short-circuit"],
+      "candidates": [
+        {
+          "id": "short-urgent",
+          "label": "推荐",
+          "intent": "快速低频双脉冲，最高紧急度。",
+          "events": [
+            { "freq_hz": 220, "ms": 70 },
+            { "rest_ms": 45 },
+            { "freq_hz": 220, "ms": 70 },
+            { "rest_ms": 45 },
+            { "freq_hz": 330, "ms": 70 }
+          ]
+        },
+        {
+          "id": "short-hard",
+          "label": "备选",
+          "intent": "更硬的重复低音。",
+          "events": [
+            { "freq_hz": 196, "ms": 95 },
+            { "rest_ms": 40 },
+            { "freq_hz": 196, "ms": 95 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarm-channel-over-5a",
+      "group": "间隔告警",
+      "kind": "interval",
+      "title": "通道电流超过 5 A",
+      "policy": "长间隔循环，提醒但低于持续故障告警优先级。",
+      "loopGapMs": 1800,
+      "tags": ["alarm", "current-5a"],
+      "candidates": [
+        {
+          "id": "over5a-ping",
+          "label": "推荐",
+          "intent": "每轮两声，长间隔提醒。",
+          "events": [
+            { "freq_hz": 988, "ms": 80 },
+            { "rest_ms": 80 },
+            { "freq_hz": 988, "ms": 80 }
+          ]
+        },
+        {
+          "id": "over5a-mark",
+          "label": "备选",
+          "intent": "单次短促标记，最不打扰。",
+          "events": [
+            { "freq_hz": 1047, "ms": 100 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hint-current-3a",
+      "group": "通道提示",
+      "kind": "one-shot",
+      "title": "电流达到 3 A",
+      "policy": "通道电流首次跨过 3 A 阈值时播放一次。",
+      "tags": ["hint", "current-3a"],
+      "candidates": [
+        {
+          "id": "current3a-nudge",
+          "label": "推荐",
+          "intent": "轻提示，不像告警。",
+          "events": [
+            { "freq_hz": 880, "ms": 55 },
+            { "rest_ms": 40 },
+            { "freq_hz": 988, "ms": 55 }
+          ]
+        },
+        {
+          "id": "current3a-soft",
+          "label": "备选",
+          "intent": "单个中高音。",
+          "events": [
+            { "freq_hz": 932, "ms": 75 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hint-current-5a",
+      "group": "通道提示",
+      "kind": "one-shot",
+      "title": "电流达到 5 A",
+      "policy": "通道电流首次跨过 5 A 阈值时播放一次；之后若持续超过 5 A 进入间隔告警。",
+      "tags": ["hint", "current-5a"],
+      "candidates": [
+        {
+          "id": "current5a-firm",
+          "label": "推荐",
+          "intent": "比 3 A 更明确，但不等同故障。",
+          "events": [
+            { "freq_hz": 988, "ms": 60 },
+            { "rest_ms": 45 },
+            { "freq_hz": 784, "ms": 80 }
+          ]
+        },
+        {
+          "id": "current5a-high",
+          "label": "备选",
+          "intent": "更醒目的高音双击。",
+          "events": [
+            { "freq_hz": 1319, "ms": 50 },
+            { "rest_ms": 45 },
+            { "freq_hz": 1319, "ms": 70 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hint-insert",
+      "group": "通道提示",
+      "kind": "one-shot",
+      "title": "插入提示音",
+      "policy": "通道电压突破 3.3 V 时播放一次。",
+      "tags": ["hint", "insert"],
+      "candidates": [
+        {
+          "id": "insert-bright",
+          "label": "推荐",
+          "intent": "明亮单上扬。",
+          "events": [
+            { "freq_hz": 784, "ms": 45 },
+            { "rest_ms": 25 },
+            { "freq_hz": 1047, "ms": 70 }
+          ]
+        },
+        {
+          "id": "insert-click",
+          "label": "备选",
+          "intent": "极短接入提示。",
+          "events": [
+            { "freq_hz": 1200, "ms": 55 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hint-remove",
+      "group": "通道提示",
+      "kind": "one-shot",
+      "title": "拔出提示音",
+      "policy": "通道电压跌破 3 V 时播放一次。",
+      "tags": ["hint", "remove"],
+      "candidates": [
+        {
+          "id": "remove-fall",
+          "label": "推荐",
+          "intent": "短下行，和插入提示成对。",
+          "events": [
+            { "freq_hz": 1047, "ms": 45 },
+            { "rest_ms": 30 },
+            { "freq_hz": 698, "ms": 80 }
+          ]
+        },
+        {
+          "id": "remove-soft",
+          "label": "备选",
+          "intent": "低强度离线提示。",
+          "events": [
+            { "freq_hz": 622, "ms": 85 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <script>
+    const toneData = JSON.parse(document.getElementById("tone-data").textContent);
+    const toneList = document.getElementById("toneList");
+    const groupFilter = document.getElementById("groupFilter");
+    const statusText = document.getElementById("statusText");
+    const stopButtons = [document.getElementById("stopAll"), document.getElementById("statusStop")];
+    const recommendedButton = document.getElementById("playRecommended");
+    document.getElementById("toneCount").textContent = toneData.tones.length;
+
+    let audioContext;
+    let loopTimer = null;
+    let loopKey = null;
+    let sequenceTimers = [];
+    let activeNodes = [];
+
+    function ensureAudio() {
+      if (!audioContext) {
+        audioContext = new AudioContext();
+      }
+      if (audioContext.state === "suspended") {
+        return audioContext.resume();
+      }
+      return Promise.resolve();
+    }
+
+    function sequenceDurationMs(events) {
+      return events.reduce((total, event) => total + (event.ms || event.rest_ms || 0), 0);
+    }
+
+    function stopAll() {
+      if (loopTimer) {
+        clearTimeout(loopTimer);
+        loopTimer = null;
+      }
+      for (const timer of sequenceTimers) {
+        clearTimeout(timer);
+      }
+      sequenceTimers = [];
+      loopKey = null;
+      for (const node of activeNodes) {
+        try {
+          node.stop(0);
+        } catch (_) {
+          // Already stopped.
+        }
+      }
+      activeNodes = [];
+      document.querySelectorAll("button.looping").forEach((button) => {
+        button.classList.remove("looping");
+        button.textContent = "循环";
+      });
+      statusText.textContent = "已停止。";
+    }
+
+    function playEvents(events, label) {
+      const ctx = audioContext;
+      let cursor = ctx.currentTime + 0.015;
+      const volume = toneData.audio.volume;
+      const fade = toneData.audio.fadeMs / 1000;
+
+      for (const event of events) {
+        if (event.rest_ms) {
+          cursor += event.rest_ms / 1000;
+          continue;
+        }
+
+        const duration = event.ms / 1000;
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = toneData.audio.waveform;
+        oscillator.frequency.setValueAtTime(event.freq_hz, cursor);
+
+        const attackEnd = cursor + Math.min(fade, duration / 3);
+        const releaseStart = cursor + Math.max(0, duration - Math.min(fade, duration / 3));
+        gain.gain.setValueAtTime(0.0001, cursor);
+        gain.gain.linearRampToValueAtTime(volume, attackEnd);
+        gain.gain.setValueAtTime(volume, releaseStart);
+        gain.gain.linearRampToValueAtTime(0.0001, cursor + duration);
+
+        oscillator.connect(gain).connect(ctx.destination);
+        oscillator.start(cursor);
+        oscillator.stop(cursor + duration + 0.01);
+        oscillator.addEventListener("ended", () => {
+          oscillator.disconnect();
+          gain.disconnect();
+        });
+        activeNodes.push(oscillator);
+        cursor += duration;
+      }
+
+      statusText.textContent = `正在播放：${label}`;
+    }
+
+    async function playCandidate(tone, candidate) {
+      stopAll();
+      await ensureAudio();
+      playEvents(candidate.events, `${tone.title} / ${candidate.label}`);
+    }
+
+    async function toggleLoop(tone, candidate, button) {
+      const key = `${tone.id}:${candidate.id}`;
+      if (loopKey === key) {
+        stopAll();
+        return;
+      }
+
+      stopAll();
+      await ensureAudio();
+      loopKey = key;
+      button.classList.add("looping");
+      button.textContent = "停止循环";
+
+      const run = () => {
+        if (loopKey !== key) return;
+        playEvents(candidate.events, `${tone.title} / ${candidate.label}（循环）`);
+        loopTimer = setTimeout(run, sequenceDurationMs(candidate.events) + (tone.loopGapMs || 600));
+      };
+      run();
+    }
+
+    function copyScore(tone, candidate) {
+      const score = {
+        tempo_bpm: 120,
+        audio: {
+          waveform: toneData.audio.waveform,
+          sample_rate_hz: 44100,
+          volume: toneData.audio.volume,
+          fade_ms: toneData.audio.fadeMs
+        },
+        midi: {
+          channel: 0,
+          program: 80,
+          velocity: 96
+        },
+        events: candidate.events
+      };
+      if (!navigator.clipboard?.writeText) {
+        statusText.textContent = "当前浏览器上下文不支持剪贴板写入，请使用页面源码中的 tone-data。";
+        return;
+      }
+      navigator.clipboard.writeText(JSON.stringify(score, null, 2)).then(
+        () => { statusText.textContent = `已复制 score.json：${tone.title} / ${candidate.label}`; },
+        () => { statusText.textContent = "浏览器阻止了剪贴板写入，请使用页面源码中的 tone-data。"; }
+      );
+    }
+
+    function timeline(events) {
+      const total = Math.max(sequenceDurationMs(events), 1);
+      const parts = events.map((event) => {
+        const ms = event.ms || event.rest_ms || 0;
+        const width = Math.max(4, (ms / total) * 100);
+        const className = event.rest_ms ? "segment rest" : "segment";
+        const title = event.rest_ms ? `rest ${event.rest_ms}ms` : `${event.freq_hz}Hz ${event.ms}ms`;
+        return `<span class="${className}" style="width:${width}%" title="${title}"></span>`;
+      }).join("");
+      return `<div class="bar" aria-hidden="true">${parts}</div>`;
+    }
+
+    function eventMeta(events, loopGapMs) {
+      const tones = events
+        .filter((event) => event.freq_hz)
+        .map((event) => `${event.freq_hz}Hz/${event.ms}ms`)
+        .join(", ");
+      const duration = sequenceDurationMs(events);
+      return loopGapMs
+        ? `${duration}ms + ${loopGapMs}ms gap · ${tones}`
+        : `${duration}ms · ${tones}`;
+    }
+
+    function tagClass(tag) {
+      if (tag === "alarm" || tag === "short-circuit") return "danger";
+      if (tag.includes("5a") || tag === "temperature" || tag === "input-power") return "warn";
+      if (tag === "accepted" || tag === "startup" || tag === "insert") return "ok";
+      return "";
+    }
+
+    function render() {
+      const group = groupFilter.value;
+      toneList.innerHTML = "";
+      for (const tone of toneData.tones) {
+        if (group !== "all" && tone.group !== group) continue;
+
+        const card = document.createElement("article");
+        card.className = "tone-card";
+        card.dataset.kind = tone.kind;
+        card.innerHTML = `
+          <div class="tone-head">
+            <h2>${tone.title}</h2>
+            <p>${tone.policy}</p>
+            <div class="tags">
+              <span class="tag">${tone.group}</span>
+              ${tone.tags.map((tag) => `<span class="tag ${tagClass(tag)}">${tag}</span>`).join("")}
+            </div>
+          </div>
+          <div class="candidate-list"></div>
+        `;
+        const list = card.querySelector(".candidate-list");
+        tone.candidates.forEach((candidate) => {
+          const row = document.createElement("section");
+          row.className = "candidate";
+          row.innerHTML = `
+            <div class="candidate-title">
+              <strong>${candidate.label}</strong>
+              <span>${candidate.intent}</span>
+            </div>
+            <div class="timeline">
+              ${timeline(candidate.events)}
+              <div class="meta">${eventMeta(candidate.events, tone.kind === "one-shot" ? 0 : tone.loopGapMs)}</div>
+            </div>
+            <div class="actions">
+              <button type="button" class="play">播放</button>
+              ${tone.kind === "one-shot" ? "" : `<button type="button" class="loop">循环</button>`}
+              <button type="button" class="copy">复制 JSON</button>
+            </div>
+          `;
+          row.querySelector(".play").addEventListener("click", () => playCandidate(tone, candidate));
+          const loop = row.querySelector(".loop");
+          if (loop) loop.addEventListener("click", () => toggleLoop(tone, candidate, loop));
+          row.querySelector(".copy").addEventListener("click", () => copyScore(tone, candidate));
+          list.appendChild(row);
+        });
+        toneList.appendChild(card);
+      }
+    }
+
+    const groups = [...new Set(toneData.tones.map((tone) => tone.group))];
+    for (const group of groups) {
+      const option = document.createElement("option");
+      option.value = group;
+      option.textContent = group;
+      groupFilter.appendChild(option);
+    }
+    groupFilter.addEventListener("change", render);
+    stopButtons.forEach((button) => button.addEventListener("click", stopAll));
+    recommendedButton.addEventListener("click", async () => {
+      stopAll();
+      await ensureAudio();
+      let delay = 0;
+      for (const tone of toneData.tones) {
+        const candidate = tone.candidates[0];
+        const timer = setTimeout(() => {
+          playEvents(candidate.events, `${tone.title} / 推荐`);
+        }, delay);
+        sequenceTimers.push(timer);
+        delay += sequenceDurationMs(candidate.events) + 420;
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

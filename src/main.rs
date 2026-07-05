@@ -21,6 +21,7 @@ use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
 use esp_hal::efuse::Efuse;
 use esp_hal::gpio::{DriveMode, Flex, Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
+use esp_hal::ledc::{LSGlobalClkSource, Ledc};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
 use esp_hal::system;
@@ -28,7 +29,9 @@ use esp_hal::timer::timg::TimerGroup;
 use esp_hal::usb_serial_jtag::UsbSerialJtag;
 use esp_println as _;
 // Shared I2C bus infrastructure
+mod audio_logic;
 mod boot_diag;
+mod buzzer;
 mod device_contract;
 mod device_identity;
 mod http_api_v1;
@@ -66,6 +69,9 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 // esp-hal Output has inherent set_low/set_high; no trait import needed
+use crate::audio_logic::{
+    center_button_tone, choose_alarm, next_input_over_power, AlarmTone, PortAudioTracker, Tone,
+};
 use crate::device_contract::{
     HubSnapshot as UsbHubSnapshot, PortSnapshot as UsbPortSnapshot,
     PortTelemetryStatus as UsbPortTelemetryStatus, RuntimeSnapshot as UsbRuntimeSnapshot,
@@ -153,6 +159,8 @@ const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 
 #[allow(dead_code)]
 const PIN_USB_V1OK: u8 = 21; // ISOUSB211 side-1 power OK (high = upstream side powered)
+#[allow(dead_code)]
+const PIN_BUZZER: u8 = 7; // passive buzzer via LEDC PWM output, idle low
 
 // Output-module enable lines (V3): EN high = module enabled
 #[allow(dead_code)]
@@ -485,11 +493,11 @@ enum PortOcpDecision {
 }
 
 fn port_overcurrent(vbus_mv: u32, current_ma: u32) -> PortOcpDecision {
-    if current_ma > PORT_OCP_HIGH_CURRENT_MA {
-        return PortOcpDecision::HighCurrent;
-    }
     if vbus_mv < PORT_OCP_LOW_VBUS_MV && current_ma > PORT_OCP_LOW_VBUS_MIN_CURRENT_MA {
         return PortOcpDecision::LowVbus;
+    }
+    if current_ma > PORT_OCP_HIGH_CURRENT_MA {
+        return PortOcpDecision::HighCurrent;
     }
     PortOcpDecision::None
 }
@@ -541,39 +549,105 @@ fn set_port_enable(ch: u8, enabled: bool, port_enables: &mut [Output<'static>; 4
     }
 }
 
-fn handle_front_key_event(
+fn front_toggle_reject_reason(
+    target: PowerSwitchTarget,
+    port_ready: bool,
+    hub_output_allowed: bool,
+    ocp_latched: bool,
+) -> &'static str {
+    if target == PowerSwitchTarget::Open {
+        "global_off"
+    } else if ocp_latched {
+        "ocp_latched"
+    } else if !port_ready {
+        "port_not_ready"
+    } else if !hub_output_allowed {
+        "sideband_gate"
+    } else {
+        "unknown"
+    }
+}
+
+#[derive(Copy, Clone)]
+struct FrontKeyContext {
+    target: PowerSwitchTarget,
+    port_ready: [bool; 4],
+    hub_output_allowed: [bool; 4],
+    ocp_latched: [bool; 4],
+}
+
+struct FrontKeyState<'a> {
+    selected_port: &'a mut usize,
+    manual_enabled: &'a mut [bool; 4],
+    port_enables: &'a mut [Output<'static>; 4],
+    ocp_latched: &'a mut [bool; 4],
+    ocp_safe_samples: &'a mut [u8; 4],
+    ocp_retry_wait: &'a mut [u8; 4],
+    ocp_reason: &'a mut [PortOcpDecision; 4],
+    port_audio: &'a mut [PortAudioTracker; 4],
+}
+
+fn handle_front_key_event_with_context(
     event: front_panel::KeyEvent,
-    selected_port: &mut usize,
-    manual_enabled: &mut [bool; 4],
-    port_enables: &mut [Output<'static>; 4],
-) {
+    state: &mut FrontKeyState<'_>,
+    context: FrontKeyContext,
+) -> Option<Tone> {
     match event {
         front_panel::KeyEvent::Left => {
-            *selected_port = if *selected_port == 0 {
+            *state.selected_port = if *state.selected_port == 0 {
                 3
             } else {
-                *selected_port - 1
+                *state.selected_port - 1
             };
-            info!("front.ui: selected_port={}", *selected_port + 1);
+            info!("front.ui: selected_port={}", *state.selected_port + 1);
+            Some(Tone::OperationOk)
         }
         front_panel::KeyEvent::Right => {
-            *selected_port = (*selected_port + 1) % 4;
-            info!("front.ui: selected_port={}", *selected_port + 1);
+            *state.selected_port = (*state.selected_port + 1) % 4;
+            info!("front.ui: selected_port={}", *state.selected_port + 1);
+            Some(Tone::OperationOk)
         }
         front_panel::KeyEvent::Center => {
-            manual_enabled[*selected_port] = !manual_enabled[*selected_port];
-            if !manual_enabled[*selected_port] {
-                port_enables[*selected_port].set_low();
+            let idx = *state.selected_port;
+            let next_enabled = !state.manual_enabled[idx];
+            let can_toggle = !next_enabled
+                || (context.target == PowerSwitchTarget::Closed
+                    && context.port_ready[idx]
+                    && context.hub_output_allowed[idx]
+                    && !context.ocp_latched[idx]);
+            let tone = center_button_tone(can_toggle, next_enabled);
+            if !can_toggle {
+                warn!(
+                    "front.ui: ch={} manual_output=rejected reason={}",
+                    idx + 1,
+                    front_toggle_reject_reason(
+                        context.target,
+                        context.port_ready[idx],
+                        context.hub_output_allowed[idx],
+                        context.ocp_latched[idx]
+                    )
+                );
+                return Some(tone);
+            }
+
+            state.manual_enabled[idx] = next_enabled;
+            if !state.manual_enabled[idx] {
+                state.port_enables[idx].set_low();
+                state.ocp_latched[idx] = false;
+                state.ocp_safe_samples[idx] = 0;
+                state.ocp_retry_wait[idx] = 0;
+                clear_channel_audio_state(idx, state.ocp_reason, state.port_audio);
             }
             info!(
                 "front.ui: ch={} manual_output={}",
-                *selected_port + 1,
-                if manual_enabled[*selected_port] {
+                idx + 1,
+                if state.manual_enabled[idx] {
                     "enabled"
                 } else {
                     "disabled"
                 }
             );
+            Some(tone)
         }
     }
 }
@@ -946,6 +1020,70 @@ fn apply_network_port_action(
         USB_REPLUG_HOLDOFF_TICKS,
         |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
     );
+}
+
+fn play_port_power_tone(enabled: bool) {
+    buzzer::play(if enabled {
+        Tone::ChannelPowerOn
+    } else {
+        Tone::ChannelPowerOff
+    });
+}
+
+fn reset_channel_audio_tracker(index: usize, port_audio: &mut [PortAudioTracker; 4]) {
+    if index < port_audio.len() {
+        let _ = port_audio[index].update(0, 0, true);
+    }
+}
+
+fn clear_channel_audio_state(
+    index: usize,
+    ocp_reason: &mut [PortOcpDecision; 4],
+    port_audio: &mut [PortAudioTracker; 4],
+) {
+    if index < ocp_reason.len() {
+        ocp_reason[index] = PortOcpDecision::None;
+        reset_channel_audio_tracker(index, port_audio);
+    }
+}
+
+fn handle_usb_action_audio(
+    action: &Option<UsbAction>,
+    ocp_reason: &mut [PortOcpDecision; 4],
+    port_audio: &mut [PortAudioTracker; 4],
+) {
+    match action {
+        Some(UsbAction::PortPowerSet { index, enabled }) => {
+            if !*enabled {
+                clear_channel_audio_state(*index, ocp_reason, port_audio);
+            }
+            play_port_power_tone(*enabled);
+        }
+        Some(UsbAction::PortReplug { index }) => {
+            reset_channel_audio_tracker(*index, port_audio);
+            play_port_power_tone(false);
+        }
+        _ => {}
+    }
+}
+
+fn handle_network_action_audio(
+    action: ApiPendingAction,
+    ocp_reason: &mut [PortOcpDecision; 4],
+    port_audio: &mut [PortAudioTracker; 4],
+) {
+    match action {
+        ApiPendingAction::PortPower { index, enabled } => {
+            if !enabled {
+                clear_channel_audio_state(index, ocp_reason, port_audio);
+            }
+            play_port_power_tone(enabled);
+        }
+        ApiPendingAction::PortReplug { index } => {
+            reset_channel_audio_tracker(index, port_audio);
+            play_port_power_tone(false);
+        }
+    }
 }
 
 fn hub_power_mode_label(sideband_online: bool, upstream_powered: bool) -> &'static str {
@@ -1447,6 +1585,11 @@ async fn main(spawner: Spawner) {
         port_enable.set_low();
     }
 
+    let mut ledc = Ledc::new(p.LEDC);
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    buzzer::spawn(&spawner, p.GPIO7).expect("spawn buzzer task");
+
     info!("init.hw: chip=ESP32-S3 sensor_i2c=sdaGPIO8/sclGPIO9 hub_i2c=sdaGPIO14/sclGPIO13 rom_wc=GPIO37-low rom_route=GPIO38-high");
 
     // Publish power-on intent first (only intent; actual switch controlled after qualification)
@@ -1755,7 +1898,7 @@ async fn main(spawner: Spawner) {
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
     let fan_ready = if power_boot.ready {
-        if fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
+        if fan::spawn(&spawner, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
             with_timeout(Duration::from_millis(1500), fan::bootstrap_signal().wait())
                 .await
                 .is_ok_and(|ready| ready)
@@ -1984,6 +2127,7 @@ async fn main(spawner: Spawner) {
 
     boot_snapshot.set_stage(BootStage::Runtime);
     info!("boot.stage: stage=runtime");
+    buzzer::play(Tone::Boot);
 
     // 当前 V3 输出模块不再沿用旧的 SW2303 runtime 遥测任务；
     // dashboard 直接按通道读取模块 INA226，避免旧驱动误报。
@@ -1993,9 +2137,13 @@ async fn main(spawner: Spawner) {
     let mut selected_port: usize = 0;
     let mut manual_enabled = [true; 4];
     let mut ocp_latched = [false; 4];
+    let mut ocp_reason = [PortOcpDecision::None; 4];
     let mut ocp_safe_samples = [0u8; 4];
     let mut ocp_retry_wait = [0u8; 4];
     let mut replug_countdown = [0u8; 4];
+    let mut port_audio = [PortAudioTracker::default(); 4];
+    let mut input_over_power_alarm = false;
+    let mut last_alarm: Option<AlarmTone> = None;
     let stored_wifi_credentials = {
         let mut i2c = I2cDevice::new(hub_bus);
         match load_wifi_credentials(&mut i2c).await {
@@ -2042,14 +2190,6 @@ async fn main(spawner: Spawner) {
     let mut port_output_active = boot_snapshot.gates.allow_port;
     let mut next_runtime_sample = Instant::now();
     loop {
-        while let Ok(event) = front_events.try_receive() {
-            handle_front_key_event(
-                event,
-                &mut selected_port,
-                &mut manual_enabled,
-                &mut port_enables,
-            );
-        }
         if let Some(network) = network.as_ref() {
             usb_wifi = network.state.lock().await.wifi;
         }
@@ -2131,6 +2271,41 @@ async fn main(spawner: Spawner) {
             .map(|snapshot| snapshot.pwren_enabled)
             .unwrap_or([false; 4]);
         let upstream_powered = usb_v1ok.is_high();
+        let port_ready = [
+            CH_RDY[0].load(Ordering::Relaxed),
+            CH_RDY[1].load(Ordering::Relaxed),
+            CH_RDY[2].load(Ordering::Relaxed),
+            CH_RDY[3].load(Ordering::Relaxed),
+        ];
+        let hub_output_allowed = [
+            hub_allows_output(sideband_online, upstream_powered, pwren_enabled, 0),
+            hub_allows_output(sideband_online, upstream_powered, pwren_enabled, 1),
+            hub_allows_output(sideband_online, upstream_powered, pwren_enabled, 2),
+            hub_allows_output(sideband_online, upstream_powered, pwren_enabled, 3),
+        ];
+        let front_key_context = FrontKeyContext {
+            target,
+            port_ready,
+            hub_output_allowed,
+            ocp_latched,
+        };
+        while let Ok(event) = front_events.try_receive() {
+            let mut front_key_state = FrontKeyState {
+                selected_port: &mut selected_port,
+                manual_enabled: &mut manual_enabled,
+                port_enables: &mut port_enables,
+                ocp_latched: &mut ocp_latched,
+                ocp_safe_samples: &mut ocp_safe_samples,
+                ocp_retry_wait: &mut ocp_retry_wait,
+                ocp_reason: &mut ocp_reason,
+                port_audio: &mut port_audio,
+            };
+            if let Some(tone) =
+                handle_front_key_event_with_context(event, &mut front_key_state, front_key_context)
+            {
+                buzzer::play(tone);
+            }
+        }
         tick_replug_countdowns(&mut manual_enabled, &mut replug_countdown);
         let hub_mode = hub_power_mode_label(sideband_online, upstream_powered);
         let mut desired_en = [false; 4];
@@ -2165,21 +2340,24 @@ async fn main(spawner: Spawner) {
                 continue;
             }
             let mut keep_recovery_probe_enabled = false;
-            if CH_RDY[idx].load(Ordering::Relaxed) {
+            if port_ready[idx] {
                 view[idx].connected = true;
                 match sample_module_ina226(ch, bus, hub_bus).await {
                     Some((v_mv, i_ma)) => {
                         view[idx].vbus_mv = v_mv;
                         view[idx].ich_ma = i_ma;
                         let ocp_decision = port_overcurrent(v_mv, i_ma);
+                        let mut suppress_normal_tone = false;
                         if ocp_decision != PortOcpDecision::None {
                             let was_latched = ocp_latched[idx];
                             ocp_latched[idx] = true;
+                            ocp_reason[idx] = ocp_decision;
                             ocp_safe_samples[idx] = 0;
                             ocp_retry_wait[idx] = 0;
                             set_port_enable(ch, false, &mut port_enables);
                             port_output_active[idx] = false;
                             view[idx].en_enabled = false;
+                            suppress_normal_tone = true;
                             if !was_latched {
                                 warn!(
                                     "hub.sideband: ocp latch port{} reason={} vbus={}mV i={}mA",
@@ -2205,12 +2383,21 @@ async fn main(spawner: Spawner) {
                             }
                         } else if ocp_latched[idx] {
                             ocp_safe_samples[idx] = 0;
+                        } else {
+                            ocp_reason[idx] = PortOcpDecision::None;
                         }
                         view[idx].ui_state = if ocp_latched[idx] {
                             UiPortState::Overcurrent
                         } else {
                             UiPortState::Normal
                         };
+                        if !ocp_latched[idx] {
+                            ocp_reason[idx] = PortOcpDecision::None;
+                        }
+                        if let Some(tone) = port_audio[idx].update(v_mv, i_ma, suppress_normal_tone)
+                        {
+                            buzzer::play(tone);
+                        }
                     }
                     None => {
                         view[idx].connected = false;
@@ -2258,6 +2445,34 @@ async fn main(spawner: Spawner) {
             }
             port_output_active[ch as usize] = desired_en[ch as usize];
         }
+        let input_status = power_in::latest_status().await;
+        input_over_power_alarm =
+            next_input_over_power(input_over_power_alarm, input_status.vin_v, input_status.i_a);
+        let channel_short = ocp_reason.contains(&PortOcpDecision::LowVbus);
+        let channel_over_5a = ocp_reason.contains(&PortOcpDecision::HighCurrent)
+            || view.iter().any(|sample| {
+                sample.en_enabled
+                    && matches!(
+                        sample.ui_state,
+                        UiPortState::Normal | UiPortState::Overcurrent
+                    )
+                    && sample.ich_ma >= 5000
+            });
+        let alarm = choose_alarm(
+            channel_short,
+            fan::over_temp_alarm_active(),
+            input_over_power_alarm,
+            channel_over_5a,
+        );
+        if alarm != last_alarm && buzzer::set_alarm(alarm) {
+            last_alarm = alarm;
+        }
+        let idle_front_key_context = FrontKeyContext {
+            target,
+            port_ready,
+            hub_output_allowed,
+            ocp_latched,
+        };
         info!(
             "port.telemetry: hub_mode={} v1ok={} p1={} {}mV {}mA pwren={} ocp={} en={} p2={} {}mV {}mA pwren={} ocp={} en={} p3={} {}mV {}mA pwren={} ocp={} en={} p4={} {}mV {}mA pwren={} ocp={} en={}",
             hub_mode,
@@ -2315,6 +2530,7 @@ async fn main(spawner: Spawner) {
             env!("CARGO_PKG_VERSION"),
             &mut usb_service,
         );
+        handle_usb_action_audio(&usb_action, &mut ocp_reason, &mut port_audio);
         while let Ok(action) = network_actions.try_receive() {
             apply_network_port_action(
                 action,
@@ -2325,6 +2541,7 @@ async fn main(spawner: Spawner) {
                 &mut ocp_retry_wait,
                 &mut replug_countdown,
             );
+            handle_network_action_audio(action, &mut ocp_reason, &mut port_audio);
         }
         match usb_action {
             Some(UsbAction::WifiSet { ssid, psk, .. }) => {
@@ -2380,12 +2597,23 @@ async fn main(spawner: Spawner) {
             )
             .await
             {
-                handle_front_key_event(
+                let mut front_key_state = FrontKeyState {
+                    selected_port: &mut selected_port,
+                    manual_enabled: &mut manual_enabled,
+                    port_enables: &mut port_enables,
+                    ocp_latched: &mut ocp_latched,
+                    ocp_safe_samples: &mut ocp_safe_samples,
+                    ocp_retry_wait: &mut ocp_retry_wait,
+                    ocp_reason: &mut ocp_reason,
+                    port_audio: &mut port_audio,
+                };
+                if let Some(tone) = handle_front_key_event_with_context(
                     event,
-                    &mut selected_port,
-                    &mut manual_enabled,
-                    &mut port_enables,
-                );
+                    &mut front_key_state,
+                    idle_front_key_context,
+                ) {
+                    buzzer::play(tone);
+                }
                 apply_dashboard_control_state(&mut view, selected_port, manual_enabled, target);
                 draw_dashboard_frame(&mut disp, &view);
                 let _ = disp.flush().await;
@@ -2412,6 +2640,7 @@ async fn main(spawner: Spawner) {
                 env!("CARGO_PKG_VERSION"),
                 &mut usb_service,
             );
+            handle_usb_action_audio(&usb_action, &mut ocp_reason, &mut port_audio);
             if !matches!(usb_action, Some(UsbAction::None) | None) {
                 break;
             }
@@ -2427,6 +2656,7 @@ async fn main(spawner: Spawner) {
                     &mut ocp_retry_wait,
                     &mut replug_countdown,
                 );
+                handle_network_action_audio(action, &mut ocp_reason, &mut port_audio);
                 applied_network_action = true;
             }
             if applied_network_action {

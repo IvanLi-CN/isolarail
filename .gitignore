@@ -30,6 +30,7 @@ Thumbs.db
 
 # Preview and tooling artifacts
 docs/assets/*.ppm
+/tools/buzzer_audio_preview/out/
 
 # Exception for required binary files
 !startup_bitmap.bin

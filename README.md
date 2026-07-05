@@ -193,5 +193,6 @@ Additional quality gates that remain part of the expected developer workflow, bu
 - [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
 - [docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md](docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md)
 - [docs/software_design.md](docs/software_design.md)
+- [tools/buzzer_audio_preview/README.md](tools/buzzer_audio_preview/README.md)
 - [web/README.md](web/README.md)
 - [docs/specs/README.md](docs/specs/README.md)

@@ -49,6 +49,24 @@ just isohub --help
 just devd-help
 ```
 
+### Hardware diagnostic snapshot
+
+Firmware emits a read-only hardware snapshot log frame:
+
+```text
+diag.snapshot: {"schema":"iso-usb-hub.hardware.snapshot.v1", ...}
+```
+
+The snapshot covers input power, I²C topology, CH335F sideband, front panel, fan, boot self-check state, and four output modules. Optional front-panel and output-module devices report `online` / `offline` / `skipped` / `error` locally; absence of one node must not fail the whole snapshot.
+
+The Web app exposes the advanced hardware debug route under each device:
+
+```text
+/devices/:deviceId/debug/hardware
+```
+
+This debug surface is read-only. It does not write registers, reset devices, flash firmware, or control port power.
+
 Common device commands:
 
 ```bash

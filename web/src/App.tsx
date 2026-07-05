@@ -17,6 +17,7 @@ import { AboutPage } from "./pages/AboutPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DeviceDashboardPage } from "./pages/DeviceDashboardPage";
 import { DeviceInfoPage } from "./pages/DeviceInfoPage";
+import { HardwareDebugPage } from "./pages/HardwareDebugPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { AppLayout } from "./ui/layout/AppLayout";
 import { DeviceListPanel } from "./ui/panels/DeviceListPanel";
@@ -106,6 +107,10 @@ export default function App() {
                     <Route
                       path="devices/:deviceId/settings"
                       element={<DeviceInfoPage mode="hardware" />}
+                    />
+                    <Route
+                      path="devices/:deviceId/debug/hardware"
+                      element={<HardwareDebugPage />}
                     />
                     <Route
                       path="devices/:deviceId/hardware"

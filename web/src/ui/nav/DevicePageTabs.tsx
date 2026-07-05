@@ -48,6 +48,21 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
               : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
           ].join(" ")
         }
+        to={`/devices/${deviceId}/debug/hardware`}
+        role="tab"
+      >
+        Debug
+      </NavLink>
+      <NavLink
+        className={({ isActive }) =>
+          [
+            "flex h-[38px] w-[132px] items-center justify-center rounded-[14px] border border-[var(--border)]",
+            "text-[14px] font-medium",
+            isActive
+              ? "bg-[var(--panel)] text-[var(--text)]"
+              : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
+          ].join(" ")
+        }
         to={`/devices/${deviceId}/info`}
         role="tab"
       >

@@ -91,4 +91,5 @@
 | e5nyr | 发布失败 Telegram 告警接入 | 已完成 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-04-12 | PR #12 |
 | q9d7h | CLI/devd 烧录迁移 | 部分完成（3/4） | `q9d7h-cli-devd-flash-migration/SPEC.md` | 2026-07-04 | source workflow 已完成，旧烧录入口已退役；真机 flash-monitor 验证待硬件确认 |
 | r6wfr | 文档 Web 站点 | 待实现 | `r6wfr-docs-site/SPEC.md` | 2026-07-05 | Rspress/Bun 双语 docs-site，GitHub Pages 发布与视觉证据 |
+| n8x4q | 硬件底层详细信息快照接口 | 部分完成（4/5） | `n8x4q-hardware-diag-snapshot/SPEC.md` | 2026-07-05 | 真机串口端到端验证待硬件接入 |
 <!-- markdownlint-enable MD060 -->

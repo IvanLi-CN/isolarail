@@ -1,0 +1,131 @@
+{
+  "schema": "iso-usb-hub.hardware.snapshot.v1",
+  "sequence": 17,
+  "uptime_ms": 84231,
+  "firmware": {
+    "name": "iso-usb-hub",
+    "version": "0.1.0",
+    "target": "esp32s3"
+  },
+  "reset_reason": "chip_power_on",
+  "boot": {
+    "stage": "runtime",
+    "outcome": "DEG",
+    "first_fault": "PANEL",
+    "gates": {
+      "runtime": true,
+      "front_panel": false,
+      "keep_input_switch_open": false,
+      "show_sticky_self_check": true
+    },
+    "checks": {
+      "vin": { "state": "OK", "fault": "-" },
+      "mux": { "state": "SKIP", "fault": "-" },
+      "front_panel": { "state": "WARN", "fault": "PANEL" },
+      "fan": { "state": "OK", "fault": "-" }
+    }
+  },
+  "power_input": {
+    "present": true,
+    "state": "OK",
+    "fault": "-",
+    "ina226": { "address": "0x44" },
+    "vin_mv": 12030,
+    "pg_good": true,
+    "ready": true,
+    "target": "closed"
+  },
+  "i2c": {
+    "topology": "direct_shared_bus",
+    "mux": { "present": false, "state": "skipped", "address": "0x70" },
+    "recovery": { "clocks": 18, "reset_released_high": true }
+  },
+  "sideband": {
+    "present": true,
+    "state": "online",
+    "device": "TCA6408A",
+    "address": "0x20",
+    "registers": {
+      "input": "0xAA",
+      "output": "0xFF",
+      "polarity": "0x00",
+      "config": "0xFF"
+    },
+    "pwren_enabled": [true, true, false, true],
+    "ovcur_asserted": [false, false, false, false]
+  },
+  "front_panel": {
+    "present": false,
+    "state": "offline",
+    "device": "TCA6408A",
+    "address": "0x21",
+    "reason": "no_ack_or_not_populated"
+  },
+  "fan": { "present": true, "state": "online", "ready": true },
+  "ports": [
+    {
+      "index": 1,
+      "present": true,
+      "state": "online",
+      "ready": true,
+      "ui_state": "ok",
+      "manual_enabled": true,
+      "pwren_enabled": true,
+      "en_enabled": true,
+      "ocp_latched": false,
+      "telemetry": { "vbus_mv": 5010, "current_ma": 420 },
+      "sensors": {
+        "ina226": { "address": "0x40", "present": true, "method": "wr_rd", "tries": 1 },
+        "tmp112": { "address": "0x48", "present": true, "method": "wr_rd", "tries": 1 }
+      }
+    },
+    {
+      "index": 2,
+      "present": false,
+      "state": "error",
+      "ready": false,
+      "ui_state": "disc",
+      "manual_enabled": true,
+      "pwren_enabled": true,
+      "en_enabled": false,
+      "ocp_latched": false,
+      "telemetry": { "vbus_mv": 0, "current_ma": 0 },
+      "sensors": {
+        "ina226": { "address": "0x41", "present": false, "method": "no", "tries": 6 },
+        "tmp112": { "address": "0x49", "present": true, "method": "addr", "tries": 2 }
+      }
+    },
+    {
+      "index": 3,
+      "present": false,
+      "state": "offline",
+      "ready": false,
+      "ui_state": "disc",
+      "manual_enabled": true,
+      "pwren_enabled": false,
+      "en_enabled": false,
+      "ocp_latched": false,
+      "telemetry": { "vbus_mv": 0, "current_ma": 0 },
+      "sensors": {
+        "ina226": { "address": "0x42", "present": false, "method": "no", "tries": 6 },
+        "tmp112": { "address": "0x4A", "present": false, "method": "no", "tries": 6 }
+      }
+    },
+    {
+      "index": 4,
+      "present": true,
+      "state": "online",
+      "ready": true,
+      "ui_state": "ok",
+      "manual_enabled": true,
+      "pwren_enabled": true,
+      "en_enabled": true,
+      "ocp_latched": false,
+      "telemetry": { "vbus_mv": 4998, "current_ma": 810 },
+      "sensors": {
+        "ina226": { "address": "0x43", "present": true, "method": "wr_rd", "tries": 1 },
+        "tmp112": { "address": "0x4B", "present": true, "method": "wr_rd", "tries": 1 }
+      }
+    }
+  ]
+}

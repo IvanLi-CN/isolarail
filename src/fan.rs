@@ -7,7 +7,7 @@ use embassy_time::{Duration, Timer};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, Pull};
 use esp_hal::ledc::channel::ChannelIFace;
 use esp_hal::ledc::timer::TimerIFace;
-use esp_hal::ledc::{channel, timer, LSGlobalClkSource, Ledc, LowSpeed};
+use esp_hal::ledc::{channel, timer, LowSpeed};
 use esp_hal::pcnt::{channel as pcnt_channel, unit, Pcnt};
 // 使用全限定路径访问寄存器，无需引入未使用的别名
 use esp_hal::time::Rate; // for APB_SARADC::regs()
@@ -81,19 +81,17 @@ fn fail_bootstrap() {
 
 pub fn spawn(
     spawner: &Spawner,
-    ledc: esp_hal::peripherals::LEDC<'static>,
     pcnt: esp_hal::peripherals::PCNT<'static>,
     sens: esp_hal::peripherals::SENS<'static>,
     pwm_pin: esp_hal::peripherals::GPIO1<'static>,
     en_pin: esp_hal::peripherals::GPIO2<'static>,
     tach_pin: esp_hal::peripherals::GPIO6<'static>,
 ) -> Result<(), SpawnError> {
-    spawner.spawn(task(ledc, pcnt, sens, pwm_pin, en_pin, tach_pin))
+    spawner.spawn(task(pcnt, sens, pwm_pin, en_pin, tach_pin))
 }
 
 #[task]
 async fn task(
-    ledc_dev: esp_hal::peripherals::LEDC<'static>,
     pcnt_dev: esp_hal::peripherals::PCNT<'static>,
     _sens_dev: esp_hal::peripherals::SENS<'static>,
     pwm_pin: esp_hal::peripherals::GPIO1<'static>,
@@ -104,9 +102,8 @@ async fn task(
     let mut fan_en = Output::new(en_pin, Level::Low, esp_hal::gpio::OutputConfig::default());
 
     // LEDC PWM setup: LowSpeed timer @ 25 kHz, 13-bit resolution
-    let mut ledc = Ledc::new(ledc_dev);
-    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
-    let mut lst = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    let mut lst =
+        timer::Timer::<LowSpeed>::new(esp_hal::peripherals::LEDC::regs(), timer::Number::Timer0);
     // 25 kHz @ 13-bit requires divisor < 1 (invalid). Use 10-bit for 25 kHz.
     if lst
         .configure(timer::config::Config {
@@ -136,7 +133,7 @@ async fn task(
     );
 
     // Create channel on GPIO1（DC 调速：需要推挽输出，给 buck FB 控制脚提供完整电平）
-    let mut ch0 = ledc.channel(channel::Number::Channel0, pwm_pin);
+    let mut ch0 = channel::Channel::<LowSpeed>::new(channel::Number::Channel0, pwm_pin);
     if ch0
         .configure(channel::config::Config {
             timer: &lst,

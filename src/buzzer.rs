@@ -4,8 +4,13 @@ use embassy_executor::{task, SpawnError, Spawner};
 use embassy_futures::select::{select, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Duration, Instant, Timer};
-use esp_hal::gpio::Output;
+use embassy_time::{Duration, Timer};
+use esp_hal::clock::Clocks;
+use esp_hal::ledc::channel::ChannelIFace;
+use esp_hal::ledc::timer::TimerIFace;
+use esp_hal::ledc::{channel, timer, LowSpeed};
+use esp_hal::peripherals::{GPIO7, LEDC};
+use esp_hal::time::Rate;
 
 #[derive(Copy, Clone)]
 struct Event {
@@ -20,6 +25,12 @@ enum Command {
 }
 
 static COMMANDS: Channel<CriticalSectionRawMutex, Command, 16> = Channel::new();
+const BUZZER_TIMER: timer::Number = timer::Number::Timer1;
+const BUZZER_CHANNEL: channel::Number = channel::Number::Channel1;
+const BUZZER_DUTY: timer::config::Duty = timer::config::Duty::Duty10Bit;
+const BUZZER_DUTY_BITS: u8 = 10;
+const BUZZER_ON_DUTY_PCT: u8 = 50;
+const LEDC_TIMER_DIV_NUM_MAX: u64 = 0x3FFFF;
 
 const fn tone(freq_hz: u16, ms: u16) -> Event {
     Event { freq_hz, ms }
@@ -62,7 +73,7 @@ const ALARM_CHANNEL_SHORT: &[Event] = &[
 ];
 const ALARM_CHANNEL_OVER_5A: &[Event] = &[tone(988, 80), rest(80), tone(988, 80)];
 
-pub fn spawn(spawner: &Spawner, pin: Output<'static>) -> Result<(), SpawnError> {
+pub fn spawn(spawner: &Spawner, pin: GPIO7<'static>) -> Result<(), SpawnError> {
     spawner.spawn(task(pin))
 }
 
@@ -141,8 +152,34 @@ fn apply_command(command: Command, alarm: &mut Option<AlarmTone>) -> Option<Tone
 }
 
 #[task]
-async fn task(mut pin: Output<'static>) {
-    pin.set_low();
+async fn task(pin: GPIO7<'static>) {
+    let mut pwm_timer = timer::Timer::<LowSpeed>::new(LEDC::regs(), BUZZER_TIMER);
+    if pwm_timer
+        .configure(timer::config::Config {
+            duty: BUZZER_DUTY,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_hz(1000),
+        })
+        .is_err()
+    {
+        warn!("buzzer.init: timer=fail");
+        return;
+    }
+
+    let mut pwm_channel = channel::Channel::<LowSpeed>::new(BUZZER_CHANNEL, pin);
+    if pwm_channel
+        .configure(channel::config::Config {
+            timer: &pwm_timer,
+            duty_pct: 0,
+            pin_config: channel::config::PinConfig::PushPull,
+        })
+        .is_err()
+    {
+        warn!("buzzer.init: channel=fail");
+        return;
+    }
+    info!("buzzer.init: driver=ledc timer=1 channel=1 gpio=GPIO7 idle=low");
+
     let rx = COMMANDS.receiver();
     let mut alarm: Option<AlarmTone> = None;
     let mut pending_tone: Option<Tone> = None;
@@ -151,7 +188,7 @@ async fn task(mut pin: Output<'static>) {
         if alarm.is_none() {
             if let Some(tone) = pending_tone.take() {
                 info!("buzzer.play: tone={}", tone.label());
-                play_events(&mut pin, events_for_tone(tone)).await;
+                play_events(&pwm_channel, events_for_tone(tone)).await;
                 continue;
             }
         }
@@ -168,7 +205,7 @@ async fn task(mut pin: Output<'static>) {
             }
             if let Some(active_alarm) = alarm {
                 info!("buzzer.alarm.play: tone={}", active_alarm.label());
-                play_events(&mut pin, events_for_alarm(active_alarm)).await;
+                play_events(&pwm_channel, events_for_alarm(active_alarm)).await;
                 match select(rx.receive(), Timer::after(alarm_gap(active_alarm))).await {
                     Either::First(command) => {
                         if let Some(tone) = apply_command(command, &mut alarm) {
@@ -183,31 +220,60 @@ async fn task(mut pin: Output<'static>) {
 
         if let Some(tone) = apply_command(rx.receive().await, &mut alarm) {
             info!("buzzer.play: tone={}", tone.label());
-            play_events(&mut pin, events_for_tone(tone)).await;
+            play_events(&pwm_channel, events_for_tone(tone)).await;
         }
     }
 }
 
-async fn play_events(pin: &mut Output<'static>, events: &[Event]) {
+async fn play_events(channel: &channel::Channel<'_, LowSpeed>, events: &[Event]) {
     for event in events {
         if event.freq_hz == 0 {
-            pin.set_low();
+            stop_pwm(channel);
             Timer::after(Duration::from_millis(event.ms as u64)).await;
         } else {
-            play_square(pin, event.freq_hz, event.ms).await;
+            play_square(channel, event.freq_hz, event.ms).await;
         }
     }
-    pin.set_low();
+    stop_pwm(channel);
 }
 
-async fn play_square(pin: &mut Output<'static>, freq_hz: u16, ms: u16) {
-    let half_period_us = 500_000u64 / u64::from(freq_hz.max(1));
-    let end = Instant::now() + Duration::from_millis(ms as u64);
-    while Instant::now() < end {
-        pin.set_high();
-        Timer::after(Duration::from_micros(half_period_us)).await;
-        pin.set_low();
-        Timer::after(Duration::from_micros(half_period_us)).await;
+async fn play_square(channel: &channel::Channel<'_, LowSpeed>, freq_hz: u16, ms: u16) {
+    stop_pwm(channel);
+    if configure_pwm_frequency(freq_hz) {
+        let _ = channel.set_duty(BUZZER_ON_DUTY_PCT);
+        Timer::after(Duration::from_millis(ms as u64)).await;
+        stop_pwm(channel);
+    } else {
+        warn!("buzzer.ledc: freq={}Hz configure=fail", freq_hz);
+        Timer::after(Duration::from_millis(ms as u64)).await;
     }
-    pin.set_low();
+}
+
+fn stop_pwm(channel: &channel::Channel<'_, LowSpeed>) {
+    let _ = channel.set_duty(0);
+}
+
+fn configure_pwm_frequency(freq_hz: u16) -> bool {
+    let freq_hz = u32::from(freq_hz.max(1));
+    let src_freq = Clocks::get().apb_clock.as_hz();
+    let precision = 1u64 << BUZZER_DUTY_BITS;
+    let divisor = ((u64::from(src_freq)) << 8) / u64::from(freq_hz) / precision;
+    if !(256..LEDC_TIMER_DIV_NUM_MAX).contains(&divisor) {
+        return false;
+    }
+
+    let ledc = LEDC::regs();
+    ledc.timer(BUZZER_TIMER as usize)
+        .conf()
+        .modify(|_, w| unsafe {
+            w.tick_sel().clear_bit();
+            w.rst().clear_bit();
+            w.pause().clear_bit();
+            w.clk_div().bits(divisor as u32);
+            w.duty_res().bits(BUZZER_DUTY_BITS)
+        });
+    ledc.timer(BUZZER_TIMER as usize)
+        .conf()
+        .modify(|_, w| w.para_up().set_bit());
+    true
 }

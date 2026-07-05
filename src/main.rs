@@ -21,6 +21,7 @@ use esp_hal::analog::adc::{Adc, AdcConfig, Attenuation};
 use esp_hal::efuse::Efuse;
 use esp_hal::gpio::{DriveMode, Flex, Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
+use esp_hal::ledc::{LSGlobalClkSource, Ledc};
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::spi::Mode as SpiMode;
 use esp_hal::system;
@@ -159,7 +160,7 @@ const PIN_IN_PG: u8 = 42; // TPS2490 PG (open drain, high = good)
 #[allow(dead_code)]
 const PIN_USB_V1OK: u8 = 21; // ISOUSB211 side-1 power OK (high = upstream side powered)
 #[allow(dead_code)]
-const PIN_BUZZER: u8 = 7; // passive buzzer, software square wave, idle low
+const PIN_BUZZER: u8 = 7; // passive buzzer via LEDC PWM output, idle low
 
 // Output-module enable lines (V3): EN high = module enabled
 #[allow(dead_code)]
@@ -1571,12 +1572,10 @@ async fn main(spawner: Spawner) {
         port_enable.set_low();
     }
 
-    let buzzer_pin = Output::new(
-        p.GPIO7,
-        Level::Low,
-        esp_hal::gpio::OutputConfig::default().with_drive_mode(DriveMode::PushPull),
-    );
-    buzzer::spawn(&spawner, buzzer_pin).expect("spawn buzzer task");
+    let mut ledc = Ledc::new(p.LEDC);
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    buzzer::spawn(&spawner, p.GPIO7).expect("spawn buzzer task");
 
     info!("init.hw: chip=ESP32-S3 sensor_i2c=sdaGPIO8/sclGPIO9 hub_i2c=sdaGPIO14/sclGPIO13 rom_wc=GPIO37-low rom_route=GPIO38-high");
 
@@ -1886,7 +1885,7 @@ async fn main(spawner: Spawner) {
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
     let fan_ready = if power_boot.ready {
-        if fan::spawn(&spawner, p.LEDC, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
+        if fan::spawn(&spawner, p.PCNT, p.SENS, p.GPIO1, p.GPIO2, p.GPIO6).is_ok() {
             with_timeout(Duration::from_millis(1500), fan::bootstrap_signal().wait())
                 .await
                 .is_ok_and(|ready| ready)

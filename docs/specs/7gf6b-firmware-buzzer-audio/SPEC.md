@@ -16,7 +16,7 @@
 
 ### Goals
 
-- 使用 `GPIO7` 软件方波播放预览页推荐音效，静音时保持低电平。
+- 使用 `GPIO7` LEDC 硬件 PWM 播放预览页推荐音效，静音时保持低电平。
 - 在开机、有效按键操作、操作拒绝、通道上电/断电、持续告警、间隔告警与通道阈值提示时播放对应音效。
 - 用纯逻辑状态机覆盖告警优先级、输入过功率 hysteresis、端口插拔/3A/5A hysteresis 与按键接受/拒绝判定。
 - 串口日志输出 `buzzer:*` 摘要，便于非破坏性验证。
@@ -25,7 +25,7 @@
 
 - 不新增用户可配置音效接口。
 - 不修改 Web/companion/API 协议。
-- 不占用 fan 已使用的 LEDC 外设。
+- 不使用 CPU busy-wait 或 async GPIO 翻转生成蜂鸣器半周期波形。
 - 不修改 `vbus_ratio` 或 RATIO `0x08 bit0`。
 - 不执行真机高温、高功率或短路破坏性验证。
 
@@ -33,7 +33,7 @@
 
 ### In scope
 
-- `src/buzzer.rs`：GPIO7 软件方波播放任务、音效常量、命令队列与告警循环。
+- `src/buzzer.rs`：GPIO7 LEDC PWM 播放任务、音效常量、命令队列与告警循环。
 - `src/audio_logic.rs`：可在 host 测试的告警与阈值判定逻辑。
 - `src/main.rs`：boot、front panel、USB JSONL、network action、port runtime 与告警状态接入。
 - `src/fan.rs`：暴露 80C set / 75C clear 的过温告警状态。
@@ -43,14 +43,16 @@
 ### Out of scope
 
 - Web/companion/API 的声音配置。
-- LEDC 蜂鸣器驱动。
+- RMT 蜂鸣器驱动。
+- 软件 GPIO 翻转蜂鸣器驱动。
 - 硬件接线或电气参数调整。
 
 ## 需求（Requirements）
 
 ### MUST
 
-- 蜂鸣器必须使用 `GPIO7` 软件方波；播放完成后必须拉低静音。
+- 蜂鸣器必须使用 `GPIO7` LEDC 硬件 PWM；播放完成后必须拉低静音。
+- LEDC 外设必须由启动流程统一初始化，fan 使用 Timer0/Channel0，蜂鸣器使用 Timer1/Channel1，两个输出不得复用同一个 timer/channel。
 - 开机音必须在 boot self-check 非 Fatal、进入 Runtime 后播放。
 - Left/Right 按键成功移动选中通道时必须播放操作提示音。
 - Center 成功切换通道电源时必须播放通道上电音或通道断电音。
@@ -82,7 +84,7 @@
 
 ### Playback
 
-- `buzzer` 任务拥有 GPIO7 输出。
+- `buzzer` 任务拥有 GPIO7 LEDC PWM 输出。
 - `buzzer::play(Tone)` 排队 one-shot 音效。
 - `buzzer::set_alarm(Option<AlarmTone>)` 设置当前循环告警。
 - 无告警时，任务按队列顺序播放 one-shot。
@@ -144,7 +146,7 @@ None
 
 - 预览页推荐音效已经确认，不再保留固件侧备选音效。
 - GPIO7 被确认为蜂鸣器控制网络，且没有其它固件模块占用。
-- fan LEDC 资源保持独占，蜂鸣器不得改用 LEDC。
+- LEDC 外设可由 fan 与蜂鸣器共享，但必须分配不同 timer/channel；fan 控制语义不得因蜂鸣器播放而改变。
 
 ## 非功能性验收 / 质量门槛（Quality Gates）
 
@@ -185,7 +187,7 @@ None
 
 ## 实现里程碑（Milestones / Delivery checklist）
 
-- [x] M1: 固化推荐音效表与 GPIO7 软件方波播放器
+- [x] M1: 固化推荐音效表与 GPIO7 LEDC PWM 播放器
 - [x] M2: 接入 boot、front panel、USB JSONL 与 network 端口动作音
 - [x] M3: 接入持续/间隔告警 reducer 与通道提示 hysteresis
 - [x] M4: 补齐纯逻辑单元测试与文档 current truth
@@ -194,13 +196,14 @@ None
 ## 方案概述（Approach, high-level）
 
 - 用 `audio_logic` 承载可测试的阈值和优先级，避免把可验证规则埋进硬件主循环。
-- 用独立 `buzzer` 任务拥有 GPIO7，主循环只发送播放/告警命令。
+- 用独立 `buzzer` 任务拥有 LEDC Timer1/Channel1 与 GPIO7，主循环只发送播放/告警命令。
+- 启动流程统一启用 LEDC 外设；fan 保持 Timer0/Channel0，蜂鸣器动态更新 Timer1 分频器并用 50% duty 播放音符，rest 与播放结束使用 0% duty 保持低电平。
 - fan 和 power input 只暴露最小状态查询接口，不改变既有控制策略。
 - 主循环继续保持 `port.telemetry` 与 OCP 日志语义，新增声音只作为并行反馈。
 
 ## 风险 / 开放问题 / 假设（Risks, Open Questions, Assumptions）
 
-- 风险：软件方波会占用 embassy timer 调度，音效长度保持短促以降低 runtime 干扰。
+- 风险：LEDC timer/channel 由 fan 与蜂鸣器共享同一外设寄存器块；实现必须保持资源编号固定，避免后续模块误用 Timer1/Channel1。
 - 风险：告警持续时 one-shot 可能被丢弃；这是为了保证安全告警优先。
 - 需要决策的问题：None
 - 假设（已确认）：只采用推荐音效；GPIO7 空闲；输入过功率阈值为 100W/90W；过温阈值为 80C/75C；Up/Down 保持无定义静默。
@@ -209,4 +212,5 @@ None
 
 - `tools/buzzer_audio_preview/README.md`
 - `docs/software_design.md`
+- `docs/solutions/firmware/esp32-s3-ledc-passive-buzzer.md`
 - `docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md`

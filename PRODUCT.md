@@ -2,35 +2,48 @@
 
 ## Register
 
-product
+brand
 
-## Users
+## Readers
 
-主要用户是桌面工位上的硬件、嵌入式和测试工程师。他们把四路 USB Hub 当成工作台上的受控供电与连接设备来使用，需要在联调、验证、烧录、故障定位与日常切换中快速理解每一路端口的真实状态，并安全地执行断电、恢复、配网、重启与固件更新操作。
+ISO USB Hub serves three adjacent reading contexts:
+
+- Bench bring-up: toolchain, firmware build, flashing safety, and first hardware checks.
+- Engineering orientation: ESP32-S3 control plane, power sequencing, display behavior, and verification gates.
+- Project evaluation: what the device is, what is implemented, and where reliable maintenance truth lives.
+
+Readers usually keep the site beside hardware on a desk, with schematics, serial logs, and firmware commands open. They need confident orientation first, then exact instructions.
 
 ## Product Purpose
 
-`iso-usb-hub` 是一套围绕四路 USB 输出硬件建立的本地控制系统：设备侧固件负责暴露端口状态、Wi-Fi 配置、USB JSONL 与 LAN HTTP 接口，本地 companion 程序 `isohub-devd` / `isohub` 与 `web app` 负责发现、连接、配置与维护设备。成功标准是用户不需要依赖零散脚本、串口临时命令或猜测性的硬件状态，就能从一个统一控制面完成设备识别、端口观察、供电控制、Wi-Fi 配置和固件维护。
+The documentation site is the public web front door for ISO USB Hub. It explains the device as a product, gives a practical path from setup to bring-up, and organizes long-lived engineering documents without replacing them as source of truth.
+
+Success means a reader can answer these questions without opening the whole repository:
+
+- What does ISO USB Hub do?
+- What hardware and firmware boundaries are currently real?
+- How do I install tools, build firmware, and find the right maintenance document?
+- Which deeper specs own implementation truth?
 
 ## Brand Personality
 
-精准、克制、可信。界面应像一台严肃的工作台仪器配套控制台，语气直接、信息密集、反馈明确，不卖弄视觉技巧，不把真实硬件状态包装得比它更“聪明”。
+Precise, bench-ready, and transparent. The voice should feel like a careful hardware lab note that has been edited into a product page: confident enough for public readers, concrete enough for maintainers, and never glossy in a way that hides engineering risk.
 
 ## Anti-references
 
-- 不要做成营销型 SaaS dashboard、夸张 hero、泛用 AI 工具 UI，或靠大卡片拼贴的后台模板。
-- 不要让设备页看起来像“数据可视化展示页”，而应该像可操作、可追责的设备控制台。
-- 不要用霓虹黑客风、装饰性玻璃拟态、过量渐变或玩具化图标弱化硬件风险感知。
-- 不要把 Web Serial、Local USB、Wi-Fi/LAN 渲染成互相割裂的三套产品，而要表现成同一设备的不同通道。
+- Generic SaaS landing pages with abstract gradients, hero metrics, and repeated feature cards.
+- Decorative electronics imagery that implies a finished enclosure or board photo when no real photo is available.
+- Dense internal wiki pages that bury the product story under implementation history.
+- Terminal-themed styling used as a shortcut for "technical" rather than because it helps the reader.
 
 ## Design Principles
 
-- 硬件真相优先：端口电源、OCP、CH335F sideband、连接通道、固件身份和 Wi-Fi 状态必须先于二级信息出现。
-- 单一控制面：发现、绑定、运行时状态、维护动作与更新能力应使用统一的信息架构，而不是拆成互不相干的小工具页面。
-- 风险显式化：断电、重启、刷写、改 Wi-Fi 这类会影响链路可达性的动作必须有明确边界、条件与反馈。
-- 通道可替换但设备唯一：用户操作的是同一台设备，通道只决定当前怎样连接它，不应制造重复设备或歧义状态。
-- 密集但冷静：允许高信息密度，但通过稳定排版、层次和术语控制噪音，不让页面变成日志墙。
+- Show the device boundary before the repository boundary: the first screen should explain the hardware system, not the file tree.
+- Be honest about physical evidence: reserve space for real photos and use engineering diagrams only where they are true.
+- Keep every route one decision away from action: topic pages lead to setup, hardware topology, firmware runtime, control-plane interfaces, dashboard behavior, or canonical specs.
+- Preserve canonical documentation: the site curates and explains, while `docs/` and `docs/specs/` remain long-lived engineering truth.
+- Favor clarity over polish: visual style should make sequencing, ownership, and risk easier to scan.
 
 ## Accessibility & Inclusion
 
-核心工作流目标为 WCAG AA 对比度，键盘操作完整可达。颜色不能单独承载 `busy`、`error`、`offline`、`USB-only` 之类关键状态；这些状态必须同时有文案或图标。动效只用于状态变化与反馈，并尊重 reduced motion 偏好。
+The site targets WCAG AA contrast for text and interactive controls. Motion must remain optional and respect `prefers-reduced-motion`. Content should not rely on color alone for status or warnings, and technical terms should be readable in both Chinese and English routes.

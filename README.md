@@ -150,6 +150,23 @@ DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
 
 The Web app never scans localhost ports. `DEVD_ORIGINS` is an explicit ordered list: put the mDNS URL first, then an IP or localhost fallback. `ALLOW_DEV_CORS=1` is only needed when the Vite page directly tries multiple configured origins; same-origin `--web-root` hosting does not need it.
 
+### Documentation site
+
+The publishable documentation site lives in `docs-site/`. It is a bilingual product and engineering documentation entrypoint built with Rspress.
+
+```bash
+bun install --frozen-lockfile
+bun run docs:build
+DOCS_PORT=50885 bun run docs:preview
+```
+
+Local builds default to a root path. The GitHub Pages workflow defaults to the repository project path
+and can be overridden with `DOCS_BASE`, including `/` for a configured custom domain:
+
+```bash
+DOCS_BASE=/preview/ bun run docs:build
+```
+
 ## Toolchain
 
 The firmware build expects the `esp` Rust toolchain:
@@ -190,6 +207,7 @@ Additional quality gates that remain part of the expected developer workflow, bu
 
 ## Reference docs
 
+- [docs-site](docs-site/docs/zh/index.mdx)
 - [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
 - [docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md](docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md)
 - [docs/software_design.md](docs/software_design.md)

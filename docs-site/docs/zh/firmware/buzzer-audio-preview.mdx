@@ -1,0 +1,30 @@
+---
+title: 蜂鸣器音效预览
+description: GPIO7 无源蜂鸣器提示音的浏览器 Web Audio 试听页。
+---
+
+import { BuzzerAudioPreview } from '../../../src/components/BuzzerAudioPreview';
+
+<h1>蜂鸣器音效预览</h1>
+
+本页把原来的 `tools/buzzer_audio_preview/` 工作台迁入文档站。音符时序仍沿用固件音效设计所用的
+同一份候选表，但界面改为文档站主题，并纳入双语导航。
+
+这里用于比较提示音的旋律、节奏和优先级，不直接改固件常量。浏览器使用 Web Audio 合成方波；
+最终 GPIO7 LEDC 播放路径仍由固件实现持有。
+
+<BuzzerAudioPreview locale="zh" />
+
+## 已带入固件的规则
+
+- 未定义或未产生实际动作的输入事件保持静默。
+- one-shot 操作音优先级低于当前活动告警。
+- 持续告警循环播放，直到对应保护条件解除。
+- score JSON、MIDI 与 WAV 评审资产由 `tools/buzzer_audio_preview/generate_assets.py`
+  生成；运行期固件不读取网页资产。
+
+## 参考
+
+- `docs/specs/7gf6b-firmware-buzzer-audio/SPEC.md`
+- `docs/software_design.md`
+- `tools/buzzer_audio_preview/README.md`

@@ -1,51 +1,56 @@
 # Design
 
-## Overview
+## Identity
 
-`iso-usb-hub` 使用克制的 product UI 视觉系统，为四路 USB Hub 提供仪器化控制面。界面应在桌面工位、串口联调和局域网配网场景下保持清晰、稳定、紧凑，优先服务状态判断与动作执行。
+ISO USB Hub documentation uses a restrained hardware-lab identity: pure white reading surfaces, near-black ink, saturated magenta as a sparing brand anchor, and green/cyan technical accents for electrical state and signal language.
 
 ## Color
 
-采用 restrained 策略，使用轻微带冷色倾向的中性色表面，加一个低饱和主强调色表示当前选择、主操作和活动通道。语义色只用于 `success`、`warning`、`error`、`busy`、`disabled`、`usb-only` 这类明确状态。
+Use OKLCH custom properties in the site stylesheet.
 
-建议 token 方向：
+- `--iso-bg`: `oklch(1 0 0)`
+- `--iso-surface`: `oklch(0.972 0.006 340)`
+- `--iso-ink`: `oklch(0.18 0.018 255)`
+- `--iso-muted`: `oklch(0.43 0.026 255)`
+- `--iso-primary`: `oklch(0.54 0.19 340)`
+- `--iso-primary-strong`: `oklch(0.45 0.18 340)`
+- `--iso-accent`: `oklch(0.62 0.15 175)`
+- `--iso-caution`: `oklch(0.70 0.14 78)`
+- `--iso-line`: `oklch(0.88 0.014 255)`
+- `--iso-dark`: `oklch(0.14 0.018 255)`
 
-- `--bg`: 带轻微蓝灰偏色的近白底。
-- `--panel`: 一级工作面板色。
-- `--panel-2`: 次级分组、日志、内嵌列表区。
-- `--border`: 低对比结构线。
-- `--primary`: 冷静的蓝靛或钢青色，用于激活态与主要 CTA。
-- `--success`, `--warning`, `--error`: 仅用于状态与告警，不用于装饰。
-
-新颜色优先使用 OKLCH，不使用纯黑纯白。
+Primary color is used for identity and the main call to action only. Accent colors mark signal, power, and verification concepts. Avoid cream, beige, navy/orange, and purple-gradient defaults.
 
 ## Typography
 
-优先使用系统 UI sans，数值、设备 ID、MAC、hostnames、串口路径、日志和固件版本使用 monospace。标题保持任务导向，不做 hero 级排版；正文与表单说明控制在易扫读密度，数值列尽量使用等宽数字避免跳动。
+Use the system sans stack for reliability across Chinese and English:
+
+```css
+font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+```
+
+Use a system mono stack only for commands, pin names, addresses, and short technical labels. Do not use monospace as the dominant brand voice.
+
+Display headings use tight but safe letter spacing, never below `-0.03em`. Body copy should remain at 65-75 characters per line on content pages.
 
 ## Layout
 
-整体为 app shell：左侧设备列表或导航，右侧主工作面。主工作面优先级如下：
+The home page opens with an asymmetric hero: copy and action links on one side, a real-photo placeholder plus engineering evidence on the other. Interior documentation pages keep Rspress defaults but add clearer hierarchy for callouts, source links, and source-of-truth notes.
 
-1. 顶部连接与身份状态带。
-2. 主列放四路端口总览与当前设备运行状态。
-3. 次列或下部放 Wi-Fi、固件更新、诊断与日志。
-4. 窄屏时按动作顺序纵向堆叠，保证关键按钮与状态先出现。
-
-卡片只用于明确的重复硬件单元，如端口卡、设备卡、阶段面板。禁止嵌套厚重卡片。
+Cards are allowed only for distinct navigation choices or repeated document groups. Do not nest cards.
 
 ## Components
 
-- 状态 badge：统一文本标签与图标体系，覆盖 `Wi-Fi/LAN`、`Web Serial`、`Local USB`、`offline`、`busy`、`usb-only`、`ocp`。
-- 连接方式切换：使用分段控件或紧凑 tab，而不是夸张大按钮组。
-- 端口面板：每个端口固定展示身份、供电状态、数据状态、遥测、动作区与异常态。
-- 表单：标签始终可见，错误贴近字段，禁用态仍可读。
-- 日志与进度面板：使用 monospace，空态和失败态要明确。
+- Photo placeholder: clearly labeled as awaiting real hardware photography; never styled as a fake product render.
+- Evidence strip: compact links to dashboard, hardware overview, software design, and specs.
+- Doc group card: title, short audience cue, and one link group.
+- Source note: neutral bordered note that names the canonical repository document.
+- Warning/caution: full border and background tint, no side stripe.
 
 ## Motion
 
-交互动效维持在 150–220 ms 的 ease-out，主要用于连接状态切换、面板展开、进度更新与错误反馈。不做入场编舞，不动画布局属性。
+Use subtle page-load emphasis for the home hero and navigation groups. Content must be visible before animation runs. Respect `prefers-reduced-motion: reduce` by disabling transitions.
 
-## Content
+## Responsive Behavior
 
-文案使用直接、操作型语句，例如 `Connect via Web Serial`、`Save Wi-Fi`、`Power off port 3`、`Restart hub`。错误信息必须同时说明失败点和下一步可做的动作。owner-facing 名称统一使用 `port1..port4` / `Port 1..4`，不用参考项目里的 `USB-A` / `USB-C` 双口语义。
+The home hero collapses to a single column on narrow viewports. Navigation groups use responsive wrapping rather than fixed breakpoints where possible. Buttons and link clusters must not overflow on mobile.

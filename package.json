@@ -2,15 +2,22 @@
   "name": "isohub-dev-tools",
   "private": true,
   "license": "MIT OR Apache-2.0",
+  "type": "module",
   "engines": {
     "bun": ">=1.0.0"
   },
+  "workspaces": [
+    "docs-site"
+  ],
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "commitlint-plugin-function-rules": "^4.0.2"
   },
   "scripts": {
-    "commitlint": "commitlint"
+    "commitlint": "commitlint",
+    "docs:dev": "bun run --cwd docs-site dev",
+    "docs:build": "bun run --cwd docs-site build",
+    "docs:preview": "bun run --cwd docs-site preview"
   }
 }

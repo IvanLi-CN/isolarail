@@ -29,8 +29,14 @@ Thumbs.db
 *.map
 
 # Preview and tooling artifacts
+node_modules/
+**/node_modules/
+.impeccable/
 docs/assets/*.ppm
 /tools/buzzer_audio_preview/out/
+docs-site/doc_build/
+docs-site/.rspress/
+docs-site/.cache/
 
 # Exception for required binary files
 !startup_bitmap.bin

@@ -576,31 +576,40 @@ struct FrontKeyContext {
     ocp_latched: [bool; 4],
 }
 
+struct FrontKeyState<'a> {
+    selected_port: &'a mut usize,
+    manual_enabled: &'a mut [bool; 4],
+    port_enables: &'a mut [Output<'static>; 4],
+    ocp_latched: &'a mut [bool; 4],
+    ocp_safe_samples: &'a mut [u8; 4],
+    ocp_retry_wait: &'a mut [u8; 4],
+    ocp_reason: &'a mut [PortOcpDecision; 4],
+    port_audio: &'a mut [PortAudioTracker; 4],
+}
+
 fn handle_front_key_event_with_context(
     event: front_panel::KeyEvent,
-    selected_port: &mut usize,
-    manual_enabled: &mut [bool; 4],
-    port_enables: &mut [Output<'static>; 4],
+    state: &mut FrontKeyState<'_>,
     context: FrontKeyContext,
 ) -> Option<Tone> {
     match event {
         front_panel::KeyEvent::Left => {
-            *selected_port = if *selected_port == 0 {
+            *state.selected_port = if *state.selected_port == 0 {
                 3
             } else {
-                *selected_port - 1
+                *state.selected_port - 1
             };
-            info!("front.ui: selected_port={}", *selected_port + 1);
+            info!("front.ui: selected_port={}", *state.selected_port + 1);
             Some(Tone::OperationOk)
         }
         front_panel::KeyEvent::Right => {
-            *selected_port = (*selected_port + 1) % 4;
-            info!("front.ui: selected_port={}", *selected_port + 1);
+            *state.selected_port = (*state.selected_port + 1) % 4;
+            info!("front.ui: selected_port={}", *state.selected_port + 1);
             Some(Tone::OperationOk)
         }
         front_panel::KeyEvent::Center => {
-            let idx = *selected_port;
-            let next_enabled = !manual_enabled[idx];
+            let idx = *state.selected_port;
+            let next_enabled = !state.manual_enabled[idx];
             let can_toggle = !next_enabled
                 || (context.target == PowerSwitchTarget::Closed
                     && context.port_ready[idx]
@@ -621,14 +630,18 @@ fn handle_front_key_event_with_context(
                 return Some(tone);
             }
 
-            manual_enabled[idx] = next_enabled;
-            if !manual_enabled[idx] {
-                port_enables[idx].set_low();
+            state.manual_enabled[idx] = next_enabled;
+            if !state.manual_enabled[idx] {
+                state.port_enables[idx].set_low();
+                state.ocp_latched[idx] = false;
+                state.ocp_safe_samples[idx] = 0;
+                state.ocp_retry_wait[idx] = 0;
+                clear_channel_audio_state(idx, state.ocp_reason, state.port_audio);
             }
             info!(
                 "front.ui: ch={} manual_output={}",
                 idx + 1,
-                if manual_enabled[idx] {
+                if state.manual_enabled[idx] {
                     "enabled"
                 } else {
                     "disabled"
@@ -2277,13 +2290,19 @@ async fn main(spawner: Spawner) {
             ocp_latched,
         };
         while let Ok(event) = front_events.try_receive() {
-            if let Some(tone) = handle_front_key_event_with_context(
-                event,
-                &mut selected_port,
-                &mut manual_enabled,
-                &mut port_enables,
-                front_key_context,
-            ) {
+            let mut front_key_state = FrontKeyState {
+                selected_port: &mut selected_port,
+                manual_enabled: &mut manual_enabled,
+                port_enables: &mut port_enables,
+                ocp_latched: &mut ocp_latched,
+                ocp_safe_samples: &mut ocp_safe_samples,
+                ocp_retry_wait: &mut ocp_retry_wait,
+                ocp_reason: &mut ocp_reason,
+                port_audio: &mut port_audio,
+            };
+            if let Some(tone) =
+                handle_front_key_event_with_context(event, &mut front_key_state, front_key_context)
+            {
                 buzzer::play(tone);
             }
         }
@@ -2578,11 +2597,19 @@ async fn main(spawner: Spawner) {
             )
             .await
             {
+                let mut front_key_state = FrontKeyState {
+                    selected_port: &mut selected_port,
+                    manual_enabled: &mut manual_enabled,
+                    port_enables: &mut port_enables,
+                    ocp_latched: &mut ocp_latched,
+                    ocp_safe_samples: &mut ocp_safe_samples,
+                    ocp_retry_wait: &mut ocp_retry_wait,
+                    ocp_reason: &mut ocp_reason,
+                    port_audio: &mut port_audio,
+                };
                 if let Some(tone) = handle_front_key_event_with_context(
                     event,
-                    &mut selected_port,
-                    &mut manual_enabled,
-                    &mut port_enables,
+                    &mut front_key_state,
                     idle_front_key_context,
                 ) {
                     buzzer::play(tone);

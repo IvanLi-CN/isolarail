@@ -203,3 +203,82 @@ body {
 .modal::backdrop {
   background: var(--overlay);
 }
+
+.hardware-json-view {
+  color: var(--text);
+}
+
+.hardware-json-node {
+  margin: 0;
+  min-height: 1.75rem;
+  padding: 0 0.25rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hardware-json-node[data-json-selected="true"] {
+  border-radius: 0.625rem;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.hardware-json-children {
+  margin: 0;
+  padding: 0 0 0 1.15rem;
+}
+
+.hardware-json-label,
+.hardware-json-punctuation {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.hardware-json-label {
+  margin-right: 0.25rem;
+}
+
+.hardware-json-label-clickable {
+  cursor: pointer;
+}
+
+.hardware-json-string {
+  color: #059669;
+}
+
+.hardware-json-number {
+  color: #0284c7;
+}
+
+.hardware-json-boolean {
+  color: #7c3aed;
+}
+
+.hardware-json-null,
+.hardware-json-other {
+  color: var(--warning);
+}
+
+.hardware-json-expander {
+  display: inline-flex;
+  width: 1rem;
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+
+.hardware-json-expander-collapsed::after {
+  content: "▸";
+}
+
+.hardware-json-expander-expanded::after {
+  content: "▾";
+}
+
+.hardware-json-collapsed {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.hardware-json-collapsed::after {
+  content: "...";
+}

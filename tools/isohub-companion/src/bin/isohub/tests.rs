@@ -105,6 +105,18 @@ mod power_output_tests {
     }
 
     #[test]
+    fn maps_diag_snapshot_endpoint_to_ipc_method() {
+        let (method, params) = map_devd_ipc_endpoint(
+            Method::GET,
+            "/api/v1/devices/usb--dev-cu-usbmodem21221401/diag-snapshot",
+            None,
+        )
+        .expect("diag snapshot endpoint should map");
+        assert_eq!(method, "device.hardware.snapshot");
+        assert_eq!(params["device_id"], "usb--dev-cu-usbmodem21221401");
+    }
+
+    #[test]
     fn cli_uses_ipc_instead_of_devd_http_flag() {
         let cli = Cli::try_parse_from([
             "isohub",

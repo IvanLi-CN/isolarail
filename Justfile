@@ -69,10 +69,11 @@ identify:
   tmp="$(mktemp)"; \
   trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
   USB_PORT="$PORT" just isohub --json discover --scan > "$tmp"; \
-  identity="$(python3 -c 'import json,sys; device_id=sys.argv[1]; data=json.load(open(sys.argv[2], encoding="utf-8")); matches=[d for d in data.get("devices", []) if d.get("id") == device_id]; (print(json.dumps(matches[0])) if matches else sys.exit(f"device {device_id} not found in discovery output"))' "$device_id" "$tmp")"; \
-  project_device_id="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print(v.get("deviceId") or v.get("device_id") or "")' "$identity")"; \
-  mac="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print(v.get("mac") or "")' "$identity")"; \
-  firmware="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); f=v.get("firmware") or {}; print(f.get("name") or "")' "$identity")"; \
+  python3 -c 'import json,sys; device_id=sys.argv[1]; data=json.load(open(sys.argv[2], encoding="utf-8")); matches=[d for d in data.get("devices", []) if d.get("id") == device_id]; matches or sys.exit(f"device {device_id} not found in discovery output")' "$device_id" "$tmp"; \
+  USB_PORT="$PORT" just isohub --json status --device "$device_id" > "$tmp"; \
+  project_device_id="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; print(v.get("device_id") or "")' "$tmp")"; \
+  mac="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; print(v.get("mac") or "")' "$tmp")"; \
+  firmware="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; f=v.get("firmware") or {}; print(f.get("name") or "")' "$tmp")"; \
   if [[ "$firmware" != "iso-usb-hub" ]]; then \
     echo "error: selected port is not running iso-usb-hub firmware." >&2; \
     exit 2; \
@@ -334,6 +335,14 @@ diagnostics-export:
   fi; \
   selector=(${=SELECTOR}); \
   cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- diagnostics export "${selector[@]}"
+
+diag-snapshot:
+  if [[ -z "${SELECTOR:-}" ]]; then \
+    echo "Set SELECTOR='--device <device-id>' or '--hardware <saved-id>'." >&2; \
+    exit 1; \
+  fi; \
+  selector=(${=SELECTOR}); \
+  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- diag-snapshot "${selector[@]}"
 
 web-install:
   bun install --cwd web

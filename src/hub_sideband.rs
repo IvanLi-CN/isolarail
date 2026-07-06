@@ -11,6 +11,9 @@ const PWREN_MASK: u8 = 0b0101_0101;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Snapshot {
     pub input: u8,
+    pub output: u8,
+    pub polarity: u8,
+    pub config: u8,
     pub pwren_enabled: [bool; 4],
     pub ovcur_asserted: [bool; 4],
 }
@@ -35,16 +38,22 @@ impl Controller {
 
     pub async fn snapshot<I2C: I2c>(&self, i2c: &mut I2C) -> Result<Snapshot, I2C::Error> {
         let input = read_reg(i2c, REG_INPUT).await?;
+        let output = read_reg(i2c, REG_OUTPUT).await?;
+        let polarity = read_reg(i2c, REG_POLARITY).await?;
+        let config = read_reg(i2c, REG_CONFIG).await?;
         let mut pwren_enabled = [false; 4];
         let mut ovcur_asserted = [false; 4];
         for ch in 0..4 {
             let pwren = pwren_bit(ch);
             let ovcur = ovcur_bit(ch);
             pwren_enabled[ch as usize] = (input & pwren) == 0;
-            ovcur_asserted[ch as usize] = (self.config & ovcur) == 0 && (self.output & ovcur) == 0;
+            ovcur_asserted[ch as usize] = (config & ovcur) == 0 && (output & ovcur) == 0;
         }
         Ok(Snapshot {
             input,
+            output,
+            polarity,
+            config,
             pwren_enabled,
             ovcur_asserted,
         })

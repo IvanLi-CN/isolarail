@@ -19,6 +19,12 @@ async fn main() -> anyhow::Result<()> {
             Command::Status(selector) => {
                 request_selected(&client, &devd, selector, Method::GET, "/status", None).await?
             }
+            Command::DiagSnapshot(selector) => {
+                let value =
+                    request_selected(&client, &devd, selector, Method::GET, "/diag-snapshot", None)
+                        .await?;
+                value.get("result").cloned().unwrap_or(value)
+            }
             Command::Hardware { command } => handle_hardware(&client, &devd, command).await?,
             Command::Wifi { command } => match command {
                 WifiCommand::Show(selector) => {

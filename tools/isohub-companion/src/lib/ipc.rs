@@ -281,6 +281,13 @@ async fn dispatch_ipc_request(
                 &usb_jsonl_request(state, &req.device_id, "ports.get", None).await?,
             ))
         }
+        "device.hardware.snapshot" => {
+            let req: DeviceIdRequest = serde_json::from_value(params)?;
+            require_compatible_project_firmware_fast(state, &req.device_id).await?;
+            Ok(redact_sensitive(
+                &usb_jsonl_request(state, &req.device_id, "hardware.snapshot", None).await?,
+            ))
+        }
         "device.port.power" => {
             let req: DevicePortPowerRequest = serde_json::from_value(params)?;
             require_compatible_project_firmware_fast(state, &req.device_id).await?;
@@ -527,6 +534,16 @@ async fn build_device_diagnostics(state: &AppState, device_id: &str) -> anyhow::
     let wifi = usb_jsonl_request(state, device_id, "wifi.get", None)
         .await
         .context("collect diagnostics wifi")?;
+    let hardware_snapshot = match usb_jsonl_request(state, device_id, "hardware.snapshot", None)
+        .await
+        .context("collect diagnostics hardware snapshot")
+    {
+        Ok(value) => value.get("result").cloned().unwrap_or(value),
+        Err(err) => json!({
+            "ok": false,
+            "error": err.to_string(),
+        }),
+    };
     let (device, session) = {
         let inner = state.inner.lock().await;
         let device = inner
@@ -546,6 +563,7 @@ async fn build_device_diagnostics(state: &AppState, device_id: &str) -> anyhow::
         "status": status,
         "ports": ports,
         "wifi": wifi,
+        "hardware_snapshot": hardware_snapshot,
         "session": session,
         "source": {
             "kind": "local_usb",

@@ -1,4 +1,7 @@
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering};
+
 use crate::audio_logic::{AlarmTone, Tone};
+use crate::hardware_snapshot as hwdiag;
 use defmt::{info, warn};
 use embassy_executor::{task, SpawnError, Spawner};
 use embassy_futures::select::{select, Either};
@@ -25,6 +28,12 @@ enum Command {
 }
 
 static COMMANDS: Channel<CriticalSectionRawMutex, Command, 16> = Channel::new();
+static DRIVER_READY: AtomicBool = AtomicBool::new(false);
+static PLAYING: AtomicBool = AtomicBool::new(false);
+static ACTIVE_TONE: AtomicU8 = AtomicU8::new(0);
+static ACTIVE_ALARM: AtomicU8 = AtomicU8::new(0);
+static FREQUENCY_HZ: AtomicU16 = AtomicU16::new(0);
+static DUTY_PCT: AtomicU8 = AtomicU8::new(0);
 const BUZZER_TIMER: timer::Number = timer::Number::Timer1;
 const BUZZER_CHANNEL: channel::Number = channel::Number::Channel1;
 const BUZZER_DUTY: timer::config::Duty = timer::config::Duty::Duty10Bit;
@@ -92,6 +101,23 @@ pub fn set_alarm(alarm: Option<AlarmTone>) -> bool {
     }
 }
 
+pub fn snapshot() -> hwdiag::BuzzerSnapshot {
+    let ready = DRIVER_READY.load(Ordering::Relaxed);
+    hwdiag::BuzzerSnapshot {
+        state: if ready {
+            hwdiag::NodeState::Online
+        } else {
+            hwdiag::NodeState::Error
+        },
+        driver_ready: ready,
+        playing: PLAYING.load(Ordering::Relaxed),
+        active_tone: tone_label_from_tag(ACTIVE_TONE.load(Ordering::Relaxed)),
+        active_alarm: alarm_label_from_tag(ACTIVE_ALARM.load(Ordering::Relaxed)),
+        frequency_hz: FREQUENCY_HZ.load(Ordering::Relaxed),
+        duty_pct: DUTY_PCT.load(Ordering::Relaxed),
+    }
+}
+
 fn events_for_tone(tone: Tone) -> &'static [Event] {
     match tone {
         Tone::Boot => BOOT,
@@ -128,6 +154,54 @@ fn alarm_label(alarm: Option<AlarmTone>) -> &'static str {
     alarm.map(AlarmTone::label).unwrap_or("none")
 }
 
+fn tone_tag(tone: Tone) -> u8 {
+    match tone {
+        Tone::Boot => 1,
+        Tone::OperationOk => 2,
+        Tone::OperationDenied => 3,
+        Tone::ChannelPowerOn => 4,
+        Tone::ChannelPowerOff => 5,
+        Tone::HintCurrent3A => 6,
+        Tone::HintCurrent5A => 7,
+        Tone::HintInsert => 8,
+        Tone::HintRemove => 9,
+    }
+}
+
+fn tone_label_from_tag(tag: u8) -> &'static str {
+    match tag {
+        1 => "boot",
+        2 => "operation_ok",
+        3 => "operation_denied",
+        4 => "channel_power_on",
+        5 => "channel_power_off",
+        6 => "hint_current_3a",
+        7 => "hint_current_5a",
+        8 => "hint_insert",
+        9 => "hint_remove",
+        _ => "none",
+    }
+}
+
+fn alarm_tag(alarm: AlarmTone) -> u8 {
+    match alarm {
+        AlarmTone::ChannelShort => 1,
+        AlarmTone::OverTemp => 2,
+        AlarmTone::InputOverPower => 3,
+        AlarmTone::ChannelOver5A => 4,
+    }
+}
+
+fn alarm_label_from_tag(tag: u8) -> &'static str {
+    match tag {
+        1 => "channel_short",
+        2 => "over_temp",
+        3 => "input_over_power",
+        4 => "channel_over_5a",
+        _ => "none",
+    }
+}
+
 fn apply_command(command: Command, alarm: &mut Option<AlarmTone>) -> Option<Tone> {
     match command {
         Command::Play(tone) => {
@@ -144,6 +218,7 @@ fn apply_command(command: Command, alarm: &mut Option<AlarmTone>) -> Option<Tone
         Command::SetAlarm(next) => {
             if *alarm != next {
                 *alarm = next;
+                ACTIVE_ALARM.store(next.map(alarm_tag).unwrap_or(0), Ordering::Relaxed);
                 info!("buzzer.alarm: active={}", alarm_label(*alarm));
             }
             None
@@ -163,6 +238,7 @@ async fn task(pin: GPIO7<'static>) {
         .is_err()
     {
         warn!("buzzer.init: timer=fail");
+        DRIVER_READY.store(false, Ordering::Relaxed);
         return;
     }
 
@@ -176,8 +252,10 @@ async fn task(pin: GPIO7<'static>) {
         .is_err()
     {
         warn!("buzzer.init: channel=fail");
+        DRIVER_READY.store(false, Ordering::Relaxed);
         return;
     }
+    DRIVER_READY.store(true, Ordering::Relaxed);
     info!("buzzer.init: driver=ledc timer=1 channel=1 gpio=GPIO7 idle=low");
 
     let rx = COMMANDS.receiver();
@@ -188,7 +266,9 @@ async fn task(pin: GPIO7<'static>) {
         if alarm.is_none() {
             if let Some(tone) = pending_tone.take() {
                 info!("buzzer.play: tone={}", tone.label());
+                ACTIVE_TONE.store(tone_tag(tone), Ordering::Relaxed);
                 play_events(&pwm_channel, events_for_tone(tone)).await;
+                ACTIVE_TONE.store(0, Ordering::Relaxed);
                 continue;
             }
         }
@@ -220,7 +300,9 @@ async fn task(pin: GPIO7<'static>) {
 
         if let Some(tone) = apply_command(rx.receive().await, &mut alarm) {
             info!("buzzer.play: tone={}", tone.label());
+            ACTIVE_TONE.store(tone_tag(tone), Ordering::Relaxed);
             play_events(&pwm_channel, events_for_tone(tone)).await;
+            ACTIVE_TONE.store(0, Ordering::Relaxed);
         }
     }
 }
@@ -241,6 +323,9 @@ async fn play_square(channel: &channel::Channel<'_, LowSpeed>, freq_hz: u16, ms:
     stop_pwm(channel);
     if configure_pwm_frequency(freq_hz) {
         let _ = channel.set_duty(BUZZER_ON_DUTY_PCT);
+        FREQUENCY_HZ.store(freq_hz, Ordering::Relaxed);
+        DUTY_PCT.store(BUZZER_ON_DUTY_PCT, Ordering::Relaxed);
+        PLAYING.store(true, Ordering::Relaxed);
         Timer::after(Duration::from_millis(ms as u64)).await;
         stop_pwm(channel);
     } else {
@@ -251,6 +336,9 @@ async fn play_square(channel: &channel::Channel<'_, LowSpeed>, freq_hz: u16, ms:
 
 fn stop_pwm(channel: &channel::Channel<'_, LowSpeed>) {
     let _ = channel.set_duty(0);
+    PLAYING.store(false, Ordering::Relaxed);
+    FREQUENCY_HZ.store(0, Ordering::Relaxed);
+    DUTY_PCT.store(0, Ordering::Relaxed);
 }
 
 fn configure_pwm_frequency(freq_hz: u16) -> bool {

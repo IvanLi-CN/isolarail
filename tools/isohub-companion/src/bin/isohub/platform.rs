@@ -348,6 +348,7 @@ fn map_devd_ipc_endpoint(
         }
         ("DELETE", "wifi") => "device.wifi.clear",
         ("GET", "ports") => "device.ports.get",
+        ("GET", "diag-snapshot") => "device.hardware.snapshot",
         ("GET", "session") => {
             if let Some(tail) = query
                 .split('&')
@@ -470,6 +471,7 @@ fn map_http_endpoint(
         ("POST", "/wifi") => (Method::POST, "/api/v1/wifi/set".to_string(), body),
         ("DELETE", "/wifi") => (Method::POST, "/api/v1/wifi/clear".to_string(), body),
         ("GET", "/ports") => (method, "/api/v1/ports".to_string(), body),
+        ("GET", "/diag-snapshot") => (method, "/api/v1/diag-snapshot".to_string(), body),
         ("GET", "/diagnostics") => (method, "/api/v1/pd-diagnostics".to_string(), body),
         ("POST", _) if suffix.starts_with("/ports/") && suffix.ends_with("/replug") => {
             let port = suffix

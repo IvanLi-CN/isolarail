@@ -19,6 +19,7 @@ type FrontI2cError = <FrontI2cDevice as embedded_hal_async::i2c::ErrorType>::Err
 const KEY_DEBOUNCE_MS: u64 = 25;
 const FALLBACK_SCAN_MS: u64 = 500;
 const TCA_READ_RETRY_DELAY_MS: u64 = 2;
+const REG_INPUT: u8 = 0x00;
 const REG_OUTPUT: u8 = 0x01;
 const REG_POLARITY: u8 = 0x02;
 const REG_CONFIG: u8 = 0x03;
@@ -31,6 +32,14 @@ const LCD_OUTPUT_RESET: u8 = LCD_OUTPUT_RELEASED & !LCD_RES;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct DisplayControlState {
     pub output: u8,
+    pub config: u8,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Snapshot {
+    pub input: u8,
+    pub output: u8,
+    pub polarity: u8,
     pub config: u8,
 }
 
@@ -70,6 +79,16 @@ pub async fn init_display_control(
     let output = tca_read_reg(&mut i2c, REG_OUTPUT).await?;
     let config = tca_read_reg(&mut i2c, REG_CONFIG).await?;
     Ok(DisplayControlState { output, config })
+}
+
+pub async fn snapshot(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) -> Option<Snapshot> {
+    let mut i2c = I2cDevice::new(bus);
+    Some(Snapshot {
+        input: tca_read_reg(&mut i2c, REG_INPUT).await.ok()?,
+        output: tca_read_reg(&mut i2c, REG_OUTPUT).await.ok()?,
+        polarity: tca_read_reg(&mut i2c, REG_POLARITY).await.ok()?,
+        config: tca_read_reg(&mut i2c, REG_CONFIG).await.ok()?,
+    })
 }
 
 pub fn spawn(
@@ -127,7 +146,7 @@ async fn task(bus: &'static Mutex<CriticalSectionRawMutex, I2cBus>) {
 
 async fn tca_read_inputs<I2C: I2c>(i2c: &mut I2C) -> Result<u8, I2C::Error> {
     // TCA6408A Input Port register address = 0x00
-    tca_read_reg(i2c, 0x00).await
+    tca_read_reg(i2c, REG_INPUT).await
 }
 
 async fn tca_read_reg<I2C: I2c>(i2c: &mut I2C, reg: u8) -> Result<u8, I2C::Error> {

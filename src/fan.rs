@@ -1,4 +1,6 @@
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU8, Ordering};
+
+use crate::hardware_snapshot as hwdiag;
 use defmt::info;
 use embassy_executor::{task, SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -56,16 +58,27 @@ const TEMP_ALARM_CLEAR_C: f32 = 75.0;
 // TSENS conversion constants (ESP32-S3):
 // General linear model from Espressif docs:
 //   T(°C) = 0.4386 * raw - 27.88 * dac_offset - 20.52
-// 其中 dac_offset 由硬件寄存器 I2C_SARADC_TSENS_DAC(3:0) 决定。
+// 其中 dac_offset 是 Espressif TSENS 档位（-2..2），不是 REGI2C 低 4 位的负值。
 // 我们不做“校准”，而是：
-//   1) 上电将 TSENS_DAC 设为 1（常用量程，对应 dac_offset = -1）
-//   2) 计算时从寄存器读回 TSENS_DAC，并按 dac_offset = - (reg & 0x0F) 使用。
+//   1) 上电将 TSENS_DAC 设为 1（-30~50°C 档位）
+//   2) 运行期按同一个已配置档位换算，避免读回保留位/无效 nibble 造成数百度误报。
 const TSENS_ADC_FACTOR: f32 = 0.4386;
 const TSENS_DAC_FACTOR: f32 = 27.88;
 const TSENS_SYS_OFFSET: f32 = 20.52;
+const TSENS_DAC_OFFSET: i8 = 1;
 
 static BOOTSTRAP_SIG: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 static OVER_TEMP_ALARM: AtomicBool = AtomicBool::new(false);
+static LATEST_ENABLED: AtomicBool = AtomicBool::new(false);
+static LATEST_TACH_VALID: AtomicBool = AtomicBool::new(false);
+static LATEST_RPM: AtomicU32 = AtomicU32::new(0);
+static LATEST_TARGET_RPM: AtomicU32 = AtomicU32::new(0);
+static LATEST_MAX_RPM: AtomicU32 = AtomicU32::new(0);
+static LATEST_SPEED_PCT: AtomicU8 = AtomicU8::new(0);
+static LATEST_TARGET_SPEED_PCT: AtomicU8 = AtomicU8::new(0);
+static LATEST_HW_DUTY_PCT: AtomicU8 = AtomicU8::new(100);
+static LATEST_TEMP_MILLI_C: AtomicI32 = AtomicI32::new(0);
+static LATEST_TEMP_RAW: AtomicU8 = AtomicU8::new(0);
 
 pub fn bootstrap_signal() -> &'static Signal<CriticalSectionRawMutex, bool> {
     &BOOTSTRAP_SIG
@@ -75,8 +88,68 @@ pub fn over_temp_alarm_active() -> bool {
     OVER_TEMP_ALARM.load(Ordering::Relaxed)
 }
 
+pub fn snapshot(ready: bool) -> hwdiag::FanSnapshot {
+    hwdiag::FanSnapshot {
+        state: if ready {
+            hwdiag::NodeState::Online
+        } else {
+            hwdiag::NodeState::Offline
+        },
+        ready,
+        enabled: LATEST_ENABLED.load(Ordering::Relaxed),
+        tach_valid: LATEST_TACH_VALID.load(Ordering::Relaxed),
+        rpm: LATEST_RPM.load(Ordering::Relaxed),
+        target_rpm: LATEST_TARGET_RPM.load(Ordering::Relaxed),
+        max_rpm: LATEST_MAX_RPM.load(Ordering::Relaxed),
+        speed_pct: LATEST_SPEED_PCT.load(Ordering::Relaxed),
+        target_speed_pct: LATEST_TARGET_SPEED_PCT.load(Ordering::Relaxed),
+        hardware_pwm_duty_pct: LATEST_HW_DUTY_PCT.load(Ordering::Relaxed),
+        temperature_milli_c: LATEST_TEMP_MILLI_C.load(Ordering::Relaxed),
+        temperature_raw: LATEST_TEMP_RAW.load(Ordering::Relaxed),
+        over_temp_alarm: OVER_TEMP_ALARM.load(Ordering::Relaxed),
+    }
+}
+
+pub fn mcu_snapshot() -> hwdiag::McuSnapshot {
+    let has_temp = LATEST_TEMP_RAW.load(Ordering::Relaxed) != 0;
+    hwdiag::McuSnapshot {
+        state: if has_temp {
+            hwdiag::NodeState::Online
+        } else {
+            hwdiag::NodeState::Skipped
+        },
+        internal_temperature_milli_c: LATEST_TEMP_MILLI_C.load(Ordering::Relaxed),
+        internal_temperature_raw: LATEST_TEMP_RAW.load(Ordering::Relaxed),
+        over_temp_alarm: OVER_TEMP_ALARM.load(Ordering::Relaxed),
+    }
+}
+
 fn fail_bootstrap() {
     BOOTSTRAP_SIG.signal(false);
+}
+
+fn store_temperature(raw: u8, temp_c: f32) {
+    LATEST_TEMP_RAW.store(raw, Ordering::Relaxed);
+    LATEST_TEMP_MILLI_C.store((temp_c * 1000.0) as i32, Ordering::Relaxed);
+}
+
+fn store_control(
+    enabled: bool,
+    tach_valid: bool,
+    rpm: u32,
+    target_rpm: u32,
+    max_rpm: u32,
+    speed_pct: u8,
+    target_speed_pct: u8,
+) {
+    LATEST_ENABLED.store(enabled, Ordering::Relaxed);
+    LATEST_TACH_VALID.store(tach_valid, Ordering::Relaxed);
+    LATEST_RPM.store(rpm, Ordering::Relaxed);
+    LATEST_TARGET_RPM.store(target_rpm, Ordering::Relaxed);
+    LATEST_MAX_RPM.store(max_rpm, Ordering::Relaxed);
+    LATEST_SPEED_PCT.store(speed_pct.min(100), Ordering::Relaxed);
+    LATEST_TARGET_SPEED_PCT.store(target_speed_pct.min(100), Ordering::Relaxed);
+    LATEST_HW_DUTY_PCT.store(speed_to_hw_duty(speed_pct), Ordering::Relaxed);
 }
 
 pub fn spawn(
@@ -249,6 +322,8 @@ async fn task(
     let calib = measure_max_rpm_diag(u0, CALIB_SPINUP_MS, CALIB_OBSERVE_MAX_MS).await;
     let tach_valid = calib.valid;
     let max_rpm = calib.rpm;
+    LATEST_TACH_VALID.store(tach_valid, Ordering::Relaxed);
+    LATEST_MAX_RPM.store(max_rpm, Ordering::Relaxed);
     info!(
         "fan.calib: max_rpm={} valid={} reason={} elapsed={}ms pulses={} jitter={}pct samples={}",
         calib.rpm,
@@ -283,6 +358,7 @@ async fn task(
             Some(prev) => 0.3 * t_c + 0.7 * prev,
         });
         let t = ema_temp.unwrap();
+        store_temperature(raw, t);
         let over_temp_alarm = OVER_TEMP_ALARM.load(Ordering::Relaxed);
         if !over_temp_alarm && t >= TEMP_FORCE_FULL_C {
             OVER_TEMP_ALARM.store(true, Ordering::Relaxed);
@@ -309,6 +385,7 @@ async fn task(
             applied_duty = 0;
             set_speed_pct(&ch0, 0);
             fan_en.set_low();
+            store_control(false, tach_valid, 0, 0, max_rpm, 0, target_pct);
             off_log_ms += CTRL_TICK_MS as u32;
             if off_log_ms >= 1000 {
                 off_log_ms = 0;
@@ -339,6 +416,15 @@ async fn task(
             info!(
                 "fan.fail_tach: force_max duty={} rpm={} (tach_valid={})",
                 applied_duty, rpm, tach_valid as u8
+            );
+            store_control(
+                true,
+                tach_valid,
+                rpm as u32,
+                0,
+                max_rpm,
+                applied_duty,
+                target_pct,
             );
         } else {
             // Closed-loop PI to reach target RPM
@@ -382,6 +468,15 @@ async fn task(
             info!(
                 "fan.pi: T={}.1C raw={} tgt_pct={} duty={} rpm={} tgt_rpm={} hw={} max={}",
                 t as i32, raw, target_pct, applied_duty, rpm, target_rpm, hw_duty, eff_max_rpm
+            );
+            store_control(
+                true,
+                tach_valid,
+                rpm as u32,
+                target_rpm.max(0) as u32,
+                eff_max_rpm,
+                applied_duty,
+                target_pct,
             );
             off_log_ms = 0;
         }
@@ -547,12 +642,10 @@ async fn read_temp_c_raw_conv() -> (u8, f32) {
     regs.sar_tsens_ctrl()
         .modify(|_, w| w.sar_tsens_dump_out().clear_bit());
 
-    // Read current TSENS_DAC value and derive dac_offset as a negative integer
-    let tsens_dac = unsafe { esp_rom_regi2c_read(0x69, 1, 0x06) } & 0x0F;
-    let dac_offset: i8 = -(tsens_dac as i8);
     let raw_f = raw as f32;
-    let t_c =
-        TSENS_ADC_FACTOR * raw_f - (TSENS_DAC_FACTOR * (dac_offset as f32)) - TSENS_SYS_OFFSET;
+    let t_c = TSENS_ADC_FACTOR * raw_f
+        - (TSENS_DAC_FACTOR * (TSENS_DAC_OFFSET as f32))
+        - TSENS_SYS_OFFSET;
     (raw, t_c)
 }
 

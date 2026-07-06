@@ -11,7 +11,7 @@
 
 extern crate alloc;
 
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering};
 use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_time::{with_timeout, Duration, Instant, Timer};
@@ -34,6 +34,7 @@ mod boot_diag;
 mod buzzer;
 mod device_contract;
 mod device_identity;
+mod hardware_snapshot;
 mod http_api_v1;
 mod hub_sideband;
 mod mdns;
@@ -54,6 +55,7 @@ use boot_diag::{
     fault_label, outcome_label, state_label, BootFaultCode, BootOutcome, BootSelfCheckSnapshot,
     BootStage, GateDecision, SelfCheckItemState, SysCheck,
 };
+use hardware_snapshot as hwdiag;
 
 // No global mutex in MVP
 
@@ -133,6 +135,10 @@ enum PowerSwitchTarget {
 
 // Global intent per docs/software_design.md 0.1
 static PWR_SW_TARGET: AtomicU8 = AtomicU8::new(PowerSwitchTarget::Open as u8);
+static POWER_LATEST_VIN_MV: AtomicI32 = AtomicI32::new(0);
+static POWER_LATEST_PG_GOOD: AtomicBool = AtomicBool::new(false);
+static POWER_LATEST_READY: AtomicBool = AtomicBool::new(false);
+static POWER_LATEST_FAULT: AtomicU8 = AtomicU8::new(3);
 
 // No shared snapshot; status task logs directly
 
@@ -213,6 +219,7 @@ const PORT_OCP_RELEASE_SAFE_SAMPLES: u8 = 4;
 const USB_REPLUG_HOLDOFF_TICKS: u8 = 2;
 const RUNTIME_SAMPLE_PERIOD_MS: u64 = 500;
 const RUNTIME_IDLE_SLICE_MS: u64 = 20;
+const DIAG_SNAPSHOT_PERIOD_TICKS: u32 = 20;
 const FRONT_DIAG_FRONT_MASK: u8 = 1 << 0;
 const FRONT_DIAG_HUB_MASK: u8 = 1 << 1;
 const FRONT_DIAG_INPUT_INA_MASK: u8 = 1 << 2;
@@ -275,19 +282,180 @@ async fn sample_module_ina226(
     ch: u8,
     sensor_bus: &'static SharedI2cBus,
     hub_bus: &'static SharedI2cBus,
-) -> Option<(u32, u32)> {
+) -> hwdiag::Ina226Runtime {
     let (module_bus, _) = module_i2c_bus(ch, sensor_bus, hub_bus);
+    let mut i2c = I2cDevice::new(module_bus);
+    let (ina_addr, _) = module_addr_pair(ch);
+    let mut config = match i2c_read_u16(&mut i2c, ina_addr, 0x00).await {
+        Some(value) => value,
+        None => {
+            return hwdiag::Ina226Runtime {
+                state: hwdiag::NodeState::Error,
+                reason: "config_read_failed",
+                ..hwdiag::Ina226Runtime::skipped("config_read_failed")
+            };
+        }
+    };
+    let mut shunt_voltage = match i2c_read_u16(&mut i2c, ina_addr, 0x01).await {
+        Some(value) => value,
+        None => {
+            return hwdiag::Ina226Runtime {
+                state: hwdiag::NodeState::Error,
+                reason: "shunt_voltage_read_failed",
+                ..hwdiag::Ina226Runtime::skipped("shunt_voltage_read_failed")
+            };
+        }
+    };
+    let mut bus_voltage = match i2c_read_u16(&mut i2c, ina_addr, 0x02).await {
+        Some(value) => value,
+        None => {
+            return hwdiag::Ina226Runtime {
+                state: hwdiag::NodeState::Error,
+                reason: "bus_voltage_read_failed",
+                ..hwdiag::Ina226Runtime::skipped("bus_voltage_read_failed")
+            };
+        }
+    };
+    let mut power = i2c_read_u16(&mut i2c, ina_addr, 0x03).await.unwrap_or(0);
+    let mut current = i2c_read_u16(&mut i2c, ina_addr, 0x04).await.unwrap_or(0);
+    let mut calibration = i2c_read_u16(&mut i2c, ina_addr, 0x05).await.unwrap_or(0);
+    let mut mask_enable = i2c_read_u16(&mut i2c, ina_addr, 0x06).await.unwrap_or(0);
+    let mut alert_limit = i2c_read_u16(&mut i2c, ina_addr, 0x07).await.unwrap_or(0);
+    let mut manufacturer_id = i2c_read_u16(&mut i2c, ina_addr, 0xFE).await.unwrap_or(0);
+    let mut die_id = i2c_read_u16(&mut i2c, ina_addr, 0xFF).await.unwrap_or(0);
+
+    // Keep the existing driver path as the calibrated voltage source used by runtime UI/OCP.
     let i2c = I2cDevice::new(module_bus);
     let mut dev = ina226::INA226::new(None);
-    let (ina_addr, _) = module_addr_pair(ch);
     dev.set_ina_address(ina_addr);
-    let mut ina = dev.initialize(i2c).await.ok()?;
+    let mut ina = match dev.initialize(i2c).await {
+        Ok(ina) => ina,
+        Err(_) => {
+            return hwdiag::Ina226Runtime {
+                state: hwdiag::NodeState::Error,
+                reason: "driver_init_failed",
+                registers: hwdiag::Ina226Registers {
+                    config,
+                    shunt_voltage,
+                    bus_voltage,
+                    power,
+                    current,
+                    calibration,
+                    mask_enable,
+                    alert_limit,
+                    manufacturer_id,
+                    die_id,
+                },
+                ..hwdiag::Ina226Runtime::skipped("driver_init_failed")
+            };
+        }
+    };
+    let mut i2c_after_init = I2cDevice::new(module_bus);
+    config = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x00)
+        .await
+        .unwrap_or(config);
+    shunt_voltage = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x01)
+        .await
+        .unwrap_or(shunt_voltage);
+    bus_voltage = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x02)
+        .await
+        .unwrap_or(bus_voltage);
+    power = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x03)
+        .await
+        .unwrap_or(power);
+    current = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x04)
+        .await
+        .unwrap_or(current);
+    calibration = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x05)
+        .await
+        .unwrap_or(calibration);
+    mask_enable = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x06)
+        .await
+        .unwrap_or(mask_enable);
+    alert_limit = i2c_read_u16(&mut i2c_after_init, ina_addr, 0x07)
+        .await
+        .unwrap_or(alert_limit);
+    manufacturer_id = i2c_read_u16(&mut i2c_after_init, ina_addr, 0xFE)
+        .await
+        .unwrap_or(manufacturer_id);
+    die_id = i2c_read_u16(&mut i2c_after_init, ina_addr, 0xFF)
+        .await
+        .unwrap_or(die_id);
     let vbus_mv = (ina.read_voltage().await * 1000.0) as u32;
-    let raw = ina.read_raw_shunt_voltage().await;
-    let signed = i16::from_be_bytes(raw.to_be_bytes());
+    let signed = i16::from_be_bytes(shunt_voltage.to_be_bytes());
     let shunt_v = signed as f32 * INA226_SHUNT_LSB_V;
     let current_ma = ((shunt_v / SHUNT_RESISTANCE_OHMS).abs() * 1000.0) as u32;
-    Some((vbus_mv, current_ma))
+    hwdiag::Ina226Runtime {
+        state: hwdiag::NodeState::Online,
+        reason: "-",
+        bus_voltage_mv: vbus_mv,
+        shunt_voltage_uv: (shunt_v * 1_000_000.0) as i32,
+        current_ma,
+        registers: hwdiag::Ina226Registers {
+            config,
+            shunt_voltage,
+            bus_voltage,
+            power,
+            current,
+            calibration,
+            mask_enable,
+            alert_limit,
+            manufacturer_id,
+            die_id,
+        },
+    }
+}
+
+async fn i2c_read_u16<I2C: embedded_hal_async::i2c::I2c>(
+    i2c: &mut I2C,
+    addr: u8,
+    reg: u8,
+) -> Option<u16> {
+    let mut bytes = [0u8; 2];
+    embedded_hal_async::i2c::I2c::write_read(i2c, addr, &[reg], &mut bytes)
+        .await
+        .ok()?;
+    Some(u16::from_be_bytes(bytes))
+}
+
+async fn sample_module_tmp112(
+    ch: u8,
+    sensor_bus: &'static SharedI2cBus,
+    hub_bus: &'static SharedI2cBus,
+) -> hwdiag::Tmp112Runtime {
+    let (module_bus, _) = module_i2c_bus(ch, sensor_bus, hub_bus);
+    let mut i2c = I2cDevice::new(module_bus);
+    let (_, tmp_addr) = module_addr_pair(ch);
+    let temperature = match i2c_read_u16(&mut i2c, tmp_addr, 0x00).await {
+        Some(value) => value,
+        None => {
+            return hwdiag::Tmp112Runtime {
+                state: hwdiag::NodeState::Error,
+                reason: "temperature_read_failed",
+                ..hwdiag::Tmp112Runtime::skipped("temperature_read_failed")
+            };
+        }
+    };
+    let config = i2c_read_u16(&mut i2c, tmp_addr, 0x01).await.unwrap_or(0);
+    let t_low = i2c_read_u16(&mut i2c, tmp_addr, 0x02).await.unwrap_or(0);
+    let t_high = i2c_read_u16(&mut i2c, tmp_addr, 0x03).await.unwrap_or(0);
+    let raw12 = ((temperature as i16) >> 4) & 0x0FFF;
+    let signed = if (raw12 & 0x0800) != 0 {
+        raw12 | !0x0FFF
+    } else {
+        raw12
+    };
+    hwdiag::Tmp112Runtime {
+        state: hwdiag::NodeState::Online,
+        reason: "-",
+        temperature_milli_c: signed as i32 * 625 / 10,
+        registers: hwdiag::Tmp112Registers {
+            temperature,
+            config,
+            t_low,
+            t_high,
+        },
+    }
 }
 
 // Diagnostic scan is limited to board-relevant address windows.
@@ -549,6 +717,221 @@ fn set_port_enable(ch: u8, enabled: bool, port_enables: &mut [Output<'static>; 4
     }
 }
 
+fn target_closed() -> bool {
+    PWR_SW_TARGET.load(Ordering::Relaxed) != (PowerSwitchTarget::Open as u8)
+}
+
+fn power_fault_tag(fault: BootFaultCode) -> u8 {
+    match fault {
+        BootFaultCode::None => 0,
+        BootFaultCode::PowerInUnavailable => 1,
+        BootFaultCode::PowerInPgBad => 2,
+        BootFaultCode::InaUnavailable => 3,
+        _ => 1,
+    }
+}
+
+fn power_fault_from_tag(tag: u8) -> BootFaultCode {
+    match tag {
+        0 => BootFaultCode::None,
+        2 => BootFaultCode::PowerInPgBad,
+        3 => BootFaultCode::InaUnavailable,
+        _ => BootFaultCode::PowerInUnavailable,
+    }
+}
+
+fn infer_power_fault(pg_good: bool) -> BootFaultCode {
+    if pg_good {
+        BootFaultCode::PowerInUnavailable
+    } else {
+        BootFaultCode::PowerInPgBad
+    }
+}
+
+fn update_power_latest(vin_v: f32, pg_good: bool, ready: bool, fault_hint: Option<BootFaultCode>) {
+    let vin_mv = (vin_v * 1000.0) as i32;
+    let vin_min_mv = (VIN_MIN_V * 1000.0) as i32;
+    let vin_max_mv = (VIN_MAX_V * 1000.0) as i32;
+    let runtime_ready = ready && pg_good && (vin_min_mv..=vin_max_mv).contains(&vin_mv);
+    let previous_fault = power_fault_from_tag(POWER_LATEST_FAULT.load(Ordering::Relaxed));
+    let fault = if runtime_ready {
+        BootFaultCode::None
+    } else if let Some(fault) = fault_hint {
+        fault
+    } else if previous_fault == BootFaultCode::InaUnavailable {
+        previous_fault
+    } else {
+        infer_power_fault(pg_good)
+    };
+    POWER_LATEST_VIN_MV.store(vin_mv, Ordering::Relaxed);
+    POWER_LATEST_PG_GOOD.store(pg_good, Ordering::Relaxed);
+    POWER_LATEST_READY.store(runtime_ready, Ordering::Relaxed);
+    POWER_LATEST_FAULT.store(power_fault_tag(fault), Ordering::Relaxed);
+}
+
+fn latest_power_snapshot() -> hwdiag::PowerInputSnapshot {
+    let vin_mv = POWER_LATEST_VIN_MV.load(Ordering::Relaxed);
+    let pg_good = POWER_LATEST_PG_GOOD.load(Ordering::Relaxed);
+    let ready = POWER_LATEST_READY.load(Ordering::Relaxed);
+    let fault = power_fault_from_tag(POWER_LATEST_FAULT.load(Ordering::Relaxed));
+    hwdiag::PowerInputSnapshot {
+        present: fault != BootFaultCode::InaUnavailable,
+        state: if ready {
+            SelfCheckItemState::Ok
+        } else {
+            SelfCheckItemState::Fatal
+        },
+        fault: if ready {
+            fault_label(BootFaultCode::None)
+        } else {
+            fault_label(fault)
+        },
+        vin_mv,
+        pg_good,
+        ready,
+        target_closed: target_closed(),
+    }
+}
+
+fn diag_ports_from_samples(
+    samples: &[PortSample; 4],
+    manual_enabled: [bool; 4],
+) -> [hwdiag::PortRuntime; 4] {
+    let mut ports = [hwdiag::PortRuntime {
+        ui_state: "init",
+        scan_done: false,
+        ready: false,
+        sample_ok: false,
+        manual_enabled: false,
+        pwren_enabled: false,
+        en_enabled: false,
+        ocp_latched: false,
+        vbus_mv: 0,
+        current_ma: 0,
+        ina226: hwdiag::Ina226Runtime::skipped("runtime_not_sampled"),
+        tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_sampled"),
+    }; 4];
+    for (idx, port) in ports.iter_mut().enumerate() {
+        let sample = samples[idx];
+        let ready = CH_RDY[idx].load(Ordering::Relaxed);
+        *port = hwdiag::PortRuntime {
+            ui_state: port_state_label(sample.ui_state),
+            scan_done: CH_SCAN_DONE[idx].load(Ordering::Relaxed),
+            ready,
+            sample_ok: ready && sample.ui_state != UiPortState::Disconnected,
+            manual_enabled: manual_enabled[idx],
+            pwren_enabled: sample.pwren_enabled,
+            en_enabled: sample.en_enabled,
+            ocp_latched: sample.ocp_latched,
+            vbus_mv: sample.vbus_mv,
+            current_ma: sample.ich_ma,
+            ina226: sample.ina226,
+            tmp112: sample.tmp112,
+        };
+    }
+    ports
+}
+
+fn diag_ports_from_boot(gates: GateDecision, pwren_enabled: [bool; 4]) -> [hwdiag::PortRuntime; 4] {
+    let mut ports = [hwdiag::PortRuntime {
+        ui_state: "skipped",
+        scan_done: false,
+        ready: false,
+        sample_ok: false,
+        manual_enabled: true,
+        pwren_enabled: false,
+        en_enabled: false,
+        ocp_latched: false,
+        vbus_mv: 0,
+        current_ma: 0,
+        ina226: hwdiag::Ina226Runtime::skipped("runtime_not_started"),
+        tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_started"),
+    }; 4];
+    for (idx, port) in ports.iter_mut().enumerate() {
+        let scan_done = gates.allow_runtime_tasks && CH_SCAN_DONE[idx].load(Ordering::Relaxed);
+        let ready = CH_RDY[idx].load(Ordering::Relaxed);
+        *port = hwdiag::PortRuntime {
+            ui_state: if ready {
+                "ok"
+            } else if scan_done {
+                "disc"
+            } else {
+                "skipped"
+            },
+            scan_done,
+            ready,
+            sample_ok: ready,
+            manual_enabled: true,
+            pwren_enabled: pwren_enabled[idx],
+            en_enabled: gates.allow_port[idx],
+            ocp_latched: false,
+            vbus_mv: 0,
+            current_ma: 0,
+            ina226: hwdiag::Ina226Runtime::skipped("runtime_not_started"),
+            tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_started"),
+        };
+    }
+    ports
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn emit_diag_snapshot(
+    sequence: u32,
+    reset_reason: &'static str,
+    boot: &BootSelfCheckSnapshot,
+    power: hwdiag::PowerInputSnapshot,
+    i2c: hwdiag::I2cSnapshot,
+    sideband: Option<hub_sideband::Snapshot>,
+    sideband_state: hwdiag::NodeState,
+    front_state: hwdiag::NodeState,
+    mcu: hwdiag::McuSnapshot,
+    fan: hwdiag::FanSnapshot,
+    buzzer: hwdiag::BuzzerSnapshot,
+    ports: &[hwdiag::PortRuntime; 4],
+    probes: &[hwdiag::PortProbe; 4],
+) -> Option<heapless::String<12288>> {
+    let front = if front_state == hwdiag::NodeState::Online {
+        front_panel::snapshot(unsafe {
+            SENSOR_I2C_BUS_REF.expect("sensor I2C bus not initialized")
+        })
+        .await
+    } else {
+        None
+    };
+    let mut json: heapless::String<12288> = heapless::String::new();
+    let uptime_ms = esp_hal::time::Instant::now()
+        .duration_since_epoch()
+        .as_millis();
+    if hwdiag::write_snapshot_json(
+        &mut json,
+        sequence,
+        uptime_ms,
+        reset_reason,
+        boot,
+        power,
+        i2c,
+        sideband,
+        sideband_state,
+        front,
+        front_state,
+        mcu,
+        fan,
+        buzzer,
+        ports,
+        probes,
+        &MODULE_INA226_ADDRS,
+        &MODULE_TMP112_ADDRS,
+    )
+    .is_ok()
+    {
+        info!("diag.snapshot: {}", json.as_str());
+        Some(json)
+    } else {
+        warn!("diag.snapshot: render failed capacity=12288");
+        None
+    }
+}
+
 fn front_toggle_reject_reason(
     target: PowerSwitchTarget,
     port_ready: bool,
@@ -731,6 +1114,8 @@ struct PortSample {
     pwren_enabled: bool,
     en_enabled: bool,
     ocp_latched: bool,
+    ina226: hwdiag::Ina226Runtime,
+    tmp112: hwdiag::Tmp112Runtime,
 }
 
 impl PortSample {
@@ -895,6 +1280,7 @@ fn service_usb_jsonl(
     state: &mut UsbJsonlState<1024>,
     snapshot: UsbRuntimeSnapshot,
     version: &str,
+    hardware_snapshot: Option<&str>,
     ctx: &mut UsbJsonlServiceContext<'_>,
 ) -> Option<UsbAction> {
     let UsbJsonlServiceContext {
@@ -921,71 +1307,79 @@ fn service_usb_jsonl(
 
     for byte in bytes.iter().take(count) {
         match state.push_byte(*byte) {
-            Ok(Some(line)) => match usb_jsonl::handle_request(line.as_str(), snapshot, version) {
-                Ok(response) => {
-                    if let Some(log) = response.log.as_ref() {
-                        usb_write_line(serial, log.as_str());
-                    }
-                    usb_write_line(serial, response.response.as_str());
-                    match response.action {
-                        UsbAction::None => {}
-                        UsbAction::Reboot => {
-                            usb_write_line(
+            Ok(Some(line)) => {
+                match usb_jsonl::handle_request(line.as_str(), snapshot, version, hardware_snapshot)
+                {
+                    Ok(response) => {
+                        if let Some(log) = response.log.as_ref() {
+                            usb_write_line(serial, log.as_str());
+                        }
+                        usb_write_line(serial, response.response.as_str());
+                        match response.action {
+                            UsbAction::None => {}
+                            UsbAction::Reboot => {
+                                usb_write_line(
                                 serial,
                                 "{\"type\":\"log\",\"level\":\"warn\",\"target\":\"usb_jsonl\",\"message\":\"software reset now\"}",
                             );
-                            system::software_reset();
+                                system::software_reset();
+                            }
+                            UsbAction::PortPowerSet { index, enabled } => {
+                                let mut port_state = PortRuntimeState {
+                                    manual_enabled,
+                                    ocp_latched,
+                                    ocp_safe_samples,
+                                    ocp_retry_wait,
+                                    replug_countdown,
+                                };
+                                let _ = apply_port_action(
+                                    PortControlAction::PowerSet { index, enabled },
+                                    &mut port_state,
+                                    USB_REPLUG_HOLDOFF_TICKS,
+                                    |idx, enabled| {
+                                        set_port_enable(idx as u8, enabled, port_enables)
+                                    },
+                                );
+                            }
+                            UsbAction::WifiSet {
+                                psk_configured,
+                                ref ssid,
+                                ..
+                            } => {
+                                let _ =
+                                    apply_wifi_set_snapshot(wifi, ssid.as_str(), psk_configured);
+                            }
+                            UsbAction::WifiClear => {
+                                apply_wifi_clear_snapshot(wifi);
+                            }
+                            UsbAction::PortReplug { index } => {
+                                let mut port_state = PortRuntimeState {
+                                    manual_enabled,
+                                    ocp_latched,
+                                    ocp_safe_samples,
+                                    ocp_retry_wait,
+                                    replug_countdown,
+                                };
+                                let _ = apply_port_action(
+                                    PortControlAction::Replug { index },
+                                    &mut port_state,
+                                    USB_REPLUG_HOLDOFF_TICKS,
+                                    |idx, enabled| {
+                                        set_port_enable(idx as u8, enabled, port_enables)
+                                    },
+                                );
+                            }
                         }
-                        UsbAction::PortPowerSet { index, enabled } => {
-                            let mut port_state = PortRuntimeState {
-                                manual_enabled,
-                                ocp_latched,
-                                ocp_safe_samples,
-                                ocp_retry_wait,
-                                replug_countdown,
-                            };
-                            let _ = apply_port_action(
-                                PortControlAction::PowerSet { index, enabled },
-                                &mut port_state,
-                                USB_REPLUG_HOLDOFF_TICKS,
-                                |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
-                            );
-                        }
-                        UsbAction::WifiSet {
-                            psk_configured,
-                            ref ssid,
-                            ..
-                        } => {
-                            let _ = apply_wifi_set_snapshot(wifi, ssid.as_str(), psk_configured);
-                        }
-                        UsbAction::WifiClear => {
-                            apply_wifi_clear_snapshot(wifi);
-                        }
-                        UsbAction::PortReplug { index } => {
-                            let mut port_state = PortRuntimeState {
-                                manual_enabled,
-                                ocp_latched,
-                                ocp_safe_samples,
-                                ocp_retry_wait,
-                                replug_countdown,
-                            };
-                            let _ = apply_port_action(
-                                PortControlAction::Replug { index },
-                                &mut port_state,
-                                USB_REPLUG_HOLDOFF_TICKS,
-                                |idx, enabled| set_port_enable(idx as u8, enabled, port_enables),
-                            );
-                        }
+                        last_action = Some(response.action);
                     }
-                    last_action = Some(response.action);
+                    Err(error) => {
+                        usb_write_line(
+                            serial,
+                            usb_jsonl::render_protocol_error(None, error).as_str(),
+                        );
+                    }
                 }
-                Err(error) => {
-                    usb_write_line(
-                        serial,
-                        usb_jsonl::render_protocol_error(None, error).as_str(),
-                    );
-                }
-            },
+            }
             Ok(None) => {}
             Err(error) => {
                 usb_write_line(
@@ -1697,6 +2091,17 @@ async fn main(spawner: Spawner) {
     );
 
     let mut boot_snapshot = BootSelfCheckSnapshot::new();
+    let mut module_probes = [hwdiag::PortProbe::skipped(); 4];
+    let mut diag_sequence: u32 = 0;
+    let mut latest_diag_snapshot = heapless::String::<12288>::new();
+    let reset_reason_name = reset_reason_label(reset_reason);
+    let i2c_diag = hwdiag::I2cSnapshot {
+        topology: "dual_shared_bus",
+        mux_state: hwdiag::NodeState::Skipped,
+        mux_address: PCA9545_ADDR,
+        recovery_clocks: I2C_RECOVERY_CLOCKS,
+        reset_released_high: board_reset_released_high,
+    };
     boot_snapshot.set_stage(BootStage::SelfCheck);
     info!("boot.stage: stage=self-check");
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
@@ -1751,6 +2156,7 @@ async fn main(spawner: Spawner) {
                 if s.pg_good { "good" } else { "bad" },
                 if s.vin_on { "true" } else { "false" }
             );
+            update_power_latest(s.vin_v, s.pg_good, s.vin_on, None);
         }
     }
     spawner
@@ -1758,6 +2164,12 @@ async fn main(spawner: Spawner) {
         .expect("spawn power_in_log_task");
 
     let power_boot = power_in::bootstrap_signal().wait().await;
+    update_power_latest(
+        power_boot.vin_v,
+        power_boot.pg_good,
+        power_boot.ready,
+        Some(power_boot.fault),
+    );
     info!(
         "boot.check: name=vin state={} fault={} vin={}V pg={}",
         state_label(power_boot.state),
@@ -2002,6 +2414,19 @@ async fn main(spawner: Spawner) {
             tmp_tries
         );
 
+        module_probes[ch as usize] = hwdiag::PortProbe {
+            ina226: hwdiag::SensorProbe {
+                present: ina_ok,
+                method: ina_method,
+                tries: ina_tries,
+            },
+            tmp112: hwdiag::SensorProbe {
+                present: tmp_ok,
+                method: tmp_method,
+                tries: tmp_tries,
+            },
+        };
+
         if ina_ok && tmp_ok {
             info!("boot.check: name=port{} state=ok fault=-", ch + 1);
             CH_RDY[ch as usize].store(true, Ordering::Relaxed);
@@ -2109,6 +2534,66 @@ async fn main(spawner: Spawner) {
     );
     flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
 
+    let mut pre_runtime_sideband_state = if !power_boot.ready {
+        hwdiag::NodeState::Skipped
+    } else if hub_ctrl.is_some() {
+        hwdiag::NodeState::Error
+    } else {
+        hwdiag::NodeState::Offline
+    };
+    let pre_runtime_sideband = if let Some(ctrl) = hub_ctrl.as_mut() {
+        let mut hub_i2c = I2cDevice::new(hub_bus);
+        match ctrl.snapshot(&mut hub_i2c).await {
+            Ok(snapshot) => {
+                pre_runtime_sideband_state = hwdiag::NodeState::Online;
+                Some(snapshot)
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    let pre_runtime_pwren = pre_runtime_sideband
+        .map(|snapshot| snapshot.pwren_enabled)
+        .unwrap_or([false; 4]);
+    let pre_runtime_ports = diag_ports_from_boot(boot_snapshot.gates, pre_runtime_pwren);
+    if let Some(snapshot) = emit_diag_snapshot(
+        diag_sequence,
+        reset_reason_name,
+        &boot_snapshot,
+        latest_power_snapshot(),
+        i2c_diag,
+        pre_runtime_sideband,
+        pre_runtime_sideband_state,
+        if !power_boot.ready {
+            hwdiag::NodeState::Skipped
+        } else if boot_snapshot.gates.allow_front_panel {
+            hwdiag::NodeState::Online
+        } else {
+            hwdiag::NodeState::Offline
+        },
+        fan::mcu_snapshot(),
+        {
+            let mut snapshot = fan::snapshot(fan_ready);
+            snapshot.state = if power_boot.ready && fan_ready {
+                hwdiag::NodeState::Online
+            } else if power_boot.ready {
+                hwdiag::NodeState::Offline
+            } else {
+                hwdiag::NodeState::Skipped
+            };
+            snapshot
+        },
+        buzzer::snapshot(),
+        &pre_runtime_ports,
+        &module_probes,
+    )
+    .await
+    {
+        latest_diag_snapshot = snapshot;
+    }
+    diag_sequence = diag_sequence.wrapping_add(1);
+
     if boot_snapshot.outcome == BootOutcome::Fatal {
         loop {
             flush_boot_self_check(&mut disp, &boot_snapshot, false).await;
@@ -2189,6 +2674,8 @@ async fn main(spawner: Spawner) {
     }
     let mut port_output_active = boot_snapshot.gates.allow_port;
     let mut next_runtime_sample = Instant::now();
+    let mut sideband_runtime_fault = false;
+    let mut diag_tick: u32 = 0;
     loop {
         if let Some(network) = network.as_ref() {
             usb_wifi = network.state.lock().await.wifi;
@@ -2206,6 +2693,8 @@ async fn main(spawner: Spawner) {
                 pwren_enabled: false,
                 en_enabled: false,
                 ocp_latched: false,
+                ina226: hwdiag::Ina226Runtime::skipped("runtime_not_sampled"),
+                tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_sampled"),
             },
             PortSample {
                 connected: false,
@@ -2217,6 +2706,8 @@ async fn main(spawner: Spawner) {
                 pwren_enabled: false,
                 en_enabled: false,
                 ocp_latched: false,
+                ina226: hwdiag::Ina226Runtime::skipped("runtime_not_sampled"),
+                tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_sampled"),
             },
             PortSample {
                 connected: false,
@@ -2228,6 +2719,8 @@ async fn main(spawner: Spawner) {
                 pwren_enabled: false,
                 en_enabled: false,
                 ocp_latched: false,
+                ina226: hwdiag::Ina226Runtime::skipped("runtime_not_sampled"),
+                tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_sampled"),
             },
             PortSample {
                 connected: false,
@@ -2239,6 +2732,8 @@ async fn main(spawner: Spawner) {
                 pwren_enabled: false,
                 en_enabled: false,
                 ocp_latched: false,
+                ina226: hwdiag::Ina226Runtime::skipped("runtime_not_sampled"),
+                tmp112: hwdiag::Tmp112Runtime::skipped("runtime_not_sampled"),
             },
         ];
         let target = if PWR_SW_TARGET.load(Ordering::Relaxed) == (PowerSwitchTarget::Open as u8) {
@@ -2264,6 +2759,7 @@ async fn main(spawner: Spawner) {
                 "hub.sideband: runtime read failed addr=0x{:02X}; close all outputs",
                 hub_sideband::TCA6408_ADDR
             );
+            sideband_runtime_fault = true;
             hub_ctrl = None;
         }
         let sideband_online = hub_snapshot.is_some();
@@ -2314,6 +2810,16 @@ async fn main(spawner: Spawner) {
             view[idx].selected = idx == selected_port;
             view[idx].pwren_enabled = pwren_enabled[idx];
             view[idx].ocp_latched = ocp_latched[idx];
+            view[idx].ina226 = if module_probes[idx].ina226.present {
+                sample_module_ina226(ch, bus, hub_bus).await
+            } else {
+                hwdiag::Ina226Runtime::offline("no_ack_or_not_populated")
+            };
+            view[idx].tmp112 = if module_probes[idx].tmp112.present {
+                sample_module_tmp112(ch, bus, hub_bus).await
+            } else {
+                hwdiag::Tmp112Runtime::offline("no_ack_or_not_populated")
+            };
             if replug_countdown[idx] > 0 {
                 view[idx].ui_state = UiPortState::Closed;
                 desired_en[idx] = false;
@@ -2342,8 +2848,10 @@ async fn main(spawner: Spawner) {
             let mut keep_recovery_probe_enabled = false;
             if port_ready[idx] {
                 view[idx].connected = true;
-                match sample_module_ina226(ch, bus, hub_bus).await {
-                    Some((v_mv, i_ma)) => {
+                match view[idx].ina226.state {
+                    hwdiag::NodeState::Online => {
+                        let v_mv = view[idx].ina226.bus_voltage_mv;
+                        let i_ma = view[idx].ina226.current_ma;
                         view[idx].vbus_mv = v_mv;
                         view[idx].ich_ma = i_ma;
                         let ocp_decision = port_overcurrent(v_mv, i_ma);
@@ -2399,7 +2907,7 @@ async fn main(spawner: Spawner) {
                             buzzer::play(tone);
                         }
                     }
-                    None => {
+                    _ => {
                         view[idx].connected = false;
                         view[idx].ui_state = UiPortState::Disconnected;
                     }
@@ -2514,6 +3022,42 @@ async fn main(spawner: Spawner) {
             &replug_countdown,
         );
         network_runtime::publish_snapshot(runtime_snapshot);
+        diag_tick = diag_tick.wrapping_add(1);
+        if diag_tick >= DIAG_SNAPSHOT_PERIOD_TICKS {
+            diag_tick = 0;
+            let diag_ports = diag_ports_from_samples(&view, manual_enabled);
+            let sideband_state = if sideband_runtime_fault {
+                hwdiag::NodeState::Error
+            } else if hub_snapshot.is_some() {
+                hwdiag::NodeState::Online
+            } else {
+                hwdiag::NodeState::Offline
+            };
+            if let Some(snapshot) = emit_diag_snapshot(
+                diag_sequence,
+                reset_reason_name,
+                &boot_snapshot,
+                latest_power_snapshot(),
+                i2c_diag,
+                hub_snapshot,
+                sideband_state,
+                if boot_snapshot.gates.allow_front_panel {
+                    hwdiag::NodeState::Online
+                } else {
+                    hwdiag::NodeState::Offline
+                },
+                fan::mcu_snapshot(),
+                fan::snapshot(fan_ready),
+                buzzer::snapshot(),
+                &diag_ports,
+                &module_probes,
+            )
+            .await
+            {
+                latest_diag_snapshot = snapshot;
+            }
+            diag_sequence = diag_sequence.wrapping_add(1);
+        }
         let mut usb_service = UsbJsonlServiceContext {
             manual_enabled: &mut manual_enabled,
             port_enables: &mut port_enables,
@@ -2528,6 +3072,11 @@ async fn main(spawner: Spawner) {
             &mut usb_jsonl,
             runtime_snapshot,
             env!("CARGO_PKG_VERSION"),
+            if latest_diag_snapshot.is_empty() {
+                None
+            } else {
+                Some(latest_diag_snapshot.as_str())
+            },
             &mut usb_service,
         );
         handle_usb_action_audio(&usb_action, &mut ocp_reason, &mut port_audio);
@@ -2638,6 +3187,11 @@ async fn main(spawner: Spawner) {
                 &mut usb_jsonl,
                 runtime_snapshot,
                 env!("CARGO_PKG_VERSION"),
+                if latest_diag_snapshot.is_empty() {
+                    None
+                } else {
+                    Some(latest_diag_snapshot.as_str())
+                },
                 &mut usb_service,
             );
             handle_usb_action_audio(&usb_action, &mut ocp_reason, &mut port_audio);

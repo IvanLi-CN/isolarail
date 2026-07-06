@@ -666,7 +666,9 @@ async fn verify_wifi_after_clear_timeout(state: &AppState, id: &str) -> anyhow::
                     }
                     return Ok(value);
                 }
-                last_error = Some(anyhow!("Wi-Fi settings still report configured credentials"));
+                last_error = Some(anyhow!(
+                    "Wi-Fi settings still report configured credentials"
+                ));
             }
             Err(err) => last_error = Some(err),
         }

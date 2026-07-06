@@ -23,6 +23,7 @@ enum Command {
     },
     Devices,
     Status(ApiSelectorArgs),
+    DiagSnapshot(ApiSelectorArgs),
     Hardware {
         #[command(subcommand)]
         command: HardwareCommand,

@@ -113,7 +113,7 @@ impl<const N: usize> Default for UsbJsonlState<N> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UsbResponse {
-    pub response: String<2048>,
+    pub response: String<16384>,
     pub log: Option<String<256>>,
     pub action: UsbAction,
 }
@@ -126,6 +126,7 @@ pub enum ProtocolError {
     InvalidPort,
     FrameTooLarge,
     InvalidWifiInput,
+    SnapshotUnavailable,
 }
 
 impl ProtocolError {
@@ -137,6 +138,7 @@ impl ProtocolError {
             Self::InvalidPort => "invalid_port",
             Self::FrameTooLarge => "frame_too_large",
             Self::InvalidWifiInput => "invalid_wifi_input",
+            Self::SnapshotUnavailable => "snapshot_unavailable",
         }
     }
 
@@ -148,6 +150,7 @@ impl ProtocolError {
             Self::InvalidPort => "requested port is outside the supported port1..port4 range",
             Self::FrameTooLarge => "request frame exceeds the line buffer capacity",
             Self::InvalidWifiInput => "wifi credentials are invalid",
+            Self::SnapshotUnavailable => "hardware snapshot is not available yet",
         }
     }
 }
@@ -207,6 +210,7 @@ pub fn handle_request(
     line: &str,
     snapshot: RuntimeSnapshot,
     version: &str,
+    hardware_snapshot: Option<&str>,
 ) -> Result<UsbResponse, ProtocolError> {
     let request = parse_request(line)?;
     match request.method {
@@ -225,6 +229,14 @@ pub fn handle_request(
             log: None,
             action: UsbAction::None,
         }),
+        "hardware.snapshot" => {
+            let snapshot_json = hardware_snapshot.ok_or(ProtocolError::SnapshotUnavailable)?;
+            Ok(UsbResponse {
+                response: render_simple_ok(request.id, snapshot_json),
+                log: None,
+                action: UsbAction::None,
+            })
+        }
         "wifi.set" => {
             let (ssid, psk) = validate_wifi_input(request.params.ssid, request.params.psk)?;
             let mut log = String::<256>::new();
@@ -399,8 +411,8 @@ fn parse_port_index(port: Option<&str>) -> Result<usize, ProtocolError> {
     port_index_from_id(port.ok_or(ProtocolError::MissingField)?).ok_or(ProtocolError::InvalidPort)
 }
 
-fn render_simple_ok(id: RequestId<'_>, result_json: &str) -> String<2048> {
-    let mut out = String::<2048>::new();
+fn render_simple_ok(id: RequestId<'_>, result_json: &str) -> String<16384> {
+    let mut out = String::<16384>::new();
     let _ = out.push_str("{\"id\":");
     id.write_json(&mut out);
     let _ = write!(out, ",\"ok\":true,\"result\":{}}}", result_json);
@@ -411,15 +423,15 @@ fn render_info_response(
     id: RequestId<'_>,
     snapshot: RuntimeSnapshot,
     version: &str,
-) -> String<2048> {
+) -> String<16384> {
     render_simple_ok(id, render_info_result(snapshot, version).as_str())
 }
 
-fn render_ports_response(id: RequestId<'_>, snapshot: RuntimeSnapshot) -> String<2048> {
+fn render_ports_response(id: RequestId<'_>, snapshot: RuntimeSnapshot) -> String<16384> {
     render_simple_ok(id, render_ports_result(snapshot).as_str())
 }
 
-fn render_wifi_response(id: RequestId<'_>, wifi: WifiSnapshot) -> String<2048> {
+fn render_wifi_response(id: RequestId<'_>, wifi: WifiSnapshot) -> String<16384> {
     render_simple_ok(id, render_wifi_result(wifi).as_str())
 }
 
@@ -495,6 +507,7 @@ mod tests {
             r#"{"id":7,"method":"info","params":{}}"#,
             sample_snapshot(),
             "0.1.0",
+            None,
         )
         .expect("numeric id should parse");
         assert!(numeric.response.contains(r#""id":7"#));
@@ -503,8 +516,24 @@ mod tests {
             r#"{"id":"devd-7","method":"info","params":{}}"#,
             sample_snapshot(),
             "0.1.0",
+            None,
         )
         .expect("string id should parse");
         assert!(string.response.contains(r#""id":"devd-7""#));
+    }
+
+    #[test]
+    fn returns_cached_hardware_snapshot() {
+        let response = handle_request(
+            r#"{"id":"diag-1","method":"hardware.snapshot","params":{}}"#,
+            sample_snapshot(),
+            "0.1.0",
+            Some(r#"{"schema":"iso-usb-hub.hardware.snapshot.v1","ports":[]}"#),
+        )
+        .expect("hardware snapshot should be served");
+        assert!(response.response.contains(r#""id":"diag-1""#));
+        assert!(response
+            .response
+            .contains(r#""schema":"iso-usb-hub.hardware.snapshot.v1""#));
     }
 }

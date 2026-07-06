@@ -51,13 +51,15 @@ just devd-help
 
 ### Hardware diagnostic snapshot
 
-Firmware emits a read-only hardware snapshot log frame:
+Firmware exposes a read-only hardware snapshot through the Local USB JSONL method
+`hardware.snapshot`. Use the project CLI/devd path:
 
-```text
-diag.snapshot: {"schema":"iso-usb-hub.hardware.snapshot.v1", ...}
+```bash
+SELECTOR='--device <device-id>' just diag-snapshot
+SELECTOR='--device <device-id>' just isohub --json diag-snapshot
 ```
 
-The snapshot covers input power, I²C topology, CH335F sideband, front panel, fan, boot self-check state, and four output modules. Optional front-panel and output-module devices report `online` / `offline` / `skipped` / `error` locally; absence of one node must not fail the whole snapshot.
+The snapshot covers input power, I²C topology, CH335F sideband, front panel, MCU internal temperature, fan control/telemetry, buzzer runtime state, boot self-check state, per-port hardware control gates, and four output modules. Output-module INA226/TMP112 nodes include read-only readings and register values when online, not just probe booleans. Optional front-panel and output-module devices report `online` / `offline` / `skipped` / `error` locally; absence of one node must not fail the whole snapshot.
 
 The Web app exposes the advanced hardware debug route under each device:
 
@@ -86,13 +88,15 @@ SELECTOR='--device <device-id>' SSID='Lab WiFi' PSK='secret' just wifi-set
 SELECTOR='--device <device-id>' just wifi-clear
 
 SELECTOR='--device <device-id>' TAIL=200 just device-monitor
+SELECTOR='--device <device-id>' just diag-snapshot
 SELECTOR='--device <device-id>' just diagnostics-export
 ```
 
 Notes:
 
 - `just device-monitor` reads the recent Local USB serial activity timeline from `isohub-devd`.
-- `just diagnostics-export` exports a companion-aggregated diagnostics snapshot built from the current `status`, `ports`, `wifi`, and recent serial session traces for the selected device.
+- `just diag-snapshot` returns the firmware `iso-usb-hub.hardware.snapshot.v1` object.
+- `just diagnostics-export` exports a companion-aggregated diagnostics snapshot built from the current `status`, `ports`, `wifi`, `hardware_snapshot`, and recent serial session traces for the selected device.
 
 To restrict companion discovery and Local USB operations to one specific serial device during development, pass `USB_PORT`:
 

@@ -58,6 +58,10 @@ fn router(state: AppState, web_root: Option<PathBuf>, allow_dev_cors: bool) -> R
             post(device_flash_upload),
         )
         .route("/api/v1/devices/{id}/reset", post(device_reset))
+        .route(
+            "/api/v1/devices/{id}/diag-snapshot",
+            get(device_diag_snapshot),
+        )
         .route("/api/v1/devices/{id}/diagnostics", get(device_diagnostics))
         .route("/api/v1/serial/lease", post(create_lease))
         .route(
@@ -341,6 +345,26 @@ async fn device_ports(
     }
     match usb_jsonl_request(&state, &id, "ports.get", None).await {
         Ok(value) => Json(redact_sensitive(&value)).into_response(),
+        Err(err) => error_from_anyhow(err),
+    }
+}
+
+async fn device_diag_snapshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(response) = require_auth(&headers, &state) {
+        return *response;
+    }
+    if let Err(err) = require_compatible_project_firmware_fast(&state, &id).await {
+        return error_from_anyhow(err);
+    }
+    match usb_jsonl_request(&state, &id, "hardware.snapshot", None).await {
+        Ok(value) => {
+            let snapshot = value.get("result").cloned().unwrap_or(value);
+            Json(redact_sensitive(&snapshot)).into_response()
+        }
         Err(err) => error_from_anyhow(err),
     }
 }

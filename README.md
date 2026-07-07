@@ -13,6 +13,15 @@ Owner-facing naming is fixed as:
 
 ![IsolaRail product hero](docs/assets/usb-c-hub-product-hero.png)
 
+## Brand assets
+
+Project brand assets live in [docs/assets/brand](docs/assets/brand/README.md):
+
+- Primary logo: [isolarail-logo-lockup.png](docs/assets/brand/isolarail-logo-lockup.png)
+- App icon: [isolarail-app-icon.png](docs/assets/brand/isolarail-app-icon.png)
+- Poster: [isolarail-poster.png](docs/assets/brand/isolarail-poster.png)
+- GitHub social preview: [isolarail-github-social-preview.png](docs/assets/brand/isolarail-github-social-preview.png)
+
 ## Developer entrypoints
 
 Use `just` as the only normal developer entrypoint.

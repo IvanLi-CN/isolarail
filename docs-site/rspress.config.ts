@@ -3,6 +3,10 @@ import path from 'node:path';
 
 const docsBase = process.env.DOCS_BASE ?? '/';
 const normalizedBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
+const docsSiteUrl = process.env.DOCS_SITE_URL ?? 'https://ivanli-cn.github.io';
+const normalizedSiteUrl = docsSiteUrl.endsWith('/') ? docsSiteUrl.slice(0, -1) : docsSiteUrl;
+const assetPath = (asset: string) => `${normalizedBase}${asset.replace(/^\/+/, '')}`;
+const absoluteAssetUrl = (asset: string) => `${normalizedSiteUrl}${assetPath(asset)}`;
 
 const zhNav = [
   { text: '快速开始', link: '/zh/start/quick-start' },
@@ -126,7 +130,36 @@ export default defineConfig({
     ),
   title: 'IsolaRail',
   description: 'Bilingual product and engineering documentation for IsolaRail.',
+  logo: assetPath('brand/isolarail-mark.svg'),
   logoText: 'IsolaRail',
+  icon: '/brand/isolarail-app-icon.svg',
+  head: [
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'IsolaRail' }],
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content: 'Isolated USB power control for bench bring-up.',
+      },
+    ],
+    ['meta', { property: 'og:image', content: absoluteAssetUrl('brand/isolarail-social-preview.png') }],
+    ['meta', { property: 'og:image:width', content: '1280' }],
+    ['meta', { property: 'og:image:height', content: '640' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 'IsolaRail' }],
+    [
+      'meta',
+      {
+        name: 'twitter:description',
+        content: 'Isolated USB power control for bench bring-up.',
+      },
+    ],
+    ['meta', { name: 'twitter:image', content: absoluteAssetUrl('brand/isolarail-social-preview.png') }],
+    ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: assetPath('brand/apple-touch-icon.png') }],
+    ['link', { rel: 'manifest', href: assetPath('site.webmanifest') }],
+    ['meta', { name: 'theme-color', content: '#17231f' }],
+  ],
   outDir: 'doc_build',
   globalStyles: path.join(__dirname, 'styles/global.css'),
   route: {

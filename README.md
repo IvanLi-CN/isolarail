@@ -13,6 +13,12 @@ Owner-facing naming is fixed as:
 
 ![IsolaRail product hero](docs/assets/usb-c-hub-product-hero.png)
 
+## Brand assets
+
+Canonical logo, app icon, poster, and GitHub social preview assets live in
+[docs/brand_assets.md](docs/brand_assets.md). Regenerate them with
+`python3 scripts/generate_brand_assets.py`.
+
 ## Developer entrypoints
 
 Use `just` as the only normal developer entrypoint.
@@ -234,6 +240,7 @@ Additional quality gates that remain part of the expected developer workflow, bu
 ## Reference docs
 
 - [docs-site](docs-site/docs/zh/index.mdx)
+- [docs/brand_assets.md](docs/brand_assets.md)
 - [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
 - [docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md](docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md)
 - [docs/software_design.md](docs/software_design.md)

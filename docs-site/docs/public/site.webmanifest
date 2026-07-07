@@ -1,0 +1,22 @@
+{
+  "name": "IsolaRail",
+  "short_name": "IsolaRail",
+  "description": "Product and engineering documentation for the IsolaRail isolated USB hub.",
+  "icons": [
+    {
+      "src": "brand/isolarail-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "brand/isolarail-app-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#17231f",
+  "background_color": "#f7faf8",
+  "display": "standalone"
+}

@@ -38,7 +38,7 @@ const meta: Meta<typeof AppLayout> = {
                       device: devices[0],
                     })}
                   >
-                    <div className="h-screen" data-theme="isohub">
+                    <div className="h-screen" data-theme="isolarail">
                       <Story />
                     </div>
                   </AddDeviceUiProvider>
@@ -78,13 +78,13 @@ export const Default: Story = {
 export const Desktop: Story = {
   ...Default,
   parameters: {
-    viewport: { defaultViewport: "isohubDesktop" },
+    viewport: { defaultViewport: "isolarailDesktop" },
   },
 };
 
 export const Mobile: Story = {
   ...Default,
   parameters: {
-    viewport: { defaultViewport: "isohubMobile" },
+    viewport: { defaultViewport: "isolarailMobile" },
   },
 };

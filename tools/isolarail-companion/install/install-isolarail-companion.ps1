@@ -7,18 +7,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoUrl = "https://github.com/IvanLi-CN/iso-usb-hub"
+$RepoUrl = "https://github.com/IvanLi-CN/isolarail"
 
 function Show-Usage {
     @"
-Install IsoHub companion tools for the current user.
+Install IsolaRail companion tools for the current user.
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File install-isohub-companion.ps1 [-Version <tag>] [-InstallDir <dir>] [-Force] [-DryRun]
+  powershell -ExecutionPolicy Bypass -File install-isolarail-companion.ps1 [-Version <tag>] [-InstallDir <dir>] [-Force] [-DryRun]
 
 Defaults:
   -Version latest
-  -InstallDir %LOCALAPPDATA%\Programs\IsoHub\bin
+  -InstallDir %LOCALAPPDATA%\Programs\IsolaRail\bin
 "@
 }
 
@@ -61,10 +61,10 @@ if (-not [Environment]::Is64BitOperatingSystem) {
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\IsoHub\bin"
+    $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\IsolaRail\bin"
 }
 
-$Archive = "isohub-companion-tools-windows-x86_64.tar.gz"
+$Archive = "isolarail-companion-tools-windows-x86_64.tar.gz"
 if ($Version -eq "latest") {
     $BaseUrl = "$RepoUrl/releases/latest/download"
 } else {
@@ -73,7 +73,7 @@ if ($Version -eq "latest") {
 $ArchiveUrl = "$BaseUrl/$Archive"
 $ChecksumUrl = "$BaseUrl/SHA256SUMS"
 
-Write-Host "IsoHub companion tools install plan"
+Write-Host "IsolaRail companion tools install plan"
 Write-Host "  source: $BaseUrl"
 Write-Host "  archive: $Archive"
 Write-Host "  install_dir: $InstallDir"
@@ -88,7 +88,7 @@ if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
     Fail "missing required command: tar"
 }
 
-$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("isohub-install-" + [Guid]::NewGuid())
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("isolarail-install-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
 try {
@@ -107,7 +107,7 @@ try {
     }
 
     $InstalledVersion = ""
-    $InstalledPath = Join-Path $InstallDir "isohub.exe"
+    $InstalledPath = Join-Path $InstallDir "isolarail.exe"
     if (Test-Path $InstalledPath) {
         try {
             $InstalledVersion = (& $InstalledPath --version 2>$null | Select-Object -First 1).Split(" ")[-1]
@@ -115,7 +115,7 @@ try {
             $InstalledVersion = ""
         }
     } else {
-        $Installed = Get-Command isohub -ErrorAction SilentlyContinue
+        $Installed = Get-Command isolarail -ErrorAction SilentlyContinue
         if ($Installed) {
             try {
                 $InstalledVersion = (& $Installed.Source --version 2>$null | Select-Object -First 1).Split(" ")[-1]
@@ -125,7 +125,7 @@ try {
         }
     }
     $DevdAvailable = $false
-    $DevdPath = Join-Path $InstallDir "isohub-devd.exe"
+    $DevdPath = Join-Path $InstallDir "isolarail-devd.exe"
     if (Test-Path $DevdPath) {
         try {
             & $DevdPath --help | Out-Null
@@ -134,7 +134,7 @@ try {
             $DevdAvailable = $false
         }
     } else {
-        $DevdCommand = Get-Command isohub-devd -ErrorAction SilentlyContinue
+        $DevdCommand = Get-Command isolarail-devd -ErrorAction SilentlyContinue
         if ($DevdCommand) {
             try {
                 & $DevdCommand.Source --help | Out-Null
@@ -149,11 +149,11 @@ try {
     if ($InstalledVersion -and $TargetVersion) {
         $Compare = Compare-Semver $TargetVersion $InstalledVersion
         if ($Compare -eq 0 -and -not $Force -and $DevdAvailable) {
-            Write-Host "isohub $InstalledVersion is already installed; use -Force to reinstall"
+            Write-Host "isolarail $InstalledVersion is already installed; use -Force to reinstall"
             exit 0
         }
         if ($Compare -lt 0 -and -not $Force) {
-            Fail "refusing to downgrade isohub $InstalledVersion to $TargetTag; use -Force to override"
+            Fail "refusing to downgrade isolarail $InstalledVersion to $TargetTag; use -Force to override"
         }
     }
 
@@ -178,22 +178,22 @@ try {
     New-Item -ItemType Directory -Path $ExtractDir | Out-Null
     tar -xzf $ArchivePath -C $ExtractDir
 
-    $IsoHub = Join-Path $ExtractDir "isohub.exe"
-    $Devd = Join-Path $ExtractDir "isohub-devd.exe"
-    if (-not (Test-Path $IsoHub)) { Fail "archive missing isohub.exe" }
-    if (-not (Test-Path $Devd)) { Fail "archive missing isohub-devd.exe" }
+    $IsolaRail = Join-Path $ExtractDir "isolarail.exe"
+    $Devd = Join-Path $ExtractDir "isolarail-devd.exe"
+    if (-not (Test-Path $IsolaRail)) { Fail "archive missing isolarail.exe" }
+    if (-not (Test-Path $Devd)) { Fail "archive missing isolarail-devd.exe" }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    Copy-Item -Force $IsoHub (Join-Path $InstallDir "isohub.exe")
-    Copy-Item -Force $Devd (Join-Path $InstallDir "isohub-devd.exe")
+    Copy-Item -Force $IsolaRail (Join-Path $InstallDir "isolarail.exe")
+    Copy-Item -Force $Devd (Join-Path $InstallDir "isolarail-devd.exe")
 
-    & (Join-Path $InstallDir "isohub.exe") --help | Out-Null
-    & (Join-Path $InstallDir "isohub-devd.exe") --help | Out-Null
+    & (Join-Path $InstallDir "isolarail.exe") --help | Out-Null
+    & (Join-Path $InstallDir "isolarail-devd.exe") --help | Out-Null
 
-    Write-Host "installed IsoHub companion tools to $InstallDir"
+    Write-Host "installed IsolaRail companion tools to $InstallDir"
     $PathEntries = @($env:PATH -split ';') | Where-Object { $_ }
     if ($PathEntries -notcontains $InstallDir) {
-        Write-Host "PATH note: add this directory before using isohub from a new shell:"
+        Write-Host "PATH note: add this directory before using isolarail from a new shell:"
         Write-Host "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';$InstallDir', 'User')"
     }
 } finally {

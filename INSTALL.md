@@ -12,7 +12,7 @@ cargo install espflash
 cargo install just
 ```
 
-`espflash` is required because `isohub-devd` invokes it internally. Firmware flashing still goes through `just flash-monitor` or `PORT=/dev/cu.xxx just flash-first-time`, not through direct `espflash` commands.
+`espflash` is required because `isolarail-devd` invokes it internally. Firmware flashing still goes through `just flash-monitor` or `PORT=/dev/cu.xxx just flash-first-time`, not through direct `espflash` commands.
 
 Verify the setup:
 
@@ -33,23 +33,23 @@ just web-check
 
 ## Companion workspace
 
-The local companion workspace is isolated under `tools/isohub-companion/` so it does not inherit the firmware Xtensa target defaults.
+The local companion workspace is isolated under `tools/isolarail-companion/` so it does not inherit the firmware Xtensa target defaults.
 
 Verify it with:
 
 ```bash
 just tools-build
 just tools-test
-just isohub --help
+just isolarail --help
 just devd-help
 ```
 
 Notes:
 
 - Prefer the repo-root `just` commands for all normal companion development.
-- If you need raw Cargo, `cd tools/isohub-companion` first and run Cargo there.
-- Avoid `cargo --manifest-path tools/isohub-companion/Cargo.toml ...` from the repo root; the firmware Xtensa target default can leak into that invocation.
-- To constrain companion discovery and Local USB operations to one serial device, set `USB_PORT=/dev/cu.usbmodem...` on the `just` command. The workspace forwards it as `ISOHUB_USB_PORT`.
+- If you need raw Cargo, `cd tools/isolarail-companion` first and run Cargo there.
+- Avoid `cargo --manifest-path tools/isolarail-companion/Cargo.toml ...` from the repo root; the firmware Xtensa target default can leak into that invocation.
+- To constrain companion discovery and Local USB operations to one serial device, set `USB_PORT=/dev/cu.usbmodem...` on the `just` command. The workspace forwards it as `ISOLARAIL_USB_PORT`.
 - `just wifi-set` and `just wifi-clear` only support `--device` or USB-backed `--hardware`; Wi-Fi/LAN `--url` selectors remain read-only.
 - `just diagnostics-export` emits a companion-side diagnostics bundle derived from the current Local USB `status`, `ports`, `wifi`, and recent serial session activity.
 
@@ -76,16 +76,16 @@ When the browser needs Local USB or companion-backed storage, start the explicit
 
 ```bash
 BIND=127.0.0.1:51200 ALLOW_DEV_CORS=1 just devd-web
-DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
+DEVD_ORIGINS=http://isolarail-devd.local:51200,http://127.0.0.1:51200 just web-dev
 ```
 
 This is distinct from normal daemon mode:
 
 - `just devd-serve`: native IPC only
 - `just devd-web`: localhost Web companion for browser development and same-origin Web hosting
-- Both commands invoke the Rust `isohub-devd` binary directly from `tools/isohub-companion/`.
+- Both commands invoke the Rust `isolarail-devd` binary directly from `tools/isolarail-companion/`.
 
-Normal local device operation still goes through `isohub`; direct `devd` startup is only for development and diagnostics.
+Normal local device operation still goes through `isolarail`; direct `devd` startup is only for development and diagnostics.
 
 ## Hardware safety
 

@@ -441,7 +441,7 @@ export function stableLocalUsbDeviceId(portPath: string): string {
 export function devdLocalUsbDeviceIdFromBaseUrl(
   baseUrl: string,
 ): string | null {
-  const prefix = "isohub-devd://";
+  const prefix = "isolarail-devd://";
   if (!baseUrl.startsWith(prefix)) {
     return null;
   }
@@ -802,7 +802,7 @@ export class WebSerialJsonlTransport {
         this.pending.delete(key);
         reject(
           new Error(
-            "No IsoHub JSONL response received from this serial device.",
+            "No IsolaRail JSONL response received from this serial device.",
           ),
         );
       }, request.timeoutMs ?? DEFAULT_JSONL_TIMEOUT_MS);
@@ -957,7 +957,7 @@ export class WebSerialJsonlTransport {
       this.pending.delete(id);
       pending.resolve(parsed);
     } catch {
-      // Ignore boot logs or non-IsoHub serial output until a JSONL frame appears.
+      // Ignore boot logs or non-IsolaRail serial output until a JSONL frame appears.
     }
   }
 

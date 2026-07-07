@@ -13,8 +13,8 @@ import { HardwareDebugPage } from "./HardwareDebugPage";
 const devices: StoredDevice[] = [
   {
     id: "f1fb44",
-    name: "isohub-f1fb44",
-    baseUrl: "http://isohub-f1fb44.local",
+    name: "isolarail-f1fb44",
+    baseUrl: "http://isolarail-f1fb44.local",
   },
 ];
 
@@ -44,7 +44,7 @@ const meta: Meta<typeof HardwareDebugPage> = {
                   >
                     <div
                       className="min-h-screen bg-[var(--bg)] p-8"
-                      data-theme="isohub"
+                      data-theme="isolarail"
                     >
                       <Routes>
                         <Route
@@ -71,6 +71,6 @@ export const JsonExplorer: Story = {};
 
 export const Mobile: Story = {
   parameters: {
-    viewport: { defaultViewport: "isohubMobile" },
+    viewport: { defaultViewport: "isolarailMobile" },
   },
 };

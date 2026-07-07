@@ -1,6 +1,6 @@
-# 硬件连接概览（ISO USB Hub V3）
+# 硬件连接概览（IsolaRail V3）
 
-本文件汇总当前 `iso-usb-hub` V3 基线板的关键硬件连接关系，作为 README、控制面 spec 与软件设计文档之间共享的 current truth。owner-facing 设备模型固定为四路 `port1..port4`；历史 V2 `SC8815 + SW2303` / `PSTOP*` 方案不再作为本文件事实源。
+本文件汇总当前 `isolarail` V3 基线板的关键硬件连接关系，作为 README、控制面 spec 与软件设计文档之间共享的 current truth。owner-facing 设备模型固定为四路 `port1..port4`；历史 V2 `SC8815 + SW2303` / `PSTOP*` 方案不再作为本文件事实源。
 
 ## 适用范围
 

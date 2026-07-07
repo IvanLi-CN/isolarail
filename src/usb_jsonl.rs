@@ -528,12 +528,12 @@ mod tests {
             r#"{"id":"diag-1","method":"hardware.snapshot","params":{}}"#,
             sample_snapshot(),
             "0.1.0",
-            Some(r#"{"schema":"iso-usb-hub.hardware.snapshot.v1","ports":[]}"#),
+            Some(r#"{"schema":"isolarail.hardware.snapshot.v1","ports":[]}"#),
         )
         .expect("hardware snapshot should be served");
         assert!(response.response.contains(r#""id":"diag-1""#));
         assert!(response
             .response
-            .contains(r#""schema":"iso-usb-hub.hardware.snapshot.v1""#));
+            .contains(r#""schema":"isolarail.hardware.snapshot.v1""#));
     }
 }

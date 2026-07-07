@@ -27,20 +27,20 @@ cargo install just
 bun install --frozen-lockfile
 ```
 
-`espflash` 是 `isohub-devd` 后端路径的一部分，不是本项目的日常烧录入口。
+`espflash` 是 `isolarail-devd` 后端路径的一部分，不是本项目的日常烧录入口。
 
 ## 项目入口规则
 
 日常开发只从仓库根目录走 `just`。这样做不是为了包装命令，而是为了固定三件事：
 
 - ESP32-S3 固件始终走 `+esp` toolchain 和 `xtensa-esp32s3-none-elf` target。
-- 本机 companion 工具在 `tools/isohub-companion/` 的正确上下文中构建，避免根目录 Xtensa target 泄漏。
-- 烧录、reset、monitor 都先经过 `isohub` / `isohub-devd` 的身份检查，不会误操作无关板子。
+- 本机 companion 工具在 `tools/isolarail-companion/` 的正确上下文中构建，避免根目录 Xtensa target 泄漏。
+- 烧录、reset、monitor 都先经过 `isolarail` / `isolarail-devd` 的身份检查，不会误操作无关板子。
 
 不要把下面这些当作常规入口：
 
 - 裸 `espflash flash --monitor`
-- 从仓库根目录手写 `cargo --manifest-path tools/isohub-companion/Cargo.toml ...`
+- 从仓库根目录手写 `cargo --manifest-path tools/isolarail-companion/Cargo.toml ...`
 - 绕过 `SELECTOR` 的状态变更命令
 
 ## 构建固件
@@ -89,16 +89,16 @@ USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem2123410
 USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just device-monitor
 ```
 
-`USB_PORT` 会转发为 `ISOHUB_USB_PORT`，限制 scan、JSONL、flash、reset、monitor 只碰这一条串口路径。多块开发板同时接入时，这一步很重要。
+`USB_PORT` 会转发为 `ISOLARAIL_USB_PORT`，限制 scan、JSONL、flash、reset、monitor 只碰这一条串口路径。多块开发板同时接入时，这一步很重要。
 
 ## 使用本机控制面
 
-`isohub` 是命令行入口，`isohub-devd` 是本机 daemon。默认 daemon 模式是 native IPC：
+`isolarail` 是命令行入口，`isolarail-devd` 是本机 daemon。默认 daemon 模式是 native IPC：
 
 ```bash
 just tools-build
 just tools-test
-just isohub --help
+just isolarail --help
 just devd-help
 ```
 
@@ -156,7 +156,7 @@ DOCS_PORT=50885 bun run docs:preview
 DOCS_BASE=/preview/ bun run docs:build
 ```
 
-站内手写链接不依赖固定 `/iso-usb-hub/` 路径。
+站内手写链接不依赖固定 `/isolarail/` 路径。
 
 ## 本地质量门禁
 
@@ -166,7 +166,7 @@ DOCS_BASE=/preview/ bun run docs:build
 | --- | --- | --- |
 | 固件 | `just firmware-check` | 快速检查 ESP32-S3 固件 |
 | 固件 | `cargo +esp build --release --target xtensa-esp32s3-none-elf` | release 形态构建 |
-| companion | `just tools-build` | 构建 `isohub` 与 `isohub-devd` |
+| companion | `just tools-build` | 构建 `isolarail` 与 `isolarail-devd` |
 | companion | `just tools-test` | 本机工具测试 |
 | Web | `just web-check` / `just web-build` | 类型与前端构建 |
 | 文档站 | `bun run docs:build` | Rspress 静态构建 |

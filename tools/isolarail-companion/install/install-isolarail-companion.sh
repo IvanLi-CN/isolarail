@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="https://github.com/IvanLi-CN/iso-usb-hub"
+REPO_URL="https://github.com/IvanLi-CN/isolarail"
 VERSION="latest"
 INSTALL_DIR="${HOME}/.local/bin"
 FORCE=0
@@ -9,10 +9,10 @@ DRY_RUN=0
 
 usage() {
   cat <<'EOF'
-Install IsoHub companion tools for the current user.
+Install IsolaRail companion tools for the current user.
 
 Usage:
-  install-isohub-companion.sh [--version <tag>] [--install-dir <dir>] [--force] [--dry-run]
+  install-isolarail-companion.sh [--version <tag>] [--install-dir <dir>] [--force] [--dry-run]
 
 Defaults:
   --version latest
@@ -73,7 +73,7 @@ case "$(uname -s)" in
     ;;
 esac
 
-ARCHIVE="isohub-companion-tools-${SLUG}.tar.gz"
+ARCHIVE="isolarail-companion-tools-${SLUG}.tar.gz"
 if [ "$VERSION" = "latest" ]; then
   BASE_URL="${REPO_URL}/releases/latest/download"
 else
@@ -82,7 +82,7 @@ fi
 ARCHIVE_URL="${BASE_URL}/${ARCHIVE}"
 CHECKSUM_URL="${BASE_URL}/SHA256SUMS"
 
-printf 'IsoHub companion tools install plan\n'
+printf 'IsolaRail companion tools install plan\n'
 printf '  source: %s\n' "$BASE_URL"
 printf '  archive: %s\n' "$ARCHIVE"
 printf '  install_dir: %s\n' "$INSTALL_DIR"
@@ -139,21 +139,21 @@ semver_cmp() {
 }
 
 installed_version=""
-installed_isohub=""
-if [ -x "${INSTALL_DIR}/isohub" ]; then
-  installed_isohub="${INSTALL_DIR}/isohub"
-elif command -v isohub >/dev/null 2>&1; then
-  installed_isohub="$(command -v isohub)"
+installed_isolarail=""
+if [ -x "${INSTALL_DIR}/isolarail" ]; then
+  installed_isolarail="${INSTALL_DIR}/isolarail"
+elif command -v isolarail >/dev/null 2>&1; then
+  installed_isolarail="$(command -v isolarail)"
 fi
-if [ -n "$installed_isohub" ]; then
-  installed_version="$("$installed_isohub" --version 2>/dev/null | awk '{print $NF}' || true)"
+if [ -n "$installed_isolarail" ]; then
+  installed_version="$("$installed_isolarail" --version 2>/dev/null | awk '{print $NF}' || true)"
 fi
 devd_available=0
 installed_devd=""
-if [ -x "${INSTALL_DIR}/isohub-devd" ]; then
-  installed_devd="${INSTALL_DIR}/isohub-devd"
-elif command -v isohub-devd >/dev/null 2>&1; then
-  installed_devd="$(command -v isohub-devd)"
+if [ -x "${INSTALL_DIR}/isolarail-devd" ]; then
+  installed_devd="${INSTALL_DIR}/isolarail-devd"
+elif command -v isolarail-devd >/dev/null 2>&1; then
+  installed_devd="$(command -v isolarail-devd)"
 fi
 if [ -n "$installed_devd" ] && "$installed_devd" --help >/dev/null 2>&1; then
   devd_available=1
@@ -164,11 +164,11 @@ if [ -n "$installed_version" ] && [ -n "$target_version" ]; then
   installed_norm="$(normalize_version "$installed_version")"
   cmp="$(semver_cmp "$target_version" "$installed_norm")"
   if [ "$cmp" -eq 0 ] && [ "$FORCE" -ne 1 ] && [ "$devd_available" -eq 1 ]; then
-    printf 'isohub %s is already installed; use --force to reinstall\n' "$installed_version"
+    printf 'isolarail %s is already installed; use --force to reinstall\n' "$installed_version"
     exit 0
   fi
   if [ "$cmp" -lt 0 ] && [ "$FORCE" -ne 1 ]; then
-    die "refusing to downgrade isohub ${installed_version} to ${target_tag}; use --force to override"
+    die "refusing to downgrade isolarail ${installed_version} to ${target_tag}; use --force to override"
   fi
 fi
 
@@ -181,21 +181,21 @@ extract_dir="${tmp_dir}/extract"
 mkdir -p "$extract_dir"
 tar -xzf "$archive_path" -C "$extract_dir"
 
-[ -f "${extract_dir}/isohub" ] || die "archive missing isohub"
-[ -f "${extract_dir}/isohub-devd" ] || die "archive missing isohub-devd"
+[ -f "${extract_dir}/isolarail" ] || die "archive missing isolarail"
+[ -f "${extract_dir}/isolarail-devd" ] || die "archive missing isolarail-devd"
 
 mkdir -p "$INSTALL_DIR"
-install -m 0755 "${extract_dir}/isohub" "${INSTALL_DIR}/isohub"
-install -m 0755 "${extract_dir}/isohub-devd" "${INSTALL_DIR}/isohub-devd"
+install -m 0755 "${extract_dir}/isolarail" "${INSTALL_DIR}/isolarail"
+install -m 0755 "${extract_dir}/isolarail-devd" "${INSTALL_DIR}/isolarail-devd"
 
-"${INSTALL_DIR}/isohub" --help >/dev/null
-"${INSTALL_DIR}/isohub-devd" --help >/dev/null
+"${INSTALL_DIR}/isolarail" --help >/dev/null
+"${INSTALL_DIR}/isolarail-devd" --help >/dev/null
 
-printf 'installed IsoHub companion tools to %s\n' "$INSTALL_DIR"
+printf 'installed IsolaRail companion tools to %s\n' "$INSTALL_DIR"
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;
   *)
-    printf 'PATH note: add this directory before using isohub from a new shell:\n'
+    printf 'PATH note: add this directory before using isolarail from a new shell:\n'
     printf '  export PATH="%s:$PATH"\n' "$INSTALL_DIR"
     ;;
 esac

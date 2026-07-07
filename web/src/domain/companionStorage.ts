@@ -6,7 +6,7 @@ import {
   type StoredDevice,
 } from "./devices";
 
-const VALID_THEMES = ["isohub", "isohub-dark", "system"] as const;
+const VALID_THEMES = ["isolarail", "isolarail-dark", "system"] as const;
 
 type StorageError = { code?: string; message: string };
 
@@ -176,7 +176,7 @@ export async function fetchStoredTheme(
   const obj = json as StorageSettingsResponse | undefined;
   const theme = obj?.settings?.theme;
   if (!isThemeId(theme)) {
-    return { ok: true, value: "isohub" };
+    return { ok: true, value: "isolarail" };
   }
   return { ok: true, value: theme };
 }

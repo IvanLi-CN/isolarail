@@ -21,11 +21,11 @@ const HTTP_TXT_PATH: &str = "path=/";
 /// Configuration for the mDNS task.
 #[derive(Clone)]
 pub struct MdnsConfig {
-    /// Hostname without the `.local` suffix, e.g. `isohub-a1b2c3`.
+    /// Hostname without the `.local` suffix, e.g. `isolarail-a1b2c3`.
     pub hostname: String<32>,
-    /// Fully qualified `.local` hostname, e.g. `isohub-a1b2c3.local`.
+    /// Fully qualified `.local` hostname, e.g. `isolarail-a1b2c3.local`.
     pub hostname_fqdn: String<48>,
-    /// Service instance name, e.g. `isohub-a1b2c3._http._tcp.local`.
+    /// Service instance name, e.g. `isolarail-a1b2c3._http._tcp.local`.
     pub instance_name: String<64>,
     /// HTTP service port (currently 80).
     pub port: u16,
@@ -625,19 +625,19 @@ mod tests {
     #[test]
     fn hostname_and_fqdn_are_built_correctly() {
         let h = hostname_from_short_id("aabbcc");
-        assert_eq!(h.as_str(), "isohub-aabbcc");
+        assert_eq!(h.as_str(), "isolarail-aabbcc");
         let fqdn = fqdn_from_hostname(h.as_str());
-        assert_eq!(fqdn.as_str(), "isohub-aabbcc.local");
+        assert_eq!(fqdn.as_str(), "isolarail-aabbcc.local");
         let inst = service_instance_name(h.as_str());
-        assert_eq!(inst.as_str(), "isohub-aabbcc._http._tcp.local");
+        assert_eq!(inst.as_str(), "isolarail-aabbcc._http._tcp.local");
     }
 
     #[test]
     fn encode_decode_roundtrip_for_a_response() {
         let cfg = MdnsConfig {
-            hostname: String::from("isohub-aabbcc"),
-            hostname_fqdn: String::from("isohub-aabbcc.local"),
-            instance_name: String::from("isohub-aabbcc._http._tcp.local"),
+            hostname: String::from("isolarail-aabbcc"),
+            hostname_fqdn: String::from("isolarail-aabbcc.local"),
+            instance_name: String::from("isolarail-aabbcc._http._tcp.local"),
             port: 80,
         };
         let ip = Ipv4Address::new(192, 168, 1, 42);

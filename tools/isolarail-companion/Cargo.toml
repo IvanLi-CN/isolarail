@@ -1,5 +1,5 @@
 [package]
-name = "isohub-companion"
+name = "isolarail-companion"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
@@ -31,9 +31,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
 
 [[bin]]
-name = "isohub-devd"
-path = "src/bin/isohub-devd.rs"
+name = "isolarail-devd"
+path = "src/bin/isolarail-devd.rs"
 
 [[bin]]
-name = "isohub"
-path = "src/bin/isohub.rs"
+name = "isolarail"
+path = "src/bin/isolarail.rs"

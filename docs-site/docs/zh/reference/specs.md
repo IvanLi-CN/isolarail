@@ -28,16 +28,16 @@ description: 文档站关联的 canonical specs、项目文档与实现状态。
 | ID | 标题 | 状态 | 站点关联 |
 | --- | --- | --- | --- |
 | `pw97u` | 四路 USB Hub 控制面对齐 | 已完成 / 部分追踪 | 固件身份、CLI/daemon 命名、USB JSONL、HTTP、Web app、port model |
-| `q9d7h` | CLI/devd 烧录迁移 | 部分完成 | `isohub`、`isohub-devd`、身份校验、烧录与 monitor 路径 |
+| `q9d7h` | CLI/devd 烧录迁移 | 部分完成 | `isolarail`、`isolarail-devd`、身份校验、烧录与 monitor 路径 |
 | `h8c4s` | CH335F sideband 电源控制 | 部分完成 | `PWREN#`、`OVCUR#`、runtime 门控与 OCP latch |
 | `7gf6b` | 固件蜂鸣器音效 | 已完成 | GPIO7 LEDC PWM、音效优先级、告警循环和站内音效预览 |
 
-这些规格解释控制面为什么叫 `isohub` / `isohub-devd`，以及为什么 owner-facing 端口固定为 `port1..port4`。
+这些规格解释控制面为什么叫 `isolarail` / `isolarail-devd`，以及为什么 owner-facing 端口固定为 `port1..port4`。
 
 阅读建议：
 
 1. 先读 `pw97u`，理解 owner-facing 名称、端口模型和接口边界。
-2. 再读 `q9d7h`，理解为什么烧录、reset、monitor 必须走 `isohub` / `isohub-devd`。
+2. 再读 `q9d7h`，理解为什么烧录、reset、monitor 必须走 `isolarail` / `isolarail-devd`。
 3. 最后读 `h8c4s`，把 `PWREN#`、`OVCUR#`、OCP latch 和 dashboard 状态连起来。
 4. 修改提示音时读 `7gf6b`，并使用[蜂鸣器音效预览](../firmware/buzzer-audio-preview)
    页面检查时序。
@@ -84,9 +84,9 @@ description: 文档站关联的 canonical specs、项目文档与实现状态。
 
 站点页面可以压缩和重写上述内容，但不得改变：
 
-- 固件身份：`iso-usb-hub`
-- CLI：`isohub`
-- daemon：`isohub-devd`
+- 固件身份：`isolarail`
+- CLI：`isolarail`
+- daemon：`isolarail-devd`
 - 端口模型：`port1..port4`
 - 当前 V3 硬件基线
 - `port.replug` = 受控断电再上电

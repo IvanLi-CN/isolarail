@@ -37,7 +37,7 @@
 
 ### Out of scope
 
-- 不在本规格内交付 `isohub` / `isohub-devd` 侧的 CH335F 控制面产品化。
+- 不在本规格内交付 `isolarail` / `isolarail-devd` 侧的 CH335F 控制面产品化。
 - 输出模块硬件限流参数重标定。
 
 ## 需求
@@ -84,7 +84,7 @@
 
 - `cargo +esp check`
 - `cargo +esp build --release`
-- 真机 `just flash-monitor` 或 `cargo run --release` 验证可用时执行，二者均通过 `isohub` / `isohub-devd` 路径。
+- 真机 `just flash-monitor` 或 `cargo run --release` 验证可用时执行，二者均通过 `isolarail` / `isolarail-devd` 路径。
 
 ### UI / Visual Evidence
 

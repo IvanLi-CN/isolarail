@@ -2,7 +2,7 @@
 
 ## Identity
 
-ISO USB Hub documentation uses a restrained hardware-lab identity: pure white reading surfaces, near-black ink, saturated magenta as a sparing brand anchor, and green/cyan technical accents for electrical state and signal language.
+IsolaRail documentation uses a restrained hardware-lab identity: pure white reading surfaces, near-black ink, saturated magenta as a sparing brand anchor, and green/cyan technical accents for electrical state and signal language.
 
 ## Color
 

@@ -18,7 +18,7 @@ describe("readMigrationPayload", () => {
         {
           id: "demo",
           name: "Demo Hub",
-          baseUrl: "http://isohub-demo.local/path",
+          baseUrl: "http://isolarail-demo.local/path",
           lastSeenAt: "2026-01-01T00:00:00.000Z",
           transports: {
             httpBaseUrl: "http://192.168.1.23/status",
@@ -28,14 +28,14 @@ describe("readMigrationPayload", () => {
         },
       ]),
     );
-    localStorage.set(THEME_STORAGE_KEY, JSON.stringify("isohub"));
+    localStorage.set(THEME_STORAGE_KEY, JSON.stringify("isolarail"));
 
     expect(readMigrationPayload()).toEqual({
       devices: [
         {
           id: "demo",
           name: "Demo Hub",
-          baseUrl: "http://isohub-demo.local",
+          baseUrl: "http://isolarail-demo.local",
           lastSeenAt: "2026-01-01T00:00:00.000Z",
           transports: {
             httpBaseUrl: "http://192.168.1.23",
@@ -44,7 +44,7 @@ describe("readMigrationPayload", () => {
           },
         },
       ],
-      settings: { theme: "isohub" },
+      settings: { theme: "isolarail" },
     });
   });
 });

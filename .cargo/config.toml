@@ -3,7 +3,7 @@
 target = "xtensa-esp32s3-none-elf"
 
 [target.'cfg(target_arch = "xtensa")']
-runner    = "bash tools/isohub-runner"
+runner    = "bash tools/isolarail-runner"
 rustflags = [
   # Link script + defmt script
   "-C", "link-arg=-Wl,-Tlinkall.x",

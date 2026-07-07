@@ -5,4 +5,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${WORKSPACE_DIR}"
-exec cargo run --bin isohub-devd -- "$@"
+exec cargo run --bin isolarail-devd -- "$@"

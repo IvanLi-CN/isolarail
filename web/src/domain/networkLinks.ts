@@ -1,4 +1,4 @@
-const EVENT_NAME = "isohub-network-link";
+const EVENT_NAME = "isolarail-network-link";
 
 export type NetworkDeviceLink = {
   deviceId: string;

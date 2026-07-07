@@ -384,7 +384,7 @@ mod tests {
         let port4 = render_port_json(snapshot, 3).expect("port4");
         let wifi = render_wifi_json(snapshot.wifi);
         assert!(
-            render_info_json(snapshot, "0.1.0").contains("\"firmware\":{\"name\":\"iso-usb-hub\"")
+            render_info_json(snapshot, "0.1.0").contains("\"firmware\":{\"name\":\"isolarail\"")
         );
         assert!(render_ports_json(snapshot).contains("\"portId\":\"port4\""));
         assert!(port4.contains("\"overcurrent\":true"));
@@ -409,7 +409,7 @@ mod tests {
             other => panic!("unexpected outcome: {:?}", other),
         };
         assert_eq!(response.status, "200 OK");
-        assert!(response.body.contains("\"hostname\":\"isohub-ccddee\""));
+        assert!(response.body.contains("\"hostname\":\"isolarail-ccddee\""));
 
         let port = match handle_request("GET", "/api/v1/ports/port4", snapshot, "0.1.0") {
             ApiOutcome::Response(response) => response,

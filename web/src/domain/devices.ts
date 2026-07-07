@@ -1,4 +1,4 @@
-export const DEVICES_STORAGE_KEY = "isohub.devices";
+export const DEVICES_STORAGE_KEY = "isolarail.devices";
 
 export type StoredDevice = {
   id: string;

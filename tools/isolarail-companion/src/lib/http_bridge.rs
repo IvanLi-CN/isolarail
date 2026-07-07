@@ -1,7 +1,7 @@
 pub async fn serve_http_bridge(config: DevdConfig) -> anyhow::Result<()> {
     if !config.bind.ip().is_loopback() {
         return Err(anyhow!(
-            "isohub-devd web refuses non-loopback binds because /api/v1/bootstrap returns a local bearer token"
+            "isolarail-devd web refuses non-loopback binds because /api/v1/bootstrap returns a local bearer token"
         ));
     }
     let listener = TcpListener::bind(config.bind)
@@ -12,20 +12,20 @@ pub async fn serve_http_bridge(config: DevdConfig) -> anyhow::Result<()> {
     let mdns_advertiser = match crate::advertise_web_mdns(config.mdns_name.as_str(), port) {
         Ok(advertiser) => {
             tracing::info!(
-                "isohub-devd web mDNS published service={} port={}",
+                "isolarail-devd web mDNS published service={} port={}",
                 crate::WEB_MDNS_SERVICE_TYPE,
                 port
             );
             Some(advertiser)
         }
         Err(err) => {
-            tracing::warn!("isohub-devd web mDNS publish failed: {}", err);
+            tracing::warn!("isolarail-devd web mDNS publish failed: {}", err);
             None
         }
     };
 
     let router = router(state, config.web_root, config.allow_dev_cors);
-    tracing::info!("isohub-devd web listening on http://127.0.0.1:{port}");
+    tracing::info!("isolarail-devd web listening on http://127.0.0.1:{port}");
     let _mdns_advertiser = mdns_advertiser;
     axum::serve(listener, router).await?;
     Ok(())
@@ -115,7 +115,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Value> {
         token: state.token,
         agent_base_url: state.base_url,
         app: BootstrapApp {
-            name: "isohub-devd",
+            name: "isolarail-devd",
             version: release_version(),
             mode: "web",
         },
@@ -859,7 +859,7 @@ fn web_storage_group_device(profiles: &[&DeviceProfile]) -> Value {
         .clone()
         .unwrap_or_else(|| match &primary.transport {
             HardwareTransport::Http { base_url } => base_url.clone(),
-            HardwareTransport::Usb { device_id, .. } => format!("isohub-devd://{device_id}"),
+            HardwareTransport::Usb { device_id, .. } => format!("isolarail-devd://{device_id}"),
             HardwareTransport::WebSerial { label } => {
                 format!("webserial://{}", label.as_deref().unwrap_or(&primary.id))
             }
@@ -960,7 +960,7 @@ fn default_hostname_short_id(base_url: &str) -> Option<String> {
     let url = reqwest::Url::parse(base_url).ok()?;
     let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
     let host = host.strip_suffix(".local").unwrap_or(&host);
-    let short_id = host.strip_prefix("isohub-")?;
+    let short_id = host.strip_prefix("isolarail-")?;
     is_short_device_id(short_id).then(|| short_id.to_string())
 }
 
@@ -969,7 +969,7 @@ fn is_short_device_id(value: &str) -> bool {
 }
 
 fn hardware_transport_from_storage_url(base_url: &str) -> HardwareTransport {
-    if let Some(device_id) = base_url.strip_prefix("isohub-devd://") {
+    if let Some(device_id) = base_url.strip_prefix("isolarail-devd://") {
         HardwareTransport::Usb {
             device_id: device_id.to_string(),
             devd_url: None,

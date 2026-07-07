@@ -7,7 +7,7 @@ description: The 160x50 dashboard four-column layout, states, input mapping, and
 
 # Front Panel
 
-ISO USB Hub exposes local status through a 160x50 pixel dashboard aligned to the four physical ports. The complete layout spec is `docs/dashboard_spec.md`.
+IsolaRail exposes local status through a 160x50 pixel dashboard aligned to the four physical ports. The complete layout spec is `docs/dashboard_spec.md`.
 
 ## Layout
 

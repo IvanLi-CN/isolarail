@@ -245,23 +245,23 @@ fn devd_start_gate_path(endpoint: &str) -> PathBuf {
     std::hash::Hash::hash(&endpoint, &mut hasher);
     let hash = std::hash::Hasher::finish(&hasher);
     std::env::temp_dir()
-        .join("isohub")
+        .join("isolarail")
         .join(format!("devd-start-{hash:016x}.lock"))
 }
 
 fn start_devd(endpoint: &str) -> anyhow::Result<()> {
-    let devd_bin = std::env::var_os("ISOHUB_DEVD_BIN")
+    let devd_bin = std::env::var_os("ISOLARAIL_DEVD_BIN")
         .map(PathBuf::from)
         .or_else(|| {
             let mut path = std::env::current_exe().ok()?;
             let suffix = std::env::consts::EXE_SUFFIX;
-            path.set_file_name(format!("isohub-devd{suffix}"));
+            path.set_file_name(format!("isolarail-devd{suffix}"));
             Some(path)
         })
-        .ok_or_else(|| anyhow!("cannot resolve isohub-devd path"))?;
+        .ok_or_else(|| anyhow!("cannot resolve isolarail-devd path"))?;
     if !devd_bin.is_file() {
         return Err(anyhow!(
-            "isohub-devd was not found next to isohub; run `cargo build --manifest-path tools/isohub-companion/Cargo.toml --bin isohub-devd` or set ISOHUB_DEVD_BIN"
+            "isolarail-devd was not found next to isolarail; run `cargo build --manifest-path tools/isolarail-companion/Cargo.toml --bin isolarail-devd` or set ISOLARAIL_DEVD_BIN"
         ));
     }
     ProcessCommand::new(devd_bin)
@@ -272,7 +272,7 @@ fn start_devd(endpoint: &str) -> anyhow::Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("start isohub-devd IPC daemon")?;
+        .context("start isolarail-devd IPC daemon")?;
     Ok(())
 }
 
@@ -288,17 +288,17 @@ async fn wait_for_devd(endpoint: &str, method: &str, params: Value) -> anyhow::R
             }
         }
     }
-    Err(last_error.unwrap_or_else(|| anyhow!("isohub-devd IPC daemon did not start")))
+    Err(last_error.unwrap_or_else(|| anyhow!("isolarail-devd IPC daemon did not start")))
 }
 
 fn devd_start_timeout() -> Duration {
-    if let Ok(value) = std::env::var("ISOHUB_DEVD_START_TIMEOUT_SECS")
+    if let Ok(value) = std::env::var("ISOLARAIL_DEVD_START_TIMEOUT_SECS")
         && let Ok(seconds) = value.trim().parse::<u64>()
         && seconds > 0
     {
         return Duration::from_secs(seconds);
     }
-    if std::env::var_os("ISOHUB_DEVD_BIN").is_some() {
+    if std::env::var_os("ISOLARAIL_DEVD_BIN").is_some() {
         return Duration::from_secs(60);
     }
     Duration::from_secs(4)
@@ -590,7 +590,7 @@ async fn handle_hardware(
             let mut registry = read_hardware_registry()?;
             let before = registry.devices.len();
             registry.devices.retain(|device| device.id != id);
-            isohub_companion::write_hardware_registry(&registry)?;
+            isolarail_companion::write_hardware_registry(&registry)?;
             Ok(json!({"path": path, "id": id, "removed": before != registry.devices.len()}))
         }
     }

@@ -59,11 +59,11 @@ jobs:
     
     - name: Check build artifacts
       run: |
-        if [ ! -f target/xtensa-esp32s3-none-elf/release/iso-usb-hub ]; then
+        if [ ! -f target/xtensa-esp32s3-none-elf/release/isolarail ]; then
           echo "Build failed: main binary not found"
           exit 1
         fi
-        echo "Build successful: binary size $(stat -c%s target/xtensa-esp32s3-none-elf/release/iso-usb-hub) bytes"
+        echo "Build successful: binary size $(stat -c%s target/xtensa-esp32s3-none-elf/release/isolarail) bytes"
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -71,6 +71,6 @@ jobs:
       with:
         name: build-artifacts-${{ github.sha }}-esp32s3
         path: |
-          target/xtensa-esp32s3-none-elf/release/iso-usb-hub
+          target/xtensa-esp32s3-none-elf/release/isolarail
           target/xtensa-esp32s3-none-elf/release/examples/*
         retention-days: 7

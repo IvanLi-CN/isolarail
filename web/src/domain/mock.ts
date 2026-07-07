@@ -56,7 +56,7 @@ export function mockPortTelemetry(
 export function mockDeviceNetworkInfo(deviceId: string): MockDeviceNetworkInfo {
   const seed = hashString(deviceId);
   const ip = `192.168.${(seed >> 8) & 0xff}.${((seed >> 16) & 0xfe) + 1}`;
-  const hostname = `isohub-${deviceId.slice(0, 6) || "device"}.local`;
+  const hostname = `isolarail-${deviceId.slice(0, 6) || "device"}.local`;
   const mac = [
     0x02,
     seed & 0xff,

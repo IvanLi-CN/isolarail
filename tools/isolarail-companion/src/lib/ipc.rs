@@ -1,5 +1,5 @@
 pub async fn serve_ipc(config: IpcConfig) -> anyhow::Result<()> {
-    let state = AppState::new("ipc://isohub-devd");
+    let state = AppState::new("ipc://isolarail-devd");
     serve_ipc_with_state(config, state).await
 }
 
@@ -16,7 +16,7 @@ async fn serve_ipc_with_state(config: IpcConfig, state: AppState) -> anyhow::Res
     #[cfg(not(any(unix, windows)))]
     {
         let _ = (config, runtime);
-        Err(anyhow!("isohub-devd IPC is unsupported on this platform"))
+        Err(anyhow!("isolarail-devd IPC is unsupported on this platform"))
     }
 }
 
@@ -41,7 +41,7 @@ async fn serve_ipc_unix(config: IpcConfig, runtime: IpcRuntime) -> anyhow::Resul
         UnixListener::bind(&path).with_context(|| format!("bind IPC {}", path.display()))?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
         .with_context(|| format!("chmod {}", path.display()))?;
-    tracing::info!("isohub-devd IPC listening on {}", path.display());
+    tracing::info!("isolarail-devd IPC listening on {}", path.display());
     let cleanup_path = path.clone();
     loop {
         if let Some(idle_timeout) = config.idle_timeout {
@@ -52,7 +52,7 @@ async fn serve_ipc_unix(config: IpcConfig, runtime: IpcRuntime) -> anyhow::Resul
                 }
                 _ = tokio::time::sleep(idle_timeout) => {
                     if ipc_should_shutdown(&runtime, idle_timeout).await {
-                        tracing::info!("isohub-devd IPC idle timeout reached; shutting down");
+                        tracing::info!("isolarail-devd IPC idle timeout reached; shutting down");
                         break;
                     }
                 }
@@ -70,7 +70,7 @@ async fn serve_ipc_unix(config: IpcConfig, runtime: IpcRuntime) -> anyhow::Resul
 async fn serve_ipc_windows(config: IpcConfig, runtime: IpcRuntime) -> anyhow::Result<()> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
-    tracing::info!("isohub-devd IPC listening on {}", config.endpoint);
+    tracing::info!("isolarail-devd IPC listening on {}", config.endpoint);
     loop {
         let server = ServerOptions::new()
             .first_pipe_instance(false)
@@ -84,7 +84,7 @@ async fn serve_ipc_windows(config: IpcConfig, runtime: IpcRuntime) -> anyhow::Re
                 }
                 _ = tokio::time::sleep(idle_timeout) => {
                     if ipc_should_shutdown(&runtime, idle_timeout).await {
-                        tracing::info!("isohub-devd IPC idle timeout reached; shutting down");
+                        tracing::info!("isolarail-devd IPC idle timeout reached; shutting down");
                         break;
                     }
                 }
@@ -596,7 +596,7 @@ pub async fn ipc_call(endpoint: &str, method: &str, params: Value) -> anyhow::Re
     #[cfg(not(any(unix, windows)))]
     {
         let _ = (endpoint, request);
-        Err(anyhow!("isohub IPC is unsupported on this platform"))
+        Err(anyhow!("isolarail IPC is unsupported on this platform"))
     }
 }
 

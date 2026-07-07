@@ -30,7 +30,7 @@ html.rp-dark {
 .rspress-doc h1,
 .rspress-doc h2,
 .rspress-doc h3,
-.isohub-hero h1 {
+.isolarail-hero h1 {
   letter-spacing: 0;
   text-wrap: balance;
 }
@@ -52,19 +52,19 @@ html.rp-dark {
   display: none !important;
 }
 
-#__rspress_root .isohub-hero,
-#__rspress_root .isohub-evidence,
-#__rspress_root .isohub-doc-grid,
-#__rspress_root .isohub-note,
-#__rspress_root .isohub-warning,
-#__rspress_root .isohub-section-heading,
+#__rspress_root .isolarail-hero,
+#__rspress_root .isolarail-evidence,
+#__rspress_root .isolarail-doc-grid,
+#__rspress_root .isolarail-note,
+#__rspress_root .isolarail-warning,
+#__rspress_root .isolarail-section-heading,
 #__rspress_root > h2 {
   width: min(100% - 40px, 1320px);
   margin-left: auto;
   margin-right: auto;
 }
 
-.isohub-hero {
+.isolarail-hero {
   display: grid;
   grid-template-columns: minmax(0, 0.98fr) minmax(360px, 1.02fr);
   gap: clamp(32px, 5vw, 72px);
@@ -73,11 +73,11 @@ html.rp-dark {
   padding: clamp(40px, 7vw, 80px) 0 clamp(44px, 7vw, 84px);
 }
 
-.isohub-hero-copy {
+.isolarail-hero-copy {
   max-width: 760px;
 }
 
-.isohub-kicker {
+.isolarail-kicker {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -86,7 +86,7 @@ html.rp-dark {
   font-weight: 760;
 }
 
-.isohub-kicker::before {
+.isolarail-kicker::before {
   content: "";
   width: 12px;
   height: 12px;
@@ -94,7 +94,7 @@ html.rp-dark {
   background: var(--iso-accent);
 }
 
-.isohub-hero h1 {
+.isolarail-hero h1 {
   margin: 0;
   color: var(--iso-ink);
   font-size: 4rem;
@@ -102,7 +102,7 @@ html.rp-dark {
   overflow-wrap: anywhere;
 }
 
-.isohub-hero-lede {
+.isolarail-hero-lede {
   max-width: 68ch;
   margin: 26px 0 0;
   color: var(--iso-muted);
@@ -110,14 +110,14 @@ html.rp-dark {
   line-height: 1.72;
 }
 
-.isohub-actions {
+.isolarail-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 32px;
 }
 
-.isohub-button {
+.isolarail-button {
   display: inline-flex;
   min-width: 0;
   min-height: 44px;
@@ -129,18 +129,18 @@ html.rp-dark {
   text-decoration: none;
 }
 
-.isohub-button.primary {
+.isolarail-button.primary {
   background: var(--iso-primary);
   color: white;
 }
 
-.isohub-button.secondary {
+.isolarail-button.secondary {
   border: 1px solid var(--iso-line);
   color: var(--iso-ink);
   background: var(--iso-bg);
 }
 
-.isohub-visual {
+.isolarail-visual {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
@@ -151,7 +151,7 @@ html.rp-dark {
   background-size: 28px 28px;
 }
 
-html.rp-dark .isohub-visual {
+html.rp-dark .isolarail-visual {
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
     linear-gradient(0deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
@@ -159,7 +159,7 @@ html.rp-dark .isohub-visual {
   background-size: 28px 28px;
 }
 
-.isohub-map {
+.isolarail-map {
   position: relative;
   display: grid;
   min-height: clamp(380px, 38vw, 520px);
@@ -169,30 +169,30 @@ html.rp-dark .isohub-visual {
   padding: clamp(18px, 3vw, 34px);
 }
 
-.isohub-map::before,
-.isohub-map::after {
+.isolarail-map::before,
+.isolarail-map::after {
   content: "";
   position: absolute;
   pointer-events: none;
 }
 
-.isohub-map::before {
+.isolarail-map::before {
   inset: 19% 15% auto;
   height: 2px;
   background: var(--iso-accent);
 }
 
-.isohub-map::after {
+.isolarail-map::after {
   inset: auto 18% 30%;
   height: 2px;
   background: var(--iso-primary);
 }
 
-.isohub-node,
-.isohub-map-bus,
-.isohub-port-strip,
-.isohub-panel-link,
-.isohub-photo-reserve {
+.isolarail-node,
+.isolarail-map-bus,
+.isolarail-port-strip,
+.isolarail-panel-link,
+.isolarail-photo-reserve {
   position: relative;
   z-index: 1;
   border: 1px solid var(--iso-line);
@@ -201,34 +201,34 @@ html.rp-dark .isohub-visual {
   box-shadow: 0 16px 40px color-mix(in oklch, var(--iso-dark) 10%, transparent);
 }
 
-.isohub-node,
-.isohub-map-bus,
-.isohub-panel-link,
-.isohub-photo-reserve {
+.isolarail-node,
+.isolarail-map-bus,
+.isolarail-panel-link,
+.isolarail-photo-reserve {
   padding: 16px;
 }
 
-.isohub-node span,
-.isohub-map-bus span,
-.isohub-panel-link span,
-.isohub-photo-reserve span {
+.isolarail-node span,
+.isolarail-map-bus span,
+.isolarail-panel-link span,
+.isolarail-photo-reserve span {
   display: block;
   color: var(--iso-muted);
   font-size: 0.84rem;
   line-height: 1.45;
 }
 
-.isohub-node strong,
-.isohub-map-bus strong,
-.isohub-panel-link strong,
-.isohub-photo-reserve strong {
+.isolarail-node strong,
+.isolarail-map-bus strong,
+.isolarail-panel-link strong,
+.isolarail-photo-reserve strong {
   display: block;
   margin-top: 4px;
   color: var(--iso-ink);
   overflow-wrap: anywhere;
 }
 
-.isohub-node em {
+.isolarail-node em {
   display: block;
   margin-top: 8px;
   color: var(--iso-muted);
@@ -237,24 +237,24 @@ html.rp-dark .isohub-visual {
   line-height: 1.45;
 }
 
-.isohub-node-core {
+.isolarail-node-core {
   grid-column: 1 / span 2;
   grid-row: 1;
   border-color: color-mix(in oklch, var(--iso-accent) 62%, var(--iso-line));
 }
 
-.isohub-node-hub {
+.isolarail-node-hub {
   grid-column: 3 / span 2;
   grid-row: 1;
   border-color: color-mix(in oklch, var(--iso-primary) 58%, var(--iso-line));
 }
 
-.isohub-map-bus {
+.isolarail-map-bus {
   grid-column: 1 / span 4;
   grid-row: 2;
 }
 
-.isohub-port-strip {
+.isolarail-port-strip {
   display: grid;
   grid-column: 1 / span 4;
   grid-row: 3;
@@ -263,7 +263,7 @@ html.rp-dark .isohub-visual {
   padding: 10px;
 }
 
-.isohub-port-strip span {
+.isolarail-port-strip span {
   min-height: 56px;
   display: grid;
   place-items: center;
@@ -275,95 +275,95 @@ html.rp-dark .isohub-visual {
   font-weight: 760;
 }
 
-.isohub-panel-link {
+.isolarail-panel-link {
   grid-column: 1 / span 2;
   grid-row: 4;
   border-color: color-mix(in oklch, var(--iso-caution) 70%, var(--iso-line));
 }
 
-.isohub-photo-reserve {
+.isolarail-photo-reserve {
   grid-column: 3 / span 2;
   grid-row: 4;
   border-style: dashed;
 }
 
-.isohub-evidence {
+.isolarail-evidence {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
   margin: 24px 0 0;
 }
 
-.isohub-evidence a,
-.isohub-doc-grid a {
+.isolarail-evidence a,
+.isolarail-doc-grid a {
   color: inherit;
   text-decoration: none;
 }
 
-.isohub-evidence-item,
-.isohub-doc-card,
-.isohub-note,
-.isohub-warning {
+.isolarail-evidence-item,
+.isolarail-doc-card,
+.isolarail-note,
+.isolarail-warning {
   border: 1px solid var(--iso-line);
   border-radius: 8px;
   background: var(--iso-bg);
 }
 
-.isohub-evidence-item {
+.isolarail-evidence-item {
   padding: 14px 16px;
 }
 
-.isohub-evidence-item span,
-.isohub-doc-card span {
+.isolarail-evidence-item span,
+.isolarail-doc-card span {
   display: block;
   color: var(--iso-muted);
   font-size: 0.92rem;
   line-height: 1.5;
 }
 
-.isohub-doc-grid {
+.isolarail-doc-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   margin: 28px 0;
 }
 
-.isohub-section-heading {
+.isolarail-section-heading {
   margin-top: 48px;
   margin-bottom: 0;
 }
 
-.isohub-doc-card {
+.isolarail-doc-card {
   padding: 20px;
 }
 
-.isohub-doc-card h3 {
+.isolarail-doc-card h3 {
   margin-top: 0;
 }
 
-.isohub-note,
-.isohub-warning {
+.isolarail-note,
+.isolarail-warning {
   margin: 24px 0;
   padding: 16px 18px;
 }
 
-.isohub-note {
+.isolarail-note {
   background: oklch(0.98 0.005 255);
 }
 
-.isohub-warning {
+.isolarail-warning {
   background: oklch(0.97 0.026 78);
 }
 
-html.rp-dark .isohub-note {
+html.rp-dark .isolarail-note {
   background: oklch(0.19 0.018 255);
 }
 
-html.rp-dark .isohub-warning {
+html.rp-dark .isolarail-warning {
   background: oklch(0.22 0.035 78);
 }
 
-.isohub-dashboard-preview {
+.isolarail-dashboard-preview {
   display: block;
   max-width: 100%;
   height: auto;
@@ -373,24 +373,24 @@ html.rp-dark .isohub-warning {
   background: var(--iso-dark);
 }
 
-.isohub-audio-preview {
+.isolarail-audio-preview {
   container-type: inline-size;
   display: grid;
   gap: 18px;
   margin: 28px 0 42px;
 }
 
-.isohub-audio-console,
-.isohub-audio-summary,
-.isohub-audio-controls,
-.isohub-tone-card,
-.isohub-candidate {
+.isolarail-audio-console,
+.isolarail-audio-summary,
+.isolarail-audio-controls,
+.isolarail-tone-card,
+.isolarail-candidate {
   border: 1px solid var(--iso-line);
   border-radius: 8px;
   background: var(--iso-bg);
 }
 
-.isohub-audio-console {
+.isolarail-audio-console {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
@@ -403,7 +403,7 @@ html.rp-dark .isohub-warning {
   background-size: 24px 24px;
 }
 
-html.rp-dark .isohub-audio-console {
+html.rp-dark .isolarail-audio-console {
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
     linear-gradient(0deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
@@ -411,18 +411,18 @@ html.rp-dark .isohub-audio-console {
   background-size: 24px 24px;
 }
 
-.isohub-audio-console__copy {
+.isolarail-audio-console__copy {
   max-width: 74ch;
 }
 
-.isohub-audio-kicker,
-.isohub-tone-card__group {
+.isolarail-audio-kicker,
+.isolarail-tone-card__group {
   display: inline-flex;
   color: var(--iso-primary-strong);
   font-weight: 760;
 }
 
-.isohub-audio-console h2 {
+.isolarail-audio-console h2 {
   margin: 8px 0 0;
   color: var(--iso-ink);
   font-size: 2rem;
@@ -431,31 +431,31 @@ html.rp-dark .isohub-audio-console {
   text-wrap: balance;
 }
 
-.isohub-audio-console p {
+.isolarail-audio-console p {
   margin: 12px 0 0;
   color: var(--iso-muted);
   line-height: 1.7;
 }
 
-.isohub-audio-toolbar,
-.isohub-candidate__actions {
+.isolarail-audio-toolbar,
+.isolarail-candidate__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
 }
 
-.isohub-audio-toolbar {
+.isolarail-audio-toolbar {
   justify-content: flex-end;
 }
 
-.isohub-candidate__actions {
+.isolarail-candidate__actions {
   align-items: center;
   justify-content: flex-end;
 }
 
-.isohub-audio-button,
-.isohub-candidate__actions button {
+.isolarail-audio-button,
+.isolarail-candidate__actions button {
   min-height: 38px;
   border-radius: 8px;
   padding: 0 14px;
@@ -467,7 +467,7 @@ html.rp-dark .isohub-audio-console {
   cursor: pointer;
 }
 
-.isohub-candidate__actions .isohub-icon-button {
+.isolarail-candidate__actions .isolarail-icon-button {
   display: inline-grid;
   place-items: center;
   width: 40px;
@@ -475,13 +475,13 @@ html.rp-dark .isohub-audio-console {
   padding: 0;
 }
 
-.isohub-candidate__actions .isohub-icon-button.is-active {
+.isolarail-candidate__actions .isolarail-icon-button.is-active {
   border-color: color-mix(in oklch, var(--iso-primary) 72%, var(--iso-line));
   background: color-mix(in oklch, var(--iso-primary) 14%, var(--iso-bg));
   color: var(--iso-primary-strong);
 }
 
-.isohub-play-icon {
+.isolarail-play-icon {
   display: block;
   width: 0;
   height: 0;
@@ -491,7 +491,7 @@ html.rp-dark .isohub-audio-console {
   border-left: 9px solid currentColor;
 }
 
-.isohub-loop-icon {
+.isolarail-loop-icon {
   position: relative;
   display: block;
   width: 16px;
@@ -501,7 +501,7 @@ html.rp-dark .isohub-audio-console {
   border-radius: 999px;
 }
 
-.isohub-loop-icon::after {
+.isolarail-loop-icon::after {
   position: absolute;
   top: -3px;
   right: -2px;
@@ -514,7 +514,7 @@ html.rp-dark .isohub-audio-console {
   transform: rotate(28deg);
 }
 
-.isohub-stop-icon {
+.isolarail-stop-icon {
   display: block;
   width: 10px;
   height: 10px;
@@ -522,65 +522,65 @@ html.rp-dark .isohub-audio-console {
   background: currentColor;
 }
 
-.isohub-audio-button:hover,
-.isohub-candidate__actions button:hover {
+.isolarail-audio-button:hover,
+.isolarail-candidate__actions button:hover {
   border-color: var(--iso-primary);
   color: var(--iso-primary-strong);
 }
 
-.isohub-audio-button:focus-visible,
-.isohub-candidate__actions button:focus-visible,
-.isohub-audio-controls select:focus-visible {
+.isolarail-audio-button:focus-visible,
+.isolarail-candidate__actions button:focus-visible,
+.isolarail-audio-controls select:focus-visible {
   outline: 2px solid var(--iso-accent);
   outline-offset: 2px;
 }
 
-.isohub-audio-button.primary {
+.isolarail-audio-button.primary {
   border-color: var(--iso-primary);
   background: var(--iso-primary);
   color: white;
 }
 
-.isohub-audio-button.primary:hover {
+.isolarail-audio-button.primary:hover {
   background: var(--iso-primary-strong);
   color: white;
 }
 
-.isohub-audio-summary {
+.isolarail-audio-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.isohub-audio-summary div {
+.isolarail-audio-summary div {
   min-width: 0;
   padding: 16px;
   border-left: 1px solid var(--iso-line);
 }
 
-.isohub-audio-summary div:first-child {
+.isolarail-audio-summary div:first-child {
   border-left: 0;
 }
 
-.isohub-audio-summary strong,
-.isohub-audio-summary span {
+.isolarail-audio-summary strong,
+.isolarail-audio-summary span {
   display: block;
 }
 
-.isohub-audio-summary strong {
+.isolarail-audio-summary strong {
   color: var(--iso-ink);
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 1.18rem;
   overflow-wrap: anywhere;
 }
 
-.isohub-audio-summary span {
+.isolarail-audio-summary span {
   margin-top: 4px;
   color: var(--iso-muted);
   font-size: 0.92rem;
   line-height: 1.45;
 }
 
-.isohub-audio-controls {
+.isolarail-audio-controls {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 14px;
@@ -588,7 +588,7 @@ html.rp-dark .isohub-audio-console {
   padding: 14px;
 }
 
-.isohub-audio-controls label {
+.isolarail-audio-controls label {
   display: grid;
   gap: 6px;
   color: var(--iso-muted);
@@ -596,7 +596,7 @@ html.rp-dark .isohub-audio-console {
   font-weight: 680;
 }
 
-.isohub-audio-controls select {
+.isolarail-audio-controls select {
   min-height: 40px;
   border: 1px solid var(--iso-line);
   border-radius: 8px;
@@ -605,7 +605,7 @@ html.rp-dark .isohub-audio-console {
   font: inherit;
 }
 
-.isohub-audio-status {
+.isolarail-audio-status {
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -616,52 +616,52 @@ html.rp-dark .isohub-audio-console {
   line-height: 1.45;
 }
 
-.isohub-audio-list {
+.isolarail-audio-list {
   display: grid;
   gap: 14px;
 }
 
-.isohub-tone-card {
+.isolarail-tone-card {
   display: grid;
   grid-template-columns: minmax(210px, 0.56fr) minmax(0, 1fr);
   overflow: hidden;
 }
 
-.isohub-tone-card[data-kind="continuous"] .isohub-tone-card__head {
+.isolarail-tone-card[data-kind="continuous"] .isolarail-tone-card__head {
   background: color-mix(in oklch, var(--iso-primary) 9%, var(--iso-bg));
 }
 
-.isohub-tone-card[data-kind="interval"] .isohub-tone-card__head {
+.isolarail-tone-card[data-kind="interval"] .isolarail-tone-card__head {
   background: color-mix(in oklch, var(--iso-caution) 13%, var(--iso-bg));
 }
 
-.isohub-tone-card__head {
+.isolarail-tone-card__head {
   padding: 18px;
   border-right: 1px solid var(--iso-line);
   background: var(--iso-surface);
 }
 
-.isohub-tone-card__head h3 {
+.isolarail-tone-card__head h3 {
   margin: 6px 0 0;
   color: var(--iso-ink);
   font-size: 1.22rem;
   line-height: 1.25;
 }
 
-.isohub-tone-card__head p {
+.isolarail-tone-card__head p {
   margin: 12px 0 0;
   color: var(--iso-muted);
   line-height: 1.58;
 }
 
-.isohub-tone-tags {
+.isolarail-tone-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 14px;
 }
 
-.isohub-tone-tags span {
+.isolarail-tone-tags span {
   border: 1px solid var(--iso-line);
   border-radius: 999px;
   padding: 2px 8px;
@@ -670,29 +670,29 @@ html.rp-dark .isohub-audio-console {
   font-size: 0.78rem;
 }
 
-.isohub-tone-tags .danger {
+.isolarail-tone-tags .danger {
   border-color: color-mix(in oklch, var(--iso-primary) 54%, var(--iso-line));
   color: var(--iso-primary-strong);
 }
 
-.isohub-tone-tags .warn {
+.isolarail-tone-tags .warn {
   border-color: color-mix(in oklch, var(--iso-caution) 64%, var(--iso-line));
   color: color-mix(in oklch, var(--iso-caution) 64%, var(--iso-ink));
 }
 
-.isohub-tone-tags .ok {
+.isolarail-tone-tags .ok {
   border-color: color-mix(in oklch, var(--iso-accent) 60%, var(--iso-line));
   color: color-mix(in oklch, var(--iso-accent) 62%, var(--iso-ink));
 }
 
-.isohub-candidate-list {
+.isolarail-candidate-list {
   display: grid;
   gap: 12px;
   min-width: 0;
   padding: 14px;
 }
 
-.isohub-candidate {
+.isolarail-candidate {
   display: grid;
   grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr) minmax(44px, max-content);
   gap: 14px;
@@ -702,46 +702,46 @@ html.rp-dark .isohub-audio-console {
   background: color-mix(in oklch, var(--iso-bg) 92%, var(--iso-surface));
 }
 
-.isohub-candidate__title strong,
-.isohub-candidate__title span {
+.isolarail-candidate__title strong,
+.isolarail-candidate__title span {
   display: block;
 }
 
-.isohub-candidate__title strong {
+.isolarail-candidate__title strong {
   color: var(--iso-ink);
 }
 
-.isohub-candidate__title span,
-.isohub-timeline__meta {
+.isolarail-candidate__title span,
+.isolarail-timeline__meta {
   color: var(--iso-muted);
   font-size: 0.9rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.isohub-timeline {
+.isolarail-timeline {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.isohub-timeline__bar {
+.isolarail-timeline__bar {
   display: flex;
   gap: 4px;
   min-height: 16px;
 }
 
-.isohub-timeline__bar span {
+.isolarail-timeline__bar span {
   min-width: 8px;
   border-radius: 4px;
   background: var(--iso-primary);
 }
 
-.isohub-timeline__bar .rest {
+.isolarail-timeline__bar .rest {
   background: color-mix(in oklch, var(--iso-line) 76%, transparent);
 }
 
-.isohub-timeline__meta {
+.isolarail-timeline__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
@@ -750,227 +750,227 @@ html.rp-dark .isohub-audio-console {
 }
 
 @container (max-width: 760px) {
-  .isohub-audio-console,
-  .isohub-audio-controls,
-  .isohub-tone-card,
-  .isohub-candidate {
+  .isolarail-audio-console,
+  .isolarail-audio-controls,
+  .isolarail-tone-card,
+  .isolarail-candidate {
     grid-template-columns: 1fr;
   }
 
-  .isohub-audio-toolbar,
-  .isohub-candidate__actions {
+  .isolarail-audio-toolbar,
+  .isolarail-candidate__actions {
     justify-content: flex-start;
   }
 
-  .isohub-tone-card__head {
+  .isolarail-tone-card__head {
     border-right: 0;
     border-bottom: 1px solid var(--iso-line);
   }
 }
 
 @container (max-width: 520px) {
-  .isohub-audio-console,
-  .isohub-audio-controls,
-  .isohub-candidate-list,
-  .isohub-candidate {
+  .isolarail-audio-console,
+  .isolarail-audio-controls,
+  .isolarail-candidate-list,
+  .isolarail-candidate {
     padding: 12px;
   }
 
-  .isohub-audio-summary {
+  .isolarail-audio-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .isohub-audio-summary div:nth-child(odd) {
+  .isolarail-audio-summary div:nth-child(odd) {
     border-left: 0;
   }
 
-  .isohub-audio-summary div:nth-child(n + 3) {
+  .isolarail-audio-summary div:nth-child(n + 3) {
     border-top: 1px solid var(--iso-line);
   }
 }
 
 @container (max-width: 380px) {
-  .isohub-audio-summary {
+  .isolarail-audio-summary {
     grid-template-columns: 1fr;
   }
 
-  .isohub-audio-summary div,
-  .isohub-audio-summary div:nth-child(odd) {
+  .isolarail-audio-summary div,
+  .isolarail-audio-summary div:nth-child(odd) {
     border-left: 0;
   }
 
-  .isohub-audio-summary div + div {
+  .isolarail-audio-summary div + div {
     border-top: 1px solid var(--iso-line);
   }
 
-  .isohub-audio-button,
-  .isohub-candidate__actions button:not(.isohub-icon-button) {
+  .isolarail-audio-button,
+  .isolarail-candidate__actions button:not(.isolarail-icon-button) {
     width: 100%;
   }
 
-  .isohub-candidate__actions .isohub-icon-button {
+  .isolarail-candidate__actions .isolarail-icon-button {
     width: 40px;
   }
 }
 
 @media (max-width: 860px) {
-  #__rspress_root .isohub-hero,
-  #__rspress_root .isohub-evidence,
-  #__rspress_root .isohub-doc-grid,
-  #__rspress_root .isohub-note,
-  #__rspress_root .isohub-warning,
-  #__rspress_root .isohub-section-heading,
+  #__rspress_root .isolarail-hero,
+  #__rspress_root .isolarail-evidence,
+  #__rspress_root .isolarail-doc-grid,
+  #__rspress_root .isolarail-note,
+  #__rspress_root .isolarail-warning,
+  #__rspress_root .isolarail-section-heading,
   #__rspress_root > h2 {
     width: min(100% - 28px, 1320px);
   }
 
-  .isohub-hero {
+  .isolarail-hero {
     grid-template-columns: 1fr;
     min-height: auto;
     padding-top: 24px;
     gap: 28px;
   }
 
-  .isohub-visual {
+  .isolarail-visual {
     order: -1;
   }
 
-  .isohub-map {
+  .isolarail-map {
     min-height: auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 14px;
   }
 
-  .isohub-map::before {
+  .isolarail-map::before {
     inset: 16% 12% auto;
   }
 
-  .isohub-map::after {
+  .isolarail-map::after {
     inset: auto 12% 35%;
   }
 
-  .isohub-node-core,
-  .isohub-node-hub,
-  .isohub-panel-link,
-  .isohub-photo-reserve {
+  .isolarail-node-core,
+  .isolarail-node-hub,
+  .isolarail-panel-link,
+  .isolarail-photo-reserve {
     grid-column: auto / span 1;
   }
 
-  .isohub-map-bus,
-  .isohub-port-strip {
+  .isolarail-map-bus,
+  .isolarail-port-strip {
     grid-column: 1 / span 2;
   }
 
-  .isohub-hero h1 {
+  .isolarail-hero h1 {
     font-size: 2.32rem;
     line-height: 1.08;
   }
 
-  .isohub-hero-lede {
+  .isolarail-hero-lede {
     font-size: 1.02rem;
   }
 
-  .isohub-actions {
+  .isolarail-actions {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .isohub-button {
+  .isolarail-button {
     width: 100%;
     padding: 0 14px;
     white-space: normal;
     text-align: center;
   }
 
-  .isohub-node,
-  .isohub-map-bus,
-  .isohub-panel-link,
-  .isohub-photo-reserve {
+  .isolarail-node,
+  .isolarail-map-bus,
+  .isolarail-panel-link,
+  .isolarail-photo-reserve {
     padding: 13px;
   }
 
-  .isohub-port-strip {
+  .isolarail-port-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .isohub-audio-console,
-  .isohub-audio-controls,
-  .isohub-tone-card,
-  .isohub-candidate {
+  .isolarail-audio-console,
+  .isolarail-audio-controls,
+  .isolarail-tone-card,
+  .isolarail-candidate {
     grid-template-columns: 1fr;
   }
 
-  .isohub-audio-toolbar {
+  .isolarail-audio-toolbar {
     justify-content: flex-start;
   }
 
-  .isohub-audio-summary {
+  .isolarail-audio-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .isohub-audio-summary div:nth-child(odd) {
+  .isolarail-audio-summary div:nth-child(odd) {
     border-left: 0;
   }
 
-  .isohub-audio-summary div:nth-child(n + 3) {
+  .isolarail-audio-summary div:nth-child(n + 3) {
     border-top: 1px solid var(--iso-line);
   }
 
-  .isohub-tone-card__head {
+  .isolarail-tone-card__head {
     border-right: 0;
     border-bottom: 1px solid var(--iso-line);
   }
 
-  .isohub-candidate__actions {
+  .isolarail-candidate__actions {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 520px) {
-  .isohub-map {
+  .isolarail-map {
     grid-template-columns: 1fr;
   }
 
-  .isohub-node-core,
-  .isohub-node-hub,
-  .isohub-map-bus,
-  .isohub-port-strip,
-  .isohub-panel-link,
-  .isohub-photo-reserve {
+  .isolarail-node-core,
+  .isolarail-node-hub,
+  .isolarail-map-bus,
+  .isolarail-port-strip,
+  .isolarail-panel-link,
+  .isolarail-photo-reserve {
     grid-column: 1;
     grid-row: auto;
   }
 
-  .isohub-port-strip {
+  .isolarail-port-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .isohub-audio-console,
-  .isohub-audio-controls,
-  .isohub-candidate-list,
-  .isohub-candidate {
+  .isolarail-audio-console,
+  .isolarail-audio-controls,
+  .isolarail-candidate-list,
+  .isolarail-candidate {
     padding: 12px;
   }
 
-  .isohub-audio-summary {
+  .isolarail-audio-summary {
     grid-template-columns: 1fr;
   }
 
-  .isohub-audio-summary div,
-  .isohub-audio-summary div:nth-child(odd) {
+  .isolarail-audio-summary div,
+  .isolarail-audio-summary div:nth-child(odd) {
     border-left: 0;
   }
 
-  .isohub-audio-summary div + div {
+  .isolarail-audio-summary div + div {
     border-top: 1px solid var(--iso-line);
   }
 
-  .isohub-audio-button,
-  .isohub-candidate__actions button:not(.isohub-icon-button) {
+  .isolarail-audio-button,
+  .isolarail-candidate__actions button:not(.isolarail-icon-button) {
     width: 100%;
   }
 
-  .isohub-candidate__actions .isohub-icon-button {
+  .isolarail-candidate__actions .isolarail-icon-button {
     width: 40px;
   }
 }

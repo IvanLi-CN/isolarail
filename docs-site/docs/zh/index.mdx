@@ -1,49 +1,49 @@
 ---
-title: ISO USB Hub
+title: IsolaRail
 description: 产品入口、硬件拓扑、固件运行和控制面文档。
 pageType: custom
 ---
 
-<section className="isohub-hero">
-  <div className="isohub-hero-copy">
-    <div className="isohub-kicker">隔离 USB Hub 的硬件与固件文档站</div>
+<section className="isolarail-hero">
+  <div className="isolarail-hero-copy">
+    <div className="isolarail-kicker">隔离 USB Hub 的硬件与固件文档站</div>
     <h1>从产品理解到板级 bring-up，一条清晰路径。</h1>
-    <div className="isohub-hero-lede">
-      ISO USB Hub 是围绕 ESP32-S3、CH335F、TCA6408A、INA226/TPS2490、M24C64 和 160x50 前面板显示链路构建的四路隔离 USB Hub 项目。这个站点按硬件、固件、控制面和规格索引组织内容，帮助你从产品边界一路读到当前工程真相。
+    <div className="isolarail-hero-lede">
+      IsolaRail 是围绕 ESP32-S3、CH335F、TCA6408A、INA226/TPS2490、M24C64 和 160x50 前面板显示链路构建的四路隔离 USB Hub 项目。这个站点按硬件、固件、控制面和规格索引组织内容，帮助你从产品边界一路读到当前工程真相。
     </div>
-    <div className="isohub-actions">
-      <a className="isohub-button primary" href="start/quick-start">开始 bring-up</a>
-      <a className="isohub-button secondary" href="hardware/topology">查看硬件拓扑</a>
-      <a className="isohub-button secondary" href="reference/specs">规格索引</a>
+    <div className="isolarail-actions">
+      <a className="isolarail-button primary" href="start/quick-start">开始 bring-up</a>
+      <a className="isolarail-button secondary" href="hardware/topology">查看硬件拓扑</a>
+      <a className="isolarail-button secondary" href="reference/specs">规格索引</a>
     </div>
   </div>
-  <div className="isohub-visual" aria-label="ISO USB Hub 系统边界图">
-    <div className="isohub-map">
-      <div className="isohub-node isohub-node-core">
+  <div className="isolarail-visual" aria-label="IsolaRail 系统边界图">
+    <div className="isolarail-map">
+      <div className="isolarail-node isolarail-node-core">
         <span>Control</span>
         <strong>ESP32-S3</strong>
         <em>boot、自检、前面板</em>
       </div>
-      <div className="isohub-node isohub-node-hub">
+      <div className="isolarail-node isolarail-node-hub">
         <span>USB hub</span>
         <strong>CH335F</strong>
         <em>sideband power control</em>
       </div>
-      <div className="isohub-map-bus">
+      <div className="isolarail-map-bus">
         <span>I2C buses and monitors</span>
         <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
       </div>
-      <div className="isohub-port-strip" aria-label="四路受控 USB 供电端口">
+      <div className="isolarail-port-strip" aria-label="四路受控 USB 供电端口">
         <span>port1</span>
         <span>port2</span>
         <span>port3</span>
         <span>port4</span>
       </div>
-      <div className="isohub-panel-link">
+      <div className="isolarail-panel-link">
         <span>160x50 display</span>
         <strong>dashboard state surface</strong>
       </div>
-      <div className="isohub-photo-reserve">
+      <div className="isolarail-photo-reserve">
         <strong>实物照片预留</strong>
         <span>真实主板、前面板或桌面 bring-up 照片会在硬件证据可用后放在这里。</span>
       </div>
@@ -51,38 +51,38 @@ pageType: custom
   </div>
 </section>
 
-<div className="isohub-evidence">
-  <a className="isohub-evidence-item" href="hardware/topology">
+<div className="isolarail-evidence">
+  <a className="isolarail-evidence-item" href="hardware/topology">
     <strong>硬件连接</strong>
     <span>VIN、四路 USB 供电模块、I2C 拓扑与前面板输入。</span>
   </a>
-  <a className="isohub-evidence-item" href="firmware/boot-runtime">
+  <a className="isolarail-evidence-item" href="firmware/boot-runtime">
     <strong>固件启动</strong>
     <span>Boot init、自检、输出门控、前面板和风扇链路。</span>
   </a>
-  <a className="isohub-evidence-item" href="dashboard/front-panel">
+  <a className="isolarail-evidence-item" href="dashboard/front-panel">
     <strong>160x50 Dashboard</strong>
     <span>四列状态、功率条、异常状态和显示资产。</span>
   </a>
 </div>
 
-<h2 className="isohub-section-heading">按主题阅读</h2>
+<h2 className="isolarail-section-heading">按主题阅读</h2>
 
-<div className="isohub-doc-grid">
-  <a className="isohub-doc-card" href="start/quick-start">
+<div className="isolarail-doc-grid">
+  <a className="isolarail-doc-card" href="start/quick-start">
     <h3>快速开始</h3>
     <span>安装工具链，构建固件与文档站，确认本地 companion 和硬件路径。</span>
   </a>
-  <a className="isohub-doc-card" href="hardware/topology">
+  <a className="isolarail-doc-card" href="hardware/topology">
     <h3>硬件拓扑</h3>
     <span>从 VIN、CH335F sideband、四路 EN 门控、两条 I²C 总线和前面板开始。</span>
   </a>
-  <a className="isohub-doc-card" href="control-plane/interfaces">
+  <a className="isolarail-doc-card" href="control-plane/interfaces">
     <h3>控制面</h3>
-    <span>理解 `isohub`、`isohub-devd`、USB JSONL、Web companion 和设备操作边界。</span>
+    <span>理解 `isolarail`、`isolarail-devd`、USB JSONL、Web companion 和设备操作边界。</span>
   </a>
 </div>
 
-<div className="isohub-note">
+<div className="isolarail-note">
   <strong>Current truth:</strong> 站点负责导览与发布，规范真相仍保存在仓库的 <code>docs/</code> 与 <code>docs/specs/</code>。
 </div>

@@ -13,7 +13,7 @@ async function mockCompanionUnavailable(
 }
 
 test("renders devices list and mock dashboard", async ({ page }) => {
-  const storageKey = "isohub.devices";
+  const storageKey = "isolarail.devices";
   const device = {
     id: "demo",
     name: "Demo Hub",
@@ -45,7 +45,7 @@ test("renders devices list and mock dashboard", async ({ page }) => {
 });
 
 test("uses canonical settings/info device routes", async ({ page }) => {
-  const storageKey = "isohub.devices";
+  const storageKey = "isolarail.devices";
   const device = {
     id: "demo",
     name: "Demo Hub",
@@ -80,7 +80,7 @@ test("uses canonical settings/info device routes", async ({ page }) => {
 test("opens add device modal with supported connection methods (web)", async ({
   page,
 }) => {
-  const storageKey = "isohub.devices";
+  const storageKey = "isolarail.devices";
   await mockCompanionUnavailable(page);
   await page.addInitScript(
     ({ storageKey }) => {
@@ -126,7 +126,7 @@ test("opens add device modal with supported connection methods (web)", async ({
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Use the explicit isohub-devd web companion to read the connected hub over Local USB and add it here.",
+      "Use the explicit isolarail-devd web companion to read the connected hub over Local USB and add it here.",
       { exact: true },
     ),
   ).toBeVisible();

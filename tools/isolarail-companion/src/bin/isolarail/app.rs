@@ -5,7 +5,7 @@ async fn main() -> anyhow::Result<()> {
         .connect_timeout(Duration::from_secs(2))
         .timeout(Duration::from_secs(5))
         .build()
-        .context("build IsoHub companion HTTP client")?;
+        .context("build IsolaRail companion HTTP client")?;
     let devd = DevdClient {
         endpoint: cli.ipc.clone(),
         auto_start: !cli.no_auto_start,

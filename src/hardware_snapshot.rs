@@ -282,7 +282,7 @@ pub fn write_snapshot_json<const N: usize>(
     out.clear();
     write!(
         out,
-        "{{\"schema\":\"iso-usb-hub.hardware.snapshot.v{}\",\"packages\":[\"identity\",\"boot\",\"power\",\"i2c\",\"sideband\",\"front_panel\",\"mcu\",\"fan\",\"buzzer\",\"ports\",\"controls\",\"sensors\",\"registers\"],\"sequence\":{},\"uptime_ms\":{},\"firmware\":{{\"name\":\"{}\",\"version\":\"{}\",\"target\":\"esp32s3\"}},\"reset_reason\":\"{}\",",
+        "{{\"schema\":\"isolarail.hardware.snapshot.v{}\",\"packages\":[\"identity\",\"boot\",\"power\",\"i2c\",\"sideband\",\"front_panel\",\"mcu\",\"fan\",\"buzzer\",\"ports\",\"controls\",\"sensors\",\"registers\"],\"sequence\":{},\"uptime_ms\":{},\"firmware\":{{\"name\":\"{}\",\"version\":\"{}\",\"target\":\"esp32s3\"}},\"reset_reason\":\"{}\",",
         SCHEMA_VERSION,
         sequence,
         uptime_ms,

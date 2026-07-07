@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ThemeId } from "../../app/theme";
 
 const OPTIONS: Array<{ id: ThemeId; label: string }> = [
-  { id: "isohub", label: "isohub" },
-  { id: "isohub-dark", label: "isohub-dark" },
+  { id: "isolarail", label: "isolarail" },
+  { id: "isolarail-dark", label: "isolarail-dark" },
   { id: "system", label: "system" },
 ];
 
@@ -22,7 +22,7 @@ export function ThemeMenu({
     window.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true;
 
   const buttonLabel =
-    value === "system" ? (prefersDark ? "isohub-dark" : "isohub") : value;
+    value === "system" ? (prefersDark ? "isolarail-dark" : "isolarail") : value;
 
   useEffect(() => {
     if (!open) {

@@ -66,7 +66,7 @@ export async function agentFetch(
 
 export function companionBootstrapUrls(): string[] {
   const explicitOrigins =
-    (import.meta.env.VITE_ISOHUB_DEVD_ORIGINS as string | undefined) ?? "";
+    (import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS as string | undefined) ?? "";
   const origins = explicitOrigins
     .split(",")
     .map((origin) => origin.trim())

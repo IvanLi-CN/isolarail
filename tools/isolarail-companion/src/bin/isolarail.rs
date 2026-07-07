@@ -1,6 +1,6 @@
 use anyhow::{Context as _, anyhow};
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
-use isohub_companion::{
+use isolarail_companion::{
     DeviceIdentity, DeviceProfile, DeviceRecord, FirmwareCatalog, HardwareTransport,
     SavedHardwareInput, api_url, default_ipc_endpoint, ipc_call, read_hardware_registry,
     redact_sensitive, registry_path, save_hardware,
@@ -18,9 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-include!("isohub/cli.rs");
-include!("isohub/app.rs");
-include!("isohub/format.rs");
-include!("isohub/platform.rs");
-include!("isohub/discover.rs");
-include!("isohub/tests.rs");
+include!("isolarail/cli.rs");
+include!("isolarail/app.rs");
+include!("isolarail/format.rs");
+include!("isolarail/platform.rs");
+include!("isolarail/discover.rs");
+include!("isolarail/tests.rs");

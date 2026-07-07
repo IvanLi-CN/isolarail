@@ -24,7 +24,7 @@
 ### Non-goals
 
 - 不实现 `mains-aegis` 的多页面自检 UI、音频 cue、BMS 交互或复杂激活流程。
-- 不改硬件地址、原理图、本机联调侧 `isohub` monitor 产品化体验。
+- 不改硬件地址、原理图、本机联调侧 `isolarail` monitor 产品化体验。
 
 ## 范围（Scope）
 

@@ -11,15 +11,15 @@ import { ToastProvider } from "../toast/ToastProvider";
 import { DeviceDashboardPanel } from "./DeviceDashboardPanel";
 
 const demoDevice: StoredDevice = {
-  id: "isohub-a",
+  id: "isolarail-a",
   name: "Desk Hub A",
-  baseUrl: "http://isohub-a.local",
+  baseUrl: "http://isolarail-a.local",
 };
 
 const legacyDevice: StoredDevice = {
-  id: "isohub-legacy",
+  id: "isolarail-legacy",
   name: "Legacy Hub",
-  baseUrl: "http://isohub-legacy.local",
+  baseUrl: "http://isolarail-legacy.local",
 };
 
 const mockDeviceApi = async (
@@ -36,15 +36,15 @@ const mockDeviceApi = async (
   );
 
   if (
-    url.hostname !== "isohub-a.local" &&
-    url.hostname !== "isohub-legacy.local"
+    url.hostname !== "isolarail-a.local" &&
+    url.hostname !== "isolarail-legacy.local"
   ) {
     return original(input, init);
   }
 
   if (url.pathname === "/api/v1/ports") {
     const hub =
-      url.hostname === "isohub-legacy.local"
+      url.hostname === "isolarail-legacy.local"
         ? { upstream_connected: true }
         : {
             upstream_connected: true,
@@ -185,7 +185,7 @@ export const LegacyFirmwareUnknownIsolation: Story = {
 export const MobileIsolationBadges: Story = {
   parameters: {
     viewport: {
-      defaultViewport: "isohubNarrow",
+      defaultViewport: "isolarailNarrow",
     },
   },
 };

@@ -20,7 +20,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { agent, status } = useCompanionBridge();
-  const [theme, setTheme] = useState<ThemeId>("isohub");
+  const [theme, setTheme] = useState<ThemeId>("isolarail");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -59,9 +59,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     };
-    window.addEventListener("isohub-storage-migrated", onMigrated);
+    window.addEventListener("isolarail-storage-migrated", onMigrated);
     return () => {
-      window.removeEventListener("isohub-storage-migrated", onMigrated);
+      window.removeEventListener("isolarail-storage-migrated", onMigrated);
     };
   }, [agent]);
 

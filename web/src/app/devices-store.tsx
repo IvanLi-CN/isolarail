@@ -121,7 +121,7 @@ export function DevicesProvider({
           variant: "success",
           message: "Imported devices/settings from browser storage.",
         });
-        window.dispatchEvent(new CustomEvent("isohub-storage-migrated"));
+        window.dispatchEvent(new CustomEvent("isolarail-storage-migrated"));
         const refreshed = await fetchStoredDevices(agent);
         if (refreshed.ok) {
           setDevices(refreshed.value);

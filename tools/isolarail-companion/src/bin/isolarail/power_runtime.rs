@@ -154,7 +154,7 @@ async fn select_saved_power_target_interactively(
 
     if saved.is_empty() {
         return Err(anyhow!(
-            "no saved hardware is available; bind hardware first with `isohub hardware save`"
+            "no saved hardware is available; bind hardware first with `isolarail hardware save`"
         ));
     }
 
@@ -249,7 +249,7 @@ async fn select_api_target_interactively(
 
     if compatible.is_empty() {
         let mut message =
-            String::from("no compatible IsoHub devices were found in the current scan");
+            String::from("no compatible IsolaRail devices were found in the current scan");
         if !rejected.is_empty() {
             message.push_str(":\n");
             message.push_str(&rejected.join("\n"));
@@ -277,7 +277,7 @@ async fn select_api_target_interactively(
     let selected = run_tui_list_menu(
         "Select a device for source-capability editing",
         Some(
-            "Only compatible IsoHub devices are shown. Use Up/Down to move, Enter to select, Esc to cancel.",
+            "Only compatible IsolaRail devices are shown. Use Up/Down to move, Enter to select, Esc to cancel.",
         ),
         &items,
         &[],

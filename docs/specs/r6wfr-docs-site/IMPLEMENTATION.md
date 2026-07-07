@@ -12,7 +12,7 @@
 - `docs-site/docs/{zh,en}/firmware/boot-runtime.md`: boot self-check、日志形状、降级策略、运行期门控、前面板输入、蜂鸣器告警和验证路径。
 - `docs-site/docs/{zh,en}/firmware/buzzer-audio-preview.mdx`: 站内 Web Audio 蜂鸣器试听工作台、分组筛选和循环告警试听。
 - `docs-site/src/components/BuzzerAudioPreview.tsx`: 从 `tools/buzzer_audio_preview/` 迁入的提示音数据和浏览器播放逻辑。
-- `docs-site/docs/{zh,en}/control-plane/interfaces.md`: USB JSONL、HTTP、`isohub`、`isohub-devd`、CLI 选择器、诊断导出、Web app 仲裁和安全边界。
+- `docs-site/docs/{zh,en}/control-plane/interfaces.md`: USB JSONL、HTTP、`isolarail`、`isolarail-devd`、CLI 选择器、诊断导出、Web app 仲裁和安全边界。
 - `docs-site/docs/{zh,en}/dashboard/front-panel.md`: 160x50 dashboard 布局、状态优先级、格式化规则、刷新来源、颜色约束和预览资产。
 - `docs-site/docs/{zh,en}/reference/specs.md`: specs/current-truth 索引、阅读顺序和事实优先级。
 - `PRODUCT.md` / `DESIGN.md`: 站点战略与视觉合同。

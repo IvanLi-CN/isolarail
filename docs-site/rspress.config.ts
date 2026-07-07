@@ -98,20 +98,20 @@ export default defineConfig({
       // The default theme switchers hide this placeholder in global.css.
       lang: 'x-default',
       label: 'Language',
-      title: 'ISO USB Hub',
-      description: 'Bilingual product and engineering documentation for ISO USB Hub.',
+      title: 'IsolaRail',
+      description: 'Bilingual product and engineering documentation for IsolaRail.',
     },
     {
       lang: 'zh',
       label: '中文',
-      title: 'ISO USB Hub',
-      description: 'ISO USB Hub 产品与工程文档。',
+      title: 'IsolaRail',
+      description: 'IsolaRail 产品与工程文档。',
     },
     {
       lang: 'en',
       label: 'English',
-      title: 'ISO USB Hub',
-      description: 'Product and engineering documentation for ISO USB Hub.',
+      title: 'IsolaRail',
+      description: 'Product and engineering documentation for IsolaRail.',
     },
   ],
   i18nSource: (source: Record<string, Record<string, string>>) =>
@@ -124,9 +124,9 @@ export default defineConfig({
         },
       ]),
     ),
-  title: 'ISO USB Hub',
-  description: 'Bilingual product and engineering documentation for ISO USB Hub.',
-  logoText: 'ISO USB Hub',
+  title: 'IsolaRail',
+  description: 'Bilingual product and engineering documentation for IsolaRail.',
+  logoText: 'IsolaRail',
   outDir: 'doc_build',
   globalStyles: path.join(__dirname, 'styles/global.css'),
   route: {
@@ -175,13 +175,13 @@ export default defineConfig({
     enableScrollToTop: true,
     search: true,
     footer: {
-      message: 'ISO USB Hub documentation. Hardware evidence and firmware contracts live in the repository docs.',
+      message: 'IsolaRail documentation. Hardware evidence and firmware contracts live in the repository docs.',
     },
     socialLinks: [
       {
         icon: 'github',
         mode: 'link',
-        content: 'https://github.com/IvanLi-CN/iso-usb-hub',
+        content: 'https://github.com/IvanLi-CN/isolarail',
       },
     ],
   },

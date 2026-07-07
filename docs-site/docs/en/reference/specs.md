@@ -28,16 +28,16 @@ This spec only owns the site itself: Rspress structure, bilingual routes, GitHub
 | ID | Title | Status | Site relevance |
 | --- | --- | --- | --- |
 | `pw97u` | Four-port USB Hub control-plane alignment | Completed / partially tracked | Firmware identity, CLI/daemon naming, USB JSONL, HTTP, Web app, port model |
-| `q9d7h` | CLI/devd flash migration | Partially complete | `isohub`, `isohub-devd`, identity checks, flashing, and monitor path |
+| `q9d7h` | CLI/devd flash migration | Partially complete | `isolarail`, `isolarail-devd`, identity checks, flashing, and monitor path |
 | `h8c4s` | CH335F sideband power control | Partially complete | `PWREN#`, `OVCUR#`, runtime gating, and OCP latch |
 | `7gf6b` | Firmware buzzer audio | Completed | GPIO7 LEDC PWM, cue priority, alarm loops, and the in-site audio preview |
 
-These specs explain why the control plane is named `isohub` / `isohub-devd` and why the owner-facing ports are fixed as `port1..port4`.
+These specs explain why the control plane is named `isolarail` / `isolarail-devd` and why the owner-facing ports are fixed as `port1..port4`.
 
 Recommended reading order:
 
 1. Read `pw97u` for owner-facing names, port model, and interface boundaries.
-2. Read `q9d7h` for why flash, reset, and monitor must go through `isohub` / `isohub-devd`.
+2. Read `q9d7h` for why flash, reset, and monitor must go through `isolarail` / `isolarail-devd`.
 3. Read `h8c4s` to connect `PWREN#`, `OVCUR#`, OCP latch, and dashboard state.
 4. Read `7gf6b` when changing cue timing or reviewing the
    [Buzzer Audio Preview](../firmware/buzzer-audio-preview).
@@ -84,9 +84,9 @@ Site pages are the public guide layer. They may condense and reorganize source m
 
 Site pages may condense and rewrite the sources above, but must not change:
 
-- Firmware identity: `iso-usb-hub`
-- CLI: `isohub`
-- Daemon: `isohub-devd`
+- Firmware identity: `isolarail`
+- CLI: `isolarail`
+- Daemon: `isolarail-devd`
 - Port model: `port1..port4`
 - Current V3 hardware baseline
 - `port.replug` = controlled power-off and power-on

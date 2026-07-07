@@ -51,7 +51,7 @@
 - 文档站必须提供中文和英文等价的精选首版内容。
 - 本地站点默认 `DOCS_BASE=/`；GitHub Pages workflow 默认使用仓库 project-pages 子路径，并能通过
   `DOCS_BASE` 覆盖。
-- 站内手写链接和图片引用不得依赖固定 `/iso-usb-hub/` 路径。
+- 站内手写链接和图片引用不得依赖固定 `/isolarail/` 路径。
 - 本地预览必须使用端口租约，不直接抢默认端口。
 - UI 视觉证据必须在合入前回传给主人，并写入本 spec。
 
@@ -63,13 +63,13 @@
 
 ## 功能与行为规格
 
-- 首页解释 ISO USB Hub 的产品定位，并提供快速开始、硬件拓扑和规格索引入口。
+- 首页解释 IsolaRail 的产品定位，并提供快速开始、硬件拓扑和规格索引入口。
 - 快速开始页给出 ESP Rust 工具链、固件构建、文档站构建和本机控制面基础命令。
 - 硬件拓扑页总结当前 V3 canonical 命名、电源输入、CH335F sideband、两条 I²C 总线、四路遥测与前面板连接。
 - 固件运行页总结 boot init、自检、降级策略、输出门控、前面板输入、蜂鸣器告警和日志风格。
 - 蜂鸣器音效预览页迁入 `tools/buzzer_audio_preview/` 的试听能力，使用站点主题提供
   Web Audio 播放、分组筛选和循环告警试听。
-- 控制面页总结 USB JSONL、HTTP、`isohub`、`isohub-devd`、CLI 选择器和 Web app 边界。
+- 控制面页总结 USB JSONL、HTTP、`isolarail`、`isolarail-devd`、CLI 选择器和 Web app 边界。
 - Dashboard 页展示 160x50 布局、状态、输入映射、刷新规则和正常态/混合状态 SVG。
 - 规格索引页链接关键 specs，并说明 specs/current-truth 文档才是长期规范源。
 
@@ -93,7 +93,7 @@
 
 ### UI / Visual Evidence
 
-预览服务：`http://127.0.0.1:57850/`，端口租约 `iso-usb-hub--0dd2c3c0--docs-site / docs-site`。
+预览服务：`http://127.0.0.1:57850/`，端口租约 `isolarail--0dd2c3c0--docs-site / docs-site`。
 
 验证覆盖：
 

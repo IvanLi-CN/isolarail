@@ -6,7 +6,7 @@ brand
 
 ## Readers
 
-ISO USB Hub serves three adjacent reading contexts:
+IsolaRail serves three adjacent reading contexts:
 
 - Bench bring-up: toolchain, firmware build, flashing safety, and first hardware checks.
 - Engineering orientation: ESP32-S3 control plane, power sequencing, display behavior, and verification gates.
@@ -16,11 +16,11 @@ Readers usually keep the site beside hardware on a desk, with schematics, serial
 
 ## Product Purpose
 
-The documentation site is the public web front door for ISO USB Hub. It explains the device as a product, gives a practical path from setup to bring-up, and organizes long-lived engineering documents without replacing them as source of truth.
+The documentation site is the public web front door for IsolaRail. It explains the device as a product, gives a practical path from setup to bring-up, and organizes long-lived engineering documents without replacing them as source of truth.
 
 Success means a reader can answer these questions without opening the whole repository:
 
-- What does ISO USB Hub do?
+- What does IsolaRail do?
 - What hardware and firmware boundaries are currently real?
 - How do I install tools, build firmware, and find the right maintenance document?
 - Which deeper specs own implementation truth?

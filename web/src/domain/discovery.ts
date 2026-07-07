@@ -253,7 +253,7 @@ export function parseDiscoveredDeviceFromApiInfo(
       }
     : { name: undefined, version: undefined };
 
-  if (!firmware.name || firmware.name !== "iso-usb-hub") {
+  if (!firmware.name || firmware.name !== "isolarail") {
     return null;
   }
 

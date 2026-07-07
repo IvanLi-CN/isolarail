@@ -78,7 +78,7 @@ describe("devdLocalUsbDeviceIdFromBaseUrl", () => {
   test("extracts CLI/devd USB profile ids", () => {
     expect(
       devdLocalUsbDeviceIdFromBaseUrl(
-        "isohub-devd://usb--dev-cu-usbmodem21221401",
+        "isolarail-devd://usb--dev-cu-usbmodem21221401",
       ),
     ).toBe("usb--dev-cu-usbmodem21221401");
     expect(devdLocalUsbDeviceIdFromBaseUrl("http://192.168.4.1")).toBeNull();

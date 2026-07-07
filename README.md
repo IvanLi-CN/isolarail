@@ -9,6 +9,10 @@ Owner-facing naming is fixed as:
 - local CLI: `isohub`
 - local daemon: `isohub-devd`
 
+## Product image
+
+![ISO USB Hub product hero](docs/assets/usb-c-hub-product-hero.png)
+
 ## Developer entrypoints
 
 Use `just` as the only normal developer entrypoint.

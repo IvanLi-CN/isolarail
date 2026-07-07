@@ -4,9 +4,9 @@ import type { StoredDevice } from "../../domain/devices";
 import { DeviceCard } from "./DeviceCard";
 
 const demoDevice: StoredDevice = {
-  id: "isohub-a",
+  id: "isolarail-a",
   name: "Desk Hub A",
-  baseUrl: "http://isohub-a.local",
+  baseUrl: "http://isolarail-a.local",
 };
 
 const meta: Meta<typeof DeviceCard> = {

@@ -365,10 +365,10 @@ mod tests {
     #[test]
     fn info_result_uses_canonical_identity() {
         let body = render_info_result(sample_snapshot(), "0.1.0");
-        assert!(body.as_str().contains("\"hostname\":\"isohub-ccddee\""));
+        assert!(body.as_str().contains("\"hostname\":\"isolarail-ccddee\""));
         assert!(body
             .as_str()
-            .contains("\"firmware\":{\"name\":\"iso-usb-hub\""));
+            .contains("\"firmware\":{\"name\":\"isolarail\""));
         assert!(body.as_str().contains("\"variant\":\"v3\""));
     }
 

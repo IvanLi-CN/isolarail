@@ -72,15 +72,15 @@ function longDevices(count: number): DiscoveredDevice[] {
   return Array.from({ length: count }, (_, i) => {
     const n = i + 1;
     return {
-      device_id: `isohub-${n}`,
-      hostname: `isohub-${n}`,
-      fqdn: `isohub-${n}.local`,
+      device_id: `isolarail-${n}`,
+      hostname: `isolarail-${n}`,
+      fqdn: `isolarail-${n}.local`,
       ipv4: `192.168.1.${40 + n}`,
       baseUrl:
         n % 3 === 0
-          ? `http://isohub-${n}.local/this/is/a/very/long/path/to/trigger/truncation/in/narrow/layouts`
-          : `http://isohub-${n}.local`,
-      firmware: { name: "iso-usb-hub", version: `0.1.${n}` },
+          ? `http://isolarail-${n}.local/this/is/a/very/long/path/to/trigger/truncation/in/narrow/layouts`
+          : `http://isolarail-${n}.local`,
+      firmware: { name: "isolarail", version: `0.1.${n}` },
       variant: "v3",
       last_seen_at: new Date(Date.now() - n * 60_000).toISOString(),
     };
@@ -95,8 +95,8 @@ const meta: Meta<typeof AddDeviceDialog> = {
   },
   args: {
     open: true,
-    existingDeviceIds: ["isohub-1"],
-    existingDeviceBaseUrls: ["http://isohub-1.local"],
+    existingDeviceIds: ["isolarail-1"],
+    existingDeviceBaseUrls: ["http://isolarail-1.local"],
     onClose: () => {},
     onCreate: async () => ({
       ok: true,
@@ -219,12 +219,12 @@ export const AddFailure: Story = {
         status: "ready",
         devices: [
           {
-            device_id: "isohub-2",
-            hostname: "isohub-2",
-            fqdn: "isohub-2.local",
+            device_id: "isolarail-2",
+            hostname: "isolarail-2",
+            fqdn: "isolarail-2.local",
             ipv4: "192.168.1.42",
-            baseUrl: "http://isohub-2.local",
-            firmware: { name: "iso-usb-hub", version: "0.1.2" },
+            baseUrl: "http://isolarail-2.local",
+            firmware: { name: "isolarail", version: "0.1.2" },
             variant: "v3",
           },
         ],
@@ -264,7 +264,7 @@ export const WebSerialConnectionLog: Story = {
       {
         tone: "warning",
         message:
-          "Web Serial info attempt failed: No IsoHub JSONL response received from this serial device.",
+          "Web Serial info attempt failed: No IsolaRail JSONL response received from this serial device.",
       },
       {
         tone: "info",

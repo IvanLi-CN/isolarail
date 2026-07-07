@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an IsoHub firmware catalog from release artifacts."""
+"""Build an IsolaRail firmware catalog from release artifacts."""
 
 from __future__ import annotations
 

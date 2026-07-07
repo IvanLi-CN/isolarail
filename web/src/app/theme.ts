@@ -1,8 +1,8 @@
-export type ThemeId = "isohub" | "isohub-dark" | "system";
+export type ThemeId = "isolarail" | "isolarail-dark" | "system";
 
-export const THEME_STORAGE_KEY = "isohub.theme";
+export const THEME_STORAGE_KEY = "isolarail.theme";
 
-const VALID_THEMES: ThemeId[] = ["isohub", "isohub-dark", "system"];
+const VALID_THEMES: ThemeId[] = ["isolarail", "isolarail-dark", "system"];
 
 function isThemeId(value: unknown): value is ThemeId {
   return (
@@ -12,19 +12,19 @@ function isThemeId(value: unknown): value is ThemeId {
 
 export function loadThemePreference(): ThemeId {
   if (typeof window === "undefined") {
-    return "isohub";
+    return "isolarail";
   }
 
   const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (!raw) {
-    return "isohub";
+    return "isolarail";
   }
 
   try {
     const parsed: unknown = JSON.parse(raw);
-    return isThemeId(parsed) ? parsed : "isohub";
+    return isThemeId(parsed) ? parsed : "isolarail";
   } catch {
-    return "isohub";
+    return "isolarail";
   }
 }
 

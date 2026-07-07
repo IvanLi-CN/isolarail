@@ -8,7 +8,7 @@
 
 ## 背景 / 问题陈述
 
-- 当前仓库是 `iso-usb-hub`，具备四路端口电源门控、CH335F sideband、前面板与 LCD dashboard，但缺少正式交付的 Wi-Fi/LAN、USB JSONL、本地 companion daemon、CLI 与 web app 控制面。
+- 当前仓库是 `isolarail`，具备四路端口电源门控、CH335F sideband、前面板与 LCD dashboard，但缺少正式交付的 Wi-Fi/LAN、USB JSONL、本地 companion daemon、CLI 与 web app 控制面。
 - 参考项目 `isolapurr` 已经验证了 `USB CDC JSONL + mDNS/HTTP + devd + CLI + Web` 的整套控制面模式，本项目需要复用这条架构路径，同时保持四路硬件语义与 V3 板约束。
 - 如果继续停留在串口日志与临时脚本层，设备身份、配网、刷写、端口控制和诊断会长期分散在多个不稳定入口中。
 
@@ -17,7 +17,7 @@
 ### Goals
 
 - 设备端引入 `USB CDC JSONL + Wi-Fi/LAN HTTP + mDNS + EEPROM provisioning`。
-- 交付 `isohub-devd` 与 `isohub`，统一 Local USB、LAN discovery、flash/reset/monitor、browser bridge 与 shared profile storage，并明确当前 `isohub` CLI 才是 owner-facing 门户；若未来引入 desktop 程序，也必须复用同一 daemon 语义。
+- 交付 `isolarail-devd` 与 `isolarail`，统一 Local USB、LAN discovery、flash/reset/monitor、browser bridge 与 shared profile storage，并明确当前 `isolarail` CLI 才是 owner-facing 门户；若未来引入 desktop 程序，也必须复用同一 daemon 语义。
 - 交付 `web/` 三通道控制台，围绕四路 `port1..port4` 构建 Add device、Dashboard、Settings、Info 工作流。
 - 统一文档、构建、验证、视觉证据与 release 产物形状，收口到 `PR-ready`。
 
@@ -34,7 +34,7 @@
 
 - 固件底座升级与模块重组。
 - `M24C64@0x50` Wi-Fi 持久化。
-- `isohub-devd` / `isohub` 本地 companion tools。
+- `isolarail-devd` / `isolarail` 本地 companion tools。
 - `web/` 前端、Storybook、视觉证据。
 - `README.md`、`docs/software_design.md`、`docs/hardware_connection_overview.md`、`docs/specs/README.md`。
 
@@ -52,10 +52,10 @@
 - 设备固件必须提供 `/api/v1/health`、`/api/v1/info`、`/api/v1/ports`、`/api/v1/ports/{portId}`、`/api/v1/ports/{portId}/power`、`/api/v1/ports/{portId}/actions/replug`、`GET /api/v1/wifi`、`POST /api/v1/reboot` 的 HTTP 接口。
 - 设备 profile 必须以 `port1..port4` 为唯一 owner-facing 端口模型。
 - Wi-Fi 凭据和网络配置必须写入主板 `M24C64@0x50`，并带 magic/version 与完整性校验。
-- `isohub-devd serve` 默认只开放本地 IPC；`isohub-devd web` 才允许 localhost Web companion。
+- `isolarail-devd serve` 默认只开放本地 IPC；`isolarail-devd web` 才允许 localhost Web companion。
 - Web runtime 不得扫描 localhost 端口；Local USB companion origin 必须由同源 bootstrap 或显式配置的 mDNS/IP origin 列表提供。
-- 普通用户当前默认通过 `isohub` CLI 操作设备；若未来引入 desktop 程序，它也必须负责按需启动并复用全局单例 `isohub-devd`，而不是要求用户先手动启动 daemon。
-- `isohub` 必须区分 `--hardware <saved-id>` 与 `--device <temporary-id>` 选择器语义。
+- 普通用户当前默认通过 `isolarail` CLI 操作设备；若未来引入 desktop 程序，它也必须负责按需启动并复用全局单例 `isolarail-devd`，而不是要求用户先手动启动 daemon。
+- `isolarail` 必须区分 `--hardware <saved-id>` 与 `--device <temporary-id>` 选择器语义。
 - web runtime 必须统一仲裁 `Wi-Fi/LAN`、`Web Serial`、`Local USB bridge` 三个通道，避免重复设备。
 - 当前 V3 板上的 `replug` 必须定义为“受控断电再上电”，而不是伪造真数据断连。
 
@@ -100,18 +100,18 @@
 
 | Scope | Canonical name | Applies to | Notes |
 | ----- | -------------- | ---------- | ----- |
-| GitHub repo / firmware package | `iso-usb-hub` | repo root, root `Cargo.toml`, release artifact identity | 仓库名与固件 package/name 保持一致 |
-| USB JSONL / HTTP identity | `firmware.name="iso-usb-hub"` | device `info`, companion identity verification, web runtime | companion/web 以此做设备身份校验 |
-| mDNS hostname | `isohub-<shortid>` | mDNS, LAN discovery, saved hardware profile | 不使用 `iso-usb-hub-<shortid>` |
-| Local daemon binary | `isohub-devd` | release binaries, CLI auto-spawn target, docs | 默认只跑原生 IPC |
-| CLI portal binary | `isohub` | owner-facing terminal entrypoint | 普通用户默认入口 |
-| Companion workspace | `tools/isohub-companion/` | repo-local source tree | 仅表示本机配套工具集合 |
-| Companion Cargo package | `isohub-companion` | `tools/isohub-companion/Cargo.toml` | 不对外暴露为产品名 |
+| GitHub repo / firmware package | `isolarail` | repo root, root `Cargo.toml`, release artifact identity | 仓库名与固件 package/name 保持一致 |
+| USB JSONL / HTTP identity | `firmware.name="isolarail"` | device `info`, companion identity verification, web runtime | companion/web 以此做设备身份校验 |
+| mDNS hostname | `isolarail-<shortid>` | mDNS, LAN discovery, saved hardware profile | 与固件 hostname 生成规则一致 |
+| Local daemon binary | `isolarail-devd` | release binaries, CLI auto-spawn target, docs | 默认只跑原生 IPC |
+| CLI portal binary | `isolarail` | owner-facing terminal entrypoint | 普通用户默认入口 |
+| Companion workspace | `tools/isolarail-companion/` | repo-local source tree | 仅表示本机配套工具集合 |
+| Companion Cargo package | `isolarail-companion` | `tools/isolarail-companion/Cargo.toml` | 不对外暴露为产品名 |
 | Frontend package | `web` | repo-local frontend package | owner-facing 产品名不是 `web` |
-| Root JS tooling manifest | `isohub-dev-tools` | repo root `package.json` | repo tooling 元数据，不是产品名 |
+| Root JS tooling manifest | `isolarail-dev-tools` | repo root `package.json` | repo tooling 元数据，不是产品名 |
 | Developer entrypoint | `just` | README, INSTALL, contributor docs, local development commands | 不把 `bun` 作为默认开发入口 |
-| Daemon IPC mode | `isohub-devd serve` | local daemon default mode | 只开放原生系统 IPC |
-| Explicit Web companion mode | `isohub-devd web` | localhost Web companion | 仅开发/浏览器路径显式启用；发布本机 `_isohub-devd._tcp.local.` |
+| Daemon IPC mode | `isolarail-devd serve` | local daemon default mode | 只开放原生系统 IPC |
+| Explicit Web companion mode | `isolarail-devd web` | localhost Web companion | 仅开发/浏览器路径显式启用；发布本机 `_isolarail-devd._tcp.local.` |
 | Owner-facing port ids | `port1` `port2` `port3` `port4` | HTTP / USB / CLI / web / shared schema | 全部一致 |
 | Port labels | `Port 1` `Port 2` `Port 3` `Port 4` | UI copy, logs, diagnostics export | 不再用 `USB-A` / `USB-C` |
 | Board baseline | `V3` | current deliverable hardware baseline | 指当前软件落地基线板 |
@@ -120,15 +120,15 @@
 
 | Package / target | Canonical name | Scope | Owner-facing | Notes |
 | ---------------- | -------------- | ----- | ------------ | ----- |
-| Root firmware Cargo package | `iso-usb-hub` | root `Cargo.toml` `[package].name` | yes | 也是设备 `firmware.name` 的真相源 |
-| Companion workspace directory | `tools/isohub-companion/` | repo-local source tree | no | 表示本仓配套工具工作区 |
-| Companion Cargo package | `isohub-companion` | `tools/isohub-companion/Cargo.toml` `[package].name` | no | 仅用于构建/发布编排，不作为产品入口名 |
-| Companion daemon binary | `isohub-devd` | `tools/isohub-companion` `[[bin]]` | yes | CLI/未来 desktop 复用的后台单例 |
-| Companion CLI binary | `isohub` | `tools/isohub-companion` `[[bin]]` | yes | 普通用户默认入口 |
-| Frontend package | `web` | `web/package.json` `name` | no | repo-local 包名；owner-facing 产品名仍是 `isohub` 控制台 |
-| Root JS tooling package | `isohub-dev-tools` | repo root `package.json` `name` | no | 仅承载 commitlint 与 repo-level JS tooling 元数据 |
+| Root firmware Cargo package | `isolarail` | root `Cargo.toml` `[package].name` | yes | 也是设备 `firmware.name` 的真相源 |
+| Companion workspace directory | `tools/isolarail-companion/` | repo-local source tree | no | 表示本仓配套工具工作区 |
+| Companion Cargo package | `isolarail-companion` | `tools/isolarail-companion/Cargo.toml` `[package].name` | no | 仅用于构建/发布编排，不作为产品入口名 |
+| Companion daemon binary | `isolarail-devd` | `tools/isolarail-companion` `[[bin]]` | yes | CLI/未来 desktop 复用的后台单例 |
+| Companion CLI binary | `isolarail` | `tools/isolarail-companion` `[[bin]]` | yes | 普通用户默认入口 |
+| Frontend package | `web` | `web/package.json` `name` | no | repo-local 包名；owner-facing 产品名仍是 `isolarail` 控制台 |
+| Root JS tooling package | `isolarail-dev-tools` | repo root `package.json` `name` | no | 仅承载 commitlint 与 repo-level JS tooling 元数据 |
 | Display driver crate | `gc9d01` | vendored submodule / firmware dependency | no | 内部驱动依赖，不提升为产品命名 |
-| Vendored display example packages | `esp32s3-160-50-direct-spi`、`esp32s3-160-50-embedded-graphics`、`stm32g4-160-40`、`stm32g4-160-40-embedded-graphics`、`stm32g4-160-40-direct-spi`、`stm32g4-160-40-90-complex-patterns`、`stm32g4-160-40-direct-spi-90-complex-patterns` | `gc9d01/examples/**/Cargo.toml` | no | 上游驱动示例包；允许保留示例名，但不得影响 `isohub` 产品命名或 release 资产 |
+| Vendored display example packages | `esp32s3-160-50-direct-spi`、`esp32s3-160-50-embedded-graphics`、`stm32g4-160-40`、`stm32g4-160-40-embedded-graphics`、`stm32g4-160-40-direct-spi`、`stm32g4-160-40-90-complex-patterns`、`stm32g4-160-40-direct-spi-90-complex-patterns` | `gc9d01/examples/**/Cargo.toml` | no | 上游驱动示例包；允许保留示例名，但不得影响 `isolarail` 产品命名或 release 资产 |
 | Dashboard preview crate | `dashboard_preview` | `tools/dashboard_preview/Cargo.toml` `[package].name` | no | 本地 LCD/布局预览工具，不作为交付产品名 |
 | Icon conversion crate | `icon2raw` | `tools/icon2raw/Cargo.toml` `[package].name` | no | 开发期资源转换工具 |
 | PNG conversion crate | `png2raw` | `tools/png2raw/Cargo.toml` `[package].name` | no | 开发期资源转换工具 |
@@ -138,7 +138,7 @@
 - 已纳入命名矩阵的 manifest：
   - root `Cargo.toml`
   - root `package.json`
-  - `tools/isohub-companion/Cargo.toml`
+  - `tools/isolarail-companion/Cargo.toml`
   - `web/package.json`
   - `gc9d01/Cargo.toml`
   - `tools/dashboard_preview/Cargo.toml`
@@ -218,12 +218,12 @@
 - 本项目 owner-facing 文档与 release 资产中禁止把 `gc9d01/examples/**` 的示例包名、`SC8815+SW2303`、`PSTOP_CTL`、`PSTOP`、未限定作用域的 `RESET#` 直接当作当前 V3 控制面的产品术语。
 - 本项目 owner-facing 文档、CLI、web、shared schema 中禁止把 `BUZZER`、`FAN_PWM`、`FAN_EN`、`FAN_TACH`、`HUB_SDA`、`HUB_SCL`、`I2C_INT`、`I2C_RESET`、`ISO_OK`、`LCD_CS`、`LCD_RST`、`LCD_RES`、`LCD_BLK`、`USB D+`、`USB D-` 直接当作产品功能名或用户可操作对象。
 - 本项目 owner-facing 文档、CLI、web、shared schema 中禁止把 `I2C_SDA`、`I2C_SCL`、`LCD_DC`、`LCD_MOSI`、`LCD_SCLK`、`GPIO13`、`GPIO14`、`GPIO0`、`CHIP_PU` 这类 pin-level 名称直接当作产品模块、设备能力或用户操作对象。
-- repo-local package 命名也不得再新增 `isolapurr-*`、`host-*`、`desktop-agent*` 这类会把参考项目或运行时实现细节误当成产品边界的包名；如确需内部适配层，命名也必须落回 `isohub-*` 或功能性中性名。
+- repo-local package 命名也不得再新增 `isolapurr-*`、`host-*`、`desktop-agent*` 这类会把参考项目或运行时实现细节误当成产品边界的包名；如确需内部适配层，命名也必须落回 `isolarail-*` 或功能性中性名。
 
-- 设备身份：`firmware.name="iso-usb-hub"`，hostname 为 `isohub-<shortid>`，HTTP `info`、USB `info`、devd、CLI 与 web domain 共享同一 identity shape。
+- 设备身份：`firmware.name="isolarail"`，hostname 为 `isolarail-<shortid>`，HTTP `info`、USB `info`、devd、CLI 与 web domain 共享同一 identity shape。
 - 端口模型：`port1..port4` 每路包含 power/data/ocp/pwren/en/telemetry/runtime channel state；断路、初始化、过流、手动关闭必须区分显示。
-- companion 进程拓扑：`isohub-devd` 作为本机全局单例后台进程存在；当前 `isohub` CLI 是默认 owner-facing 门户，负责发现已运行实例、按需自启 `serve` 模式 daemon，并通过本地 IPC 复用同一实例；未来若引入 desktop 程序，也必须复用这套单例语义；`web` 仅在 Web 路径显式需要时开启。
-- 原生 IPC 机制：`isohub-devd serve` 在 Unix 平台必须使用 Unix domain socket，在 Windows 必须使用 named pipe；`isohub-devd web` 只是显式附加的 localhost Web companion，不能替代默认 IPC。
+- companion 进程拓扑：`isolarail-devd` 作为本机全局单例后台进程存在；当前 `isolarail` CLI 是默认 owner-facing 门户，负责发现已运行实例、按需自启 `serve` 模式 daemon，并通过本地 IPC 复用同一实例；未来若引入 desktop 程序，也必须复用这套单例语义；`web` 仅在 Web 路径显式需要时开启。
+- 原生 IPC 机制：`isolarail-devd serve` 在 Unix 平台必须使用 Unix domain socket，在 Windows 必须使用 named pipe；`isolarail-devd web` 只是显式附加的 localhost Web companion，不能替代默认 IPC。
 - 通道仲裁：当多个通道同时可用时，采用“最后成功通道优先”；当前通道失效时自动提升另一条可用通道，不新建重复设备。
 - Wi-Fi 写策略：LAN HTTP 路径只读；`wifi.set` / `wifi.clear` 必须要求 `Web Serial` 或 `Local USB bridge` 当前可用。
 - `port.replug`：关闭对应 `ENx`，等待受控恢复窗口后重新打开；成功证据为设备侧动作完成与 companion/runtime 观察到的状态更新。
@@ -234,16 +234,16 @@
 - Given 当前 V3 板启动成功，When 用户通过 USB JSONL 或 LAN HTTP 请求 `info`，Then 返回一致的 firmware identity、hostname、MAC 与 Wi-Fi 状态。
 - Given 四路输出存在运行期遥测，When 请求 `ports.get` 或 `GET /api/v1/ports`，Then `port1..port4` 返回与 CH335F sideband/OCP/手动门控一致的状态。
 - Given Wi-Fi 凭据通过 USB-capable 通道写入，When 设备重启或重新连网，Then 固件从 `M24C64@0x50` 恢复配置并更新 HTTP `info` / USB `wifi.get`。
-- Given `isohub-devd serve` 正在运行，When 未显式启动 `isohub-devd web` companion，Then localhost 不应暴露 HTTP API。
-- Given `isohub-devd serve` 在 Unix 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 Unix domain socket 而不是 localhost HTTP。
-- Given `isohub-devd serve` 在 Windows 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 named pipe 而不是 localhost HTTP。
-- Given 普通用户从 `isohub` CLI 发起本地操作，When 本机尚无可用 daemon，Then `isohub` 应自动启动或连接全局单例 `isohub-devd serve`，而不是要求用户先手动执行 `devd-serve`。
+- Given `isolarail-devd serve` 正在运行，When 未显式启动 `isolarail-devd web` companion，Then localhost 不应暴露 HTTP API。
+- Given `isolarail-devd serve` 在 Unix 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 Unix domain socket 而不是 localhost HTTP。
+- Given `isolarail-devd serve` 在 Windows 平台启动，When companion/CLI 连接 daemon，Then 连接路径必须走 named pipe 而不是 localhost HTTP。
+- Given 普通用户从 `isolarail` CLI 发起本地操作，When 本机尚无可用 daemon，Then `isolarail` 应自动启动或连接全局单例 `isolarail-devd serve`，而不是要求用户先手动执行 `devd-serve`。
 - Given web app 已绑定同一设备的多条通道，When 当前主通道失效，Then 运行时切换到其他可用通道而不创建重复条目。
 
 ## 实现前置条件
 
 - 当前 V3 板的 `M24C64`、USB D+/D-、CH335F、四路 `EN` 与 sideband 拓扑事实已冻结。
-- owner-facing 命名空间 `isohub` / `isohub-devd` 与 `port1..port4` 已冻结。
+- owner-facing 命名空间 `isolarail` / `isolarail-devd` 与 `port1..port4` 已冻结。
 - `replug=power-cycle` 与 `hub.reset` 语义已冻结。
 
 ## 非功能性验收 / 质量门槛
@@ -260,7 +260,7 @@
 
 - `docs/specs/pw97u-control-plane-alignment/SPEC.md` 必须继续作为软件包名、二进制名、硬件基线名与板级子系统 canonical naming 的单一真相源。
 - `docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md` 必须继续作为 V3 GPIO、pin-level 网络名、显示链路与 scoped reset 真相源；`docs/plan/**` 与历史 GPIO 参考文档不得覆盖它。
-- root `Cargo.toml`、`tools/isohub-companion/Cargo.toml`、`web/package.json`、README、web owner-facing copy、CLI help、HTTP/USB identity 与 shared schema 不得偏离本 spec 的 `Canonical Naming Matrix`、`Software Package Matrix` 与 `Hardware Naming Matrix`。
+- root `Cargo.toml`、`tools/isolarail-companion/Cargo.toml`、`web/package.json`、README、web owner-facing copy、CLI help、HTTP/USB identity 与 shared schema 不得偏离本 spec 的 `Canonical Naming Matrix`、`Software Package Matrix` 与 `Hardware Naming Matrix`。
 - `gc9d01/examples/**` 的 vendored 示例包、legacy `SC8815/SW2303/PSTOP*` 板级术语与 scoped reset/INT 命名，必须按本 spec 的排除/限定规则出现；它们可以保留在示例或硬件拓扑文档中，但不得漂移进 owner-facing 控制面边界。
 - 除“参考项目说明”“历史兼容说明”“BOM/netlist 别名说明”三类受控语境外，项目文档与 owner-facing 文案中不得重新引入 `isolapurr`、`host-devd`、`port_a`、`USB-C route` 等禁用命名。
 - `docs/hardware_connection_overview.md` 必须保持当前 V3 四路设备模型、`EN1..EN4`、`PWREN#` / `OVCUR#`、输入电源路径与前面板/显示链路的 current truth；历史 GPIO 与 V2 讨论若仍需保留，应停留在明确的 legacy 文档中。

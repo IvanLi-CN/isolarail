@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use isohub_companion::{
+use isolarail_companion::{
     DEFAULT_BIND, DEFAULT_IPC_IDLE_TIMEOUT_SECS, DEFAULT_WEB_MDNS_NAME, DevdConfig, IpcConfig,
     default_ipc_endpoint, serve_http_bridge, serve_ipc,
 };
@@ -7,9 +7,9 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "isohub-devd",
-    version = isohub_companion::release_version(),
-    about = "IsoHub local device daemon"
+    name = "isolarail-devd",
+    version = isolarail_companion::release_version(),
+    about = "IsolaRail local device daemon"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -70,14 +70,14 @@ mod tests {
     #[test]
     fn web_command_accepts_bind_web_root_mdns_and_cors_flags() {
         let cli = Cli::try_parse_from([
-            "isohub-devd",
+            "isolarail-devd",
             "web",
             "--bind",
             "127.0.0.1:51201",
             "--web-root",
             "web/dist",
             "--mdns-name",
-            "isohub-devd",
+            "isolarail-devd",
             "--allow-dev-cors",
         ])
         .expect("web command should parse");
@@ -94,7 +94,7 @@ mod tests {
 
         assert_eq!(bind.to_string(), "127.0.0.1:51201");
         assert_eq!(web_root, Some(PathBuf::from("web/dist")));
-        assert_eq!(mdns_name, "isohub-devd");
+        assert_eq!(mdns_name, "isolarail-devd");
         assert!(allow_dev_cors);
     }
 
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn legacy_bridge_http_command_is_rejected() {
-        let err = Cli::try_parse_from(["isohub-devd", "bridge-http"])
+        let err = Cli::try_parse_from(["isolarail-devd", "bridge-http"])
             .expect_err("legacy command should not parse");
 
         assert!(err.to_string().contains("unrecognized subcommand"));

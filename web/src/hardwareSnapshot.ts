@@ -135,10 +135,10 @@ export interface HardwareSnapshot {
 }
 
 export const mockSnapshot: HardwareSnapshot = {
-  schema: "iso-usb-hub.hardware.snapshot.v1",
+  schema: "isolarail.hardware.snapshot.v1",
   sequence: 17,
   uptime_ms: 84231,
-  firmware: { name: "iso-usb-hub", version: "0.1.0", target: "esp32s3" },
+  firmware: { name: "isolarail", version: "0.1.0", target: "esp32s3" },
   packages: [
     "identity",
     "boot",

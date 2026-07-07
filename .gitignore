@@ -49,4 +49,4 @@ docs-site/.cache/
 # Local MCU tooling state
 .esp32-port
 .mcu-agentd/
-.isohub-devd/
+.isolarail-devd/

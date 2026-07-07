@@ -1,5 +1,5 @@
 pub fn registry_path() -> anyhow::Result<PathBuf> {
-    let dirs = ProjectDirs::from("cc", "isohub", "isohub")
+    let dirs = ProjectDirs::from("cc", "isolarail", "isolarail")
         .ok_or_else(|| anyhow!("cannot resolve user config directory"))?;
     Ok(dirs.config_dir().join(STORAGE_FILE_NAME))
 }
@@ -35,14 +35,14 @@ pub fn write_hardware_registry(registry: &HardwareRegistry) -> anyhow::Result<()
 }
 
 fn settings_path() -> anyhow::Result<PathBuf> {
-    let dirs = ProjectDirs::from("cc", "isohub", "isohub")
+    let dirs = ProjectDirs::from("cc", "isolarail", "isolarail")
         .ok_or_else(|| anyhow!("cannot resolve user config directory"))?;
     Ok(dirs.config_dir().join(STORAGE_SETTINGS_FILE_NAME))
 }
 
 fn default_storage_settings() -> StorageSettings {
     StorageSettings {
-        theme: "isohub".to_string(),
+        theme: "isolarail".to_string(),
     }
 }
 
@@ -238,7 +238,7 @@ async fn require_compatible_project_firmware(
         Ok(info) => info,
         Err(err) => {
             return Err(anyhow!(
-                "device did not respond to IsoHub `info`; it may be in download mode or running non-project firmware: {err:#}"
+                "device did not respond to IsolaRail `info`; it may be in download mode or running non-project firmware: {err:#}"
             ));
         }
     };
@@ -295,7 +295,7 @@ async fn require_project_firmware_for_upgrade(
         Ok(info) => info,
         Err(err) => {
             return Err(anyhow!(
-                "device did not respond to IsoHub `info`; it may be in download mode or running non-project firmware: {err:#}"
+                "device did not respond to IsolaRail `info`; it may be in download mode or running non-project firmware: {err:#}"
             ));
         }
     };
@@ -616,8 +616,8 @@ fn error_from_anyhow(err: anyhow::Error) -> Response {
     } else if message.contains("non-project firmware")
         || message.contains("not include firmware")
         || message.contains("firmware version")
-        || message.contains("expected `iso-usb-hub`")
-        || message.contains("did not respond to IsoHub")
+        || message.contains("expected `isolarail`")
+        || message.contains("did not respond to IsolaRail")
     {
         bad_request(&message)
     } else {

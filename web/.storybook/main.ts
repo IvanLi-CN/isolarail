@@ -1,6 +1,6 @@
 import type { StorybookConfig } from "@storybook/react-vite";
 
-process.env.ISOHUB_DEV_PROXY ??= "0";
+process.env.ISOLARAIL_DEV_PROXY ??= "0";
 
 const config: StorybookConfig = {
   stories: ["../src/**/*.stories.@(ts|tsx)"],

@@ -1,8 +1,8 @@
 set shell := ["zsh", "-cu"]
 
-companion_devd_bin := justfile_directory() + "/tools/isohub-companion/scripts/devd-bin.sh"
+companion_devd_bin := justfile_directory() + "/tools/isolarail-companion/scripts/devd-bin.sh"
 TARGET := "xtensa-esp32s3-none-elf"
-BIN := "iso-usb-hub"
+BIN := "isolarail"
 FIRMWARE_ELF := justfile_directory() + "/target/" + TARGET + "/release/" + BIN
 FIRMWARE_BIN := justfile_directory() + "/target/" + TARGET + "/release/" + BIN + ".app.bin"
 FIRMWARE_CATALOG := justfile_directory() + "/target/" + TARGET + "/release/firmware-catalog.json"
@@ -12,10 +12,10 @@ default:
   @just --list
 
 tools-build:
-  cd tools/isohub-companion && ISOHUB_USB_PORT="${USB_PORT:-}" cargo build --bins
+  cd tools/isolarail-companion && ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo build --bins
 
 tools-test:
-  cd tools/isohub-companion && ISOHUB_USB_PORT="${USB_PORT:-}" cargo test
+  cd tools/isolarail-companion && ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo test
 
 firmware-check:
   cargo +esp check
@@ -34,27 +34,27 @@ host-tools-test:
   just tools-test
 
 devd-serve:
-  cd tools/isohub-companion && \
+  cd tools/isolarail-companion && \
   if [[ -n "${ENDPOINT:-}" ]]; then \
-    ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- serve --endpoint "${ENDPOINT}"; \
+    ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail-devd -- serve --endpoint "${ENDPOINT}"; \
   else \
-    ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- serve; \
+    ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail-devd -- serve; \
   fi
 
 devd-web:
-  cd tools/isohub-companion && \
+  cd tools/isolarail-companion && \
   extra_args=(); \
   if [[ "${ALLOW_DEV_CORS:-}" == "1" ]]; then extra_args+=(--allow-dev-cors); fi; \
-  ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- web --bind "${BIND:-127.0.0.1:51200}" --mdns-name "${MDNS_NAME:-isohub-devd}" "${extra_args[@]}"
+  ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail-devd -- web --bind "${BIND:-127.0.0.1:51200}" --mdns-name "${MDNS_NAME:-isolarail-devd}" "${extra_args[@]}"
 
 devd-help:
-  cd tools/isohub-companion && ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub-devd -- --help
+  cd tools/isolarail-companion && ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail-devd -- --help
 
-isohub +ARGS='--help':
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- {{ARGS}}
+isolarail +ARGS='--help':
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- {{ARGS}}
 
 ports:
-  USB_PORT="${USB_PORT:-}" just isohub --json discover --scan | python3 -c 'import json,sys; data=json.load(sys.stdin); rows=["{}\t{}\tdevice={}".format((d.get("transport") or {}).get("portPath") or "", d.get("displayName") or d.get("id") or "iso-usb-hub", d.get("id") or "") for d in data.get("devices", []) if (d.get("transport") or {}).get("kind") == "usb" and (d.get("transport") or {}).get("portPath")]; print("\n".join(rows) if rows else "No ESP32-S3 USB Serial/JTAG candidates found.")'
+  USB_PORT="${USB_PORT:-}" just isolarail --json discover --scan | python3 -c 'import json,sys; data=json.load(sys.stdin); rows=["{}\t{}\tdevice={}".format((d.get("transport") or {}).get("portPath") or "", d.get("displayName") or d.get("id") or "isolarail", d.get("id") or "") for d in data.get("devices", []) if (d.get("transport") or {}).get("kind") == "usb" and (d.get("transport") or {}).get("portPath")]; print("\n".join(rows) if rows else "No ESP32-S3 USB Serial/JTAG candidates found.")'
 
 identify:
   if [[ -z "${PORT:-}" ]]; then \
@@ -68,14 +68,14 @@ identify:
   device_id="usb-$(printf '%s' "$PORT" | sed 's/[^A-Za-z0-9]/-/g')"; \
   tmp="$(mktemp)"; \
   trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-  USB_PORT="$PORT" just isohub --json discover --scan > "$tmp"; \
+  USB_PORT="$PORT" just isolarail --json discover --scan > "$tmp"; \
   python3 -c 'import json,sys; device_id=sys.argv[1]; data=json.load(open(sys.argv[2], encoding="utf-8")); matches=[d for d in data.get("devices", []) if d.get("id") == device_id]; matches or sys.exit(f"device {device_id} not found in discovery output")' "$device_id" "$tmp"; \
-  USB_PORT="$PORT" just isohub --json status --device "$device_id" > "$tmp"; \
+  USB_PORT="$PORT" just isolarail --json status --device "$device_id" > "$tmp"; \
   project_device_id="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; print(v.get("device_id") or "")' "$tmp")"; \
   mac="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; print(v.get("mac") or "")' "$tmp")"; \
   firmware="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("device") or (d.get("result") or {}).get("device") or {}; f=v.get("firmware") or {}; print(f.get("name") or "")' "$tmp")"; \
-  if [[ "$firmware" != "iso-usb-hub" ]]; then \
-    echo "error: selected port is not running iso-usb-hub firmware." >&2; \
+  if [[ "$firmware" != "isolarail" ]]; then \
+    echo "error: selected port is not running isolarail firmware." >&2; \
     exit 2; \
   fi; \
   { \
@@ -180,7 +180,7 @@ flash:
   expected_args=("${(@z)expected}"); \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
   just firmware-bin; \
-  USB_PORT="$port" just isohub flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
+  USB_PORT="$port" just isolarail flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
 
 _flash-cargo-elf:
   @device="$(just _selected-device)" || exit $?; \
@@ -188,7 +188,7 @@ _flash-cargo-elf:
   expected_args=("${(@z)expected}"); \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
   catalog="$(just _firmware-bin-from-cargo-elf)" || exit $?; \
-  USB_PORT="$port" just isohub flash --device "$device" --catalog "$catalog" --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
+  USB_PORT="$port" just isolarail flash --device "$device" --catalog "$catalog" --artifact {{FIRMWARE_ARTIFACT}} --real "${expected_args[@]}"
 
 flash-first-time:
   @if [[ -z "${PORT:-}" ]]; then \
@@ -200,8 +200,8 @@ flash-first-time:
   device="usb-$(printf '%s' "$PORT" | sed 's/[^A-Za-z0-9]/-/g')"; \
   tmp="$(mktemp)"; \
   trap 'rm -f "$tmp"' EXIT HUP INT TERM; \
-  USB_PORT="$PORT" just isohub discover --scan >/dev/null || true; \
-  USB_PORT="$PORT" just isohub --json flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time | tee "$tmp"; \
+  USB_PORT="$PORT" just isolarail discover --scan >/dev/null || true; \
+  USB_PORT="$PORT" just isolarail --json flash --device "$device" --catalog {{FIRMWARE_CATALOG}} --artifact {{FIRMWARE_ARTIFACT}} --real --first-time | tee "$tmp"; \
   project_device_id="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); identity=data.get("identity") or (data.get("result") or {}).get("identity") or {}; print(identity.get("deviceId") or identity.get("device_id") or "")' "$tmp")"; \
   mac="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); identity=data.get("identity") or (data.get("result") or {}).get("identity") or {}; print(identity.get("mac") or "")' "$tmp")"; \
   if [[ -z "$project_device_id" && -z "$mac" ]]; then \
@@ -222,12 +222,12 @@ flash-first-time:
 reset:
   @device="$(just _selected-device)" || exit $?; \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
-  USB_PORT="$port" just isohub reset --device "$device"
+  USB_PORT="$port" just isolarail reset --device "$device"
 
 monitor:
   @device="$(just _selected-device)" || exit $?; \
   port="$(sed -n 's/^port=//p' .esp32-port | head -1)"; \
-  USB_PORT="$port" just isohub monitor --device "$device" --tail "${TAIL:-200}"
+  USB_PORT="$port" just isolarail monitor --device "$device" --tail "${TAIL:-200}"
 
 flash-monitor:
   @just flash
@@ -241,19 +241,19 @@ _flash-monitor-cargo-elf:
 
 discover:
   if [[ "${SCAN:-1}" == '1' ]]; then \
-    cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- discover --scan; \
+    cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- discover --scan; \
   else \
-    cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- discover; \
+    cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- discover; \
   fi
 
 devices:
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- devices
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- devices
 
 hardware-available:
   if [[ "${SCAN:-1}" == '1' ]]; then \
-    cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- hardware available --scan; \
+    cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- hardware available --scan; \
   else \
-    cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- hardware available; \
+    cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- hardware available; \
   fi
 
 status:
@@ -262,7 +262,7 @@ status:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- status "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- status "${selector[@]}"
 
 device-ports:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -270,7 +270,7 @@ device-ports:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- ports "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- ports "${selector[@]}"
 
 port-power:
   if [[ -z "${SELECTOR:-}" || -z "${PORT:-}" || -z "${ENABLED:-}" ]]; then \
@@ -278,7 +278,7 @@ port-power:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- ports "${selector[@]}" power --port "${PORT}" --enabled "${ENABLED}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- ports "${selector[@]}" power --port "${PORT}" --enabled "${ENABLED}"
 
 port-replug:
   if [[ -z "${SELECTOR:-}" || -z "${PORT:-}" ]]; then \
@@ -286,7 +286,7 @@ port-replug:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- ports "${selector[@]}" replug --port "${PORT}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- ports "${selector[@]}" replug --port "${PORT}"
 
 wifi-show:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -294,7 +294,7 @@ wifi-show:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- wifi show "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- wifi show "${selector[@]}"
 
 wifi-set:
   if [[ -z "${SELECTOR:-}" || -z "${SSID:-}" || -z "${PSK:-}" ]]; then \
@@ -302,7 +302,7 @@ wifi-set:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- wifi set "${selector[@]}" --ssid "${SSID}" --psk "${PSK}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- wifi set "${selector[@]}" --ssid "${SSID}" --psk "${PSK}"
 
 wifi-clear:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -310,7 +310,7 @@ wifi-clear:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- wifi clear "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- wifi clear "${selector[@]}"
 
 device-reset:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -318,7 +318,7 @@ device-reset:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- reset "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- reset "${selector[@]}"
 
 device-monitor:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -326,7 +326,7 @@ device-monitor:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- monitor "${selector[@]}" --tail "${TAIL:-200}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- monitor "${selector[@]}" --tail "${TAIL:-200}"
 
 diagnostics-export:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -334,7 +334,7 @@ diagnostics-export:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- diagnostics export "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- diagnostics export "${selector[@]}"
 
 diag-snapshot:
   if [[ -z "${SELECTOR:-}" ]]; then \
@@ -342,13 +342,13 @@ diag-snapshot:
     exit 1; \
   fi; \
   selector=(${=SELECTOR}); \
-  cd tools/isohub-companion && ISOHUB_DEVD_BIN='{{companion_devd_bin}}' ISOHUB_USB_PORT="${USB_PORT:-}" cargo run --bin isohub -- diag-snapshot "${selector[@]}"
+  cd tools/isolarail-companion && ISOLARAIL_DEVD_BIN='{{companion_devd_bin}}' ISOLARAIL_USB_PORT="${USB_PORT:-}" cargo run --bin isolarail -- diag-snapshot "${selector[@]}"
 
 web-install:
   bun install --cwd web
 
 web-dev:
-  ISOHUB_DEVD_ORIGINS="${DEVD_ORIGINS:-http://isohub-devd.local:51200,http://127.0.0.1:51200}" bun run --cwd web dev
+  ISOLARAIL_DEVD_ORIGINS="${DEVD_ORIGINS:-http://isolarail-devd.local:51200,http://127.0.0.1:51200}" bun run --cwd web dev
 
 web-storybook:
   bun run --cwd web storybook

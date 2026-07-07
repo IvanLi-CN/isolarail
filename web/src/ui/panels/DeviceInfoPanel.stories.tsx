@@ -12,11 +12,11 @@ import type { SerialActivityEntry } from "../../domain/hardwareConsole";
 import { DeviceInfoPanel } from "./DeviceInfoPanel";
 
 const demoDevice: StoredDevice = {
-  id: "isohub-a",
+  id: "isolarail-a",
   name: "Bench Hub A",
-  baseUrl: "http://isohub-a.local",
+  baseUrl: "http://isolarail-a.local",
   transports: {
-    httpBaseUrl: "http://isohub-a.local",
+    httpBaseUrl: "http://isolarail-a.local",
     localUsbDeviceId: "usb--dev-cu-usbmodem21221401",
     webSerialLabel: "ESP32-S3 USB Serial/JTAG",
   },
@@ -24,12 +24,12 @@ const demoDevice: StoredDevice = {
 
 const mockInfo: DeviceInfoResponse = {
   device: {
-    device_id: "isohub-a1b2c3",
-    hostname: "isohub-a1b2c3",
-    fqdn: "isohub-a1b2c3.local",
+    device_id: "isolarail-a1b2c3",
+    hostname: "isolarail-a1b2c3",
+    fqdn: "isolarail-a1b2c3.local",
     mac: "AA:BB:CC:DD:EE:FF",
     variant: "v3",
-    firmware: { name: "iso-usb-hub", version: "0.1.0" },
+    firmware: { name: "isolarail", version: "0.1.0" },
     uptime_ms: 123_456,
     wifi: { state: "connected", ipv4: "192.168.1.42", is_static: false },
   },
@@ -271,7 +271,7 @@ export const InvalidShortPsk: Story = {
 
 export const NarrowWebSerial: Story = {
   parameters: {
-    viewport: { defaultViewport: "isohubNarrow" },
+    viewport: { defaultViewport: "isolarailNarrow" },
   },
   args: {
     transport: "web_serial",

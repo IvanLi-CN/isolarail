@@ -736,24 +736,24 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
   }
 
   return (
-    <section className="isohub-audio-preview" aria-label={copy.title}>
-      <div className="isohub-audio-console">
-        <div className="isohub-audio-console__copy">
-          <span className="isohub-audio-kicker">{copy.summaryHardware}</span>
+    <section className="isolarail-audio-preview" aria-label={copy.title}>
+      <div className="isolarail-audio-console">
+        <div className="isolarail-audio-console__copy">
+          <span className="isolarail-audio-kicker">{copy.summaryHardware}</span>
           <h2>{copy.title}</h2>
           <p>{copy.subtitle}</p>
         </div>
-        <div className="isohub-audio-toolbar">
-          <button className="isohub-audio-button primary" type="button" onClick={playRecommendedSet}>
+        <div className="isolarail-audio-toolbar">
+          <button className="isolarail-audio-button primary" type="button" onClick={playRecommendedSet}>
             {copy.playAll}
           </button>
-          <button className="isohub-audio-button secondary" type="button" onClick={() => stopAll()}>
+          <button className="isolarail-audio-button secondary" type="button" onClick={() => stopAll()}>
             {copy.stop}
           </button>
         </div>
       </div>
 
-      <div className="isohub-audio-summary" aria-label={copy.title}>
+      <div className="isolarail-audio-summary" aria-label={copy.title}>
         <div>
           <strong>{toneData.tones.length}</strong>
           <span>{copy.summaryTones}</span>
@@ -774,7 +774,7 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
         </div>
       </div>
 
-      <div className="isohub-audio-controls">
+      <div className="isolarail-audio-controls">
         <label>
           {copy.filter}
           <select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)}>
@@ -786,23 +786,23 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
             ))}
           </select>
         </label>
-        <div className="isohub-audio-status" role="status" aria-live="polite">
+        <div className="isolarail-audio-status" role="status" aria-live="polite">
           {status}
         </div>
       </div>
 
-      <div className="isohub-audio-list">
+      <div className="isolarail-audio-list">
         {visibleTones.map((tone) => {
           const toneText = tones[locale][tone.id];
           return (
-            <article className="isohub-tone-card" data-kind={tone.kind} key={tone.id}>
-              <div className="isohub-tone-card__head">
+            <article className="isolarail-tone-card" data-kind={tone.kind} key={tone.id}>
+              <div className="isolarail-tone-card__head">
                 <div>
-                  <span className="isohub-tone-card__group">{groups[locale][tone.group]}</span>
+                  <span className="isolarail-tone-card__group">{groups[locale][tone.group]}</span>
                   <h3>{toneText.title}</h3>
                 </div>
                 <p>{toneText.policy}</p>
-                <div className="isohub-tone-tags">
+                <div className="isolarail-tone-tags">
                   {tone.tags.map((tag) => (
                     <span className={tagTone(tag)} key={tag}>
                       {tag}
@@ -811,19 +811,19 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
                 </div>
               </div>
 
-              <div className="isohub-candidate-list">
+              <div className="isolarail-candidate-list">
                 {tone.candidates.map((candidate) => {
                   const total = sequenceDurationMs(candidate.events);
                   const currentLoopKey = `${tone.id}:${candidate.id}`;
                   const isLooping = loopKey === currentLoopKey;
                   return (
-                    <section className="isohub-candidate" key={candidate.id}>
-                      <div className="isohub-candidate__title">
+                    <section className="isolarail-candidate" key={candidate.id}>
+                      <div className="isolarail-candidate__title">
                         <strong>{copy[candidate.label]}</strong>
                         <span>{candidates[locale][candidate.id]}</span>
                       </div>
-                      <div className="isohub-timeline" aria-label={`${toneText.title} ${copy.duration}`}>
-                        <div className="isohub-timeline__bar" aria-hidden="true">
+                      <div className="isolarail-timeline" aria-label={`${toneText.title} ${copy.duration}`}>
+                        <div className="isolarail-timeline__bar" aria-hidden="true">
                           {candidate.events.map((event, index) => {
                             const width =
                               ('rest_ms' in event ? event.rest_ms : event.ms) / Math.max(total, 1);
@@ -837,7 +837,7 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
                             );
                           })}
                         </div>
-                        <div className="isohub-timeline__meta">
+                        <div className="isolarail-timeline__meta">
                           <span>{total}ms</span>
                           {tone.kind !== 'one-shot' && tone.loopGapMs ? (
                             <span>
@@ -854,19 +854,19 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
                           </span>
                         </div>
                       </div>
-                      <div className="isohub-candidate__actions">
+                      <div className="isolarail-candidate__actions">
                         <button
-                          className="isohub-icon-button"
+                          className="isolarail-icon-button"
                           type="button"
                           onClick={() => playCandidate(tone, candidate)}
                           aria-label={`${copy.play} ${toneText.title} / ${copy[candidate.label]}`}
                           title={copy.play}
                         >
-                          <span className="isohub-play-icon" aria-hidden="true" />
+                          <span className="isolarail-play-icon" aria-hidden="true" />
                         </button>
                         {tone.kind !== 'one-shot' ? (
                           <button
-                            className={`isohub-icon-button${isLooping ? ' is-active' : ''}`}
+                            className={`isolarail-icon-button${isLooping ? ' is-active' : ''}`}
                             type="button"
                             onClick={() => toggleLoop(tone, candidate)}
                             aria-label={`${isLooping ? copy.loopPlaying : copy.loop} ${toneText.title} / ${
@@ -875,7 +875,7 @@ export function BuzzerAudioPreview({ locale }: { locale: Locale }) {
                             title={isLooping ? copy.loopPlaying : copy.loop}
                           >
                             <span
-                              className={isLooping ? 'isohub-stop-icon' : 'isohub-loop-icon'}
+                              className={isLooping ? 'isolarail-stop-icon' : 'isolarail-loop-icon'}
                               aria-hidden="true"
                             />
                           </button>

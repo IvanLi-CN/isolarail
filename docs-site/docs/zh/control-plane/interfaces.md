@@ -1,41 +1,41 @@
 ---
 title: 接口与本机工具
-description: USB JSONL、HTTP、isohub CLI、isohub-devd daemon 与 Web companion 的边界。
+description: USB JSONL、HTTP、isolarail CLI、isolarail-devd daemon 与 Web companion 的边界。
 ---
 
 <!-- markdownlint-disable MD025 -->
 
 # 接口与本机工具
 
-ISO USB Hub 的控制面由设备固件、本机 daemon、CLI 和 Web app 共同组成。当前 owner-facing 入口固定为 `isohub` CLI；`isohub-devd` 是本机服务，不要求普通用户手动管理。
+IsolaRail 的控制面由设备固件、本机 daemon、CLI 和 Web app 共同组成。当前 owner-facing 入口固定为 `isolarail` CLI；`isolarail-devd` 是本机服务，不要求普通用户手动管理。
 
 ## 分层结构
 
 ```text
 user
-  ├─ isohub CLI
-  │    └─ native IPC -> isohub-devd serve
+  ├─ isolarail CLI
+  │    └─ native IPC -> isolarail-devd serve
   │          └─ USB JSONL / flash / reset / monitor
   ├─ Web app
   │    ├─ Wi-Fi / LAN HTTP
   │    ├─ Web Serial
-  │    └─ explicit Local USB bridge from isohub-devd web
+  │    └─ explicit Local USB bridge from isolarail-devd web
   └─ direct firmware links
        ├─ USB CDC JSONL
        └─ HTTP / LAN v1
 ```
 
-默认路径是 `isohub` CLI 自动发现或启动 `isohub-devd serve`。`isohub-devd web` 只在浏览器开发和 same-origin Web hosting 中显式启用。
+默认路径是 `isolarail` CLI 自动发现或启动 `isolarail-devd serve`。`isolarail-devd web` 只在浏览器开发和 same-origin Web hosting 中显式启用。
 
 ## 命名与身份
 
 | 范围 | 当前名称 |
 | --- | --- |
-| 固件身份 | `iso-usb-hub` |
-| CLI | `isohub` |
-| daemon | `isohub-devd` |
-| companion 源码 | `tools/isohub-companion/` |
-| 设备 hostname | `isohub-<shortid>` |
+| 固件身份 | `isolarail` |
+| CLI | `isolarail` |
+| daemon | `isolarail-devd` |
+| companion 源码 | `tools/isolarail-companion/` |
+| 设备 hostname | `isolarail-<shortid>` |
 | 端口 ID | `port1`、`port2`、`port3`、`port4` |
 
 这些名称由 `docs/specs/pw97u-control-plane-alignment/SPEC.md` 持有。Web、CLI、README 和 diagnostics 不应重新发明产品名。
@@ -100,9 +100,9 @@ HTTP v1 的用途是 LAN 可见状态和有限维护动作。它不是默认 dae
 
 LAN 上能看到设备，不等于可以写 Wi-Fi 凭据。Wi-Fi 写入必须有 USB-backed 当前设备路径。
 
-## `isohub-devd` 模式
+## `isolarail-devd` 模式
 
-`isohub-devd` 有两个模式：
+`isolarail-devd` 有两个模式：
 
 - `serve`：默认 native IPC daemon，只供本机 CLI/桌面路径使用。
 - `web`：显式 localhost Web companion，用于浏览器开发和 same-origin Web hosting。
@@ -111,8 +111,8 @@ LAN 上能看到设备，不等于可以写 Wi-Fi 凭据。Wi-Fi 写入必须有
 
 | 模式 | 默认暴露 | 适用场景 |
 | --- | --- | --- |
-| `isohub-devd serve` | Unix domain socket / Windows named pipe | CLI、未来 desktop、本机单例 daemon |
-| `isohub-devd web` | 显式 localhost Web companion | 浏览器开发、same-origin Web hosting |
+| `isolarail-devd serve` | Unix domain socket / Windows named pipe | CLI、未来 desktop、本机单例 daemon |
+| `isolarail-devd web` | 显式 localhost Web companion | 浏览器开发、same-origin Web hosting |
 
 普通用户不需要先手动启动 daemon。CLI 负责查找已运行实例，必要时启动 `serve` 模式。
 
@@ -185,7 +185,7 @@ Web app 统一仲裁三类通道：
 - Web Serial
 - Local USB bridge
 
-它不扫描 localhost，不把用户引向隐式端口发现，也不绕过 `isohub-devd` 的身份校验。
+它不扫描 localhost，不把用户引向隐式端口发现，也不绕过 `isolarail-devd` 的身份校验。
 
 Web runtime 的通道仲裁规则：
 
@@ -196,7 +196,7 @@ Web runtime 的通道仲裁规则：
 
 ## 安全边界
 
-- 烧录、reset、monitor 走 `isohub` / `isohub-devd` 路径，先做固件身份校验。
+- 烧录、reset、monitor 走 `isolarail` / `isolarail-devd` 路径，先做固件身份校验。
 - Wi-Fi 写入只能走 USB-backed 路径。
 - `port.replug` 是电源动作，不伪装成 USB 数据断开。
 - localhost HTTP 不是默认 IPC；默认 daemon 不能因为 CLI 操作而暴露浏览器 HTTP 面。

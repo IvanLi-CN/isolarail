@@ -4,11 +4,11 @@
 
 当前仓库的软件与硬件命名真相源由 `pw97u-control-plane-alignment/SPEC.md` 统一定义：
 
-- 固件 package / identity：`iso-usb-hub`
-- repo JS tooling package：`isohub-dev-tools`
-- CLI：`isohub`
-- daemon：`isohub-devd`
-- companion workspace：`tools/isohub-companion/`
+- 固件 package / identity：`isolarail`
+- repo JS tooling package：`isolarail-dev-tools`
+- CLI：`isolarail`
+- daemon：`isolarail-devd`
+- companion workspace：`tools/isolarail-companion/`
 - internal support crates / tools：`gc9d01`、`dashboard_preview`、`icon2raw`、`png2raw`
 - vendored example packages：`gc9d01/examples/**` 下的示例包名仅用于驱动示例，不得进入本项目 owner-facing 命名
 - 开发者入口：`just`
@@ -86,7 +86,7 @@
 | pw97u | 四路 USB Hub 控制面对齐 | 已完成 | `pw97u-control-plane-alignment/SPEC.md` | 2026-06-29 | 当前 HEAD 已完成本地 `PR-ready` 收口：Wi-Fi/LAN、USB CDC、companion、web、current-truth 文档与视觉证据已统一对齐 |
 | 5f74j | 固件健壮化与开机自检 | 已完成 | `5f74j-firmware-boot-self-check/SPEC.md` | 2026-03-17 | 当前板型为直连 I2C；保留 mux 槽位以兼容后续 PCA9545A |
 | j6nvw | 硬件 V3 引脚与显示链路对齐 | 部分完成（2/3） | `j6nvw-hardware-v3-pin-assignment/SPEC.md` | 2026-04-27 | legacy `docs/plan/j6nvw-hw-v3-pin-assignment/**` 删除待确认 |
-| h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-06-13 | 固件与上游侧 p1/p3/p4 控制已验证；命名已对齐到 `isohub` / 上游侧语义；PWREN1#/2# 硬件缺陷见 issue #18 |
+| h8c4s | CH335F sideband 电源控制 | 部分完成（2/3） | `h8c4s-ch335f-sideband-power-control/SPEC.md` | 2026-06-13 | 固件与上游侧 p1/p3/p4 控制已验证；命名已对齐到 `isolarail` / 上游侧语义；PWREN1#/2# 硬件缺陷见 issue #18 |
 | 7gf6b | 固件蜂鸣器音效 | 已完成 | `7gf6b-firmware-buzzer-audio/SPEC.md` | 2026-07-05 | PR #25 |
 | e5nyr | 发布失败 Telegram 告警接入 | 已完成 | `e5nyr-release-failure-telegram-alerts/SPEC.md` | 2026-07-07 | 覆盖范围扩展到 `Docs Pages` 部署失败；GitHub Pages settings 仍需 owner 侧启用 Actions source |
 | q9d7h | CLI/devd 烧录迁移 | 部分完成（3/4） | `q9d7h-cli-devd-flash-migration/SPEC.md` | 2026-07-04 | source workflow 已完成，旧烧录入口已退役；真机 flash-monitor 验证待硬件确认 |

@@ -1,8 +1,8 @@
 #[derive(Debug, Parser)]
 #[command(
-    name = "isohub",
-    version = isohub_companion::release_version(),
-    about = "IsoHub CLI"
+    name = "isolarail",
+    version = isolarail_companion::release_version(),
+    about = "IsolaRail CLI"
 )]
 struct Cli {
     #[arg(long, global = true, default_value_t = default_ipc_endpoint())]

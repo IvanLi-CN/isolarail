@@ -64,34 +64,34 @@ describe("companionBootstrapUrls", () => {
   });
 
   test("uses explicitly configured origins in order", () => {
-    import.meta.env.VITE_ISOHUB_DEVD_ORIGINS =
-      "http://isohub-devd.local:51200, http://127.0.0.1:51200";
+    import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS =
+      "http://isolarail-devd.local:51200, http://127.0.0.1:51200";
 
     expect(companionBootstrapUrls()).toEqual([
-      "http://isohub-devd.local:51200/api/v1/bootstrap",
+      "http://isolarail-devd.local:51200/api/v1/bootstrap",
       "http://127.0.0.1:51200/api/v1/bootstrap",
     ]);
 
-    import.meta.env.VITE_ISOHUB_DEVD_ORIGINS = "";
+    import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS = "";
   });
 });
 
 describe("tryBootstrapCompanionBridge", () => {
   test("tries explicit mDNS origin before fallback origin without scanning ports", async () => {
-    import.meta.env.VITE_ISOHUB_DEVD_ORIGINS =
-      "http://isohub-devd.local:51200,http://127.0.0.1:51200";
+    import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS =
+      "http://isolarail-devd.local:51200,http://127.0.0.1:51200";
     const calls: string[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = input.toString();
       calls.push(url);
-      if (url === "http://isohub-devd.local:51200/api/v1/bootstrap") {
+      if (url === "http://isolarail-devd.local:51200/api/v1/bootstrap") {
         return new Response("", { status: 503 });
       }
       return Response.json({
         token: "test-token",
         agentBaseUrl: "http://127.0.0.1:51200",
-        app: { name: "isohub-devd", version: "0.1.0", mode: "web" },
+        app: { name: "isolarail-devd", version: "0.1.0", mode: "web" },
       });
     }) as typeof fetch;
 
@@ -100,12 +100,12 @@ describe("tryBootstrapCompanionBridge", () => {
 
       expect(bridge?.agentBaseUrl).toBe("http://127.0.0.1:51200");
       expect(calls).toEqual([
-        "http://isohub-devd.local:51200/api/v1/bootstrap",
+        "http://isolarail-devd.local:51200/api/v1/bootstrap",
         "http://127.0.0.1:51200/api/v1/bootstrap",
       ]);
     } finally {
       globalThis.fetch = originalFetch;
-      import.meta.env.VITE_ISOHUB_DEVD_ORIGINS = "";
+      import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS = "";
     }
   });
 });

@@ -1,49 +1,49 @@
 ---
-title: ISO USB Hub
+title: IsolaRail
 description: Product entry, hardware topology, firmware runtime, and control-plane docs.
 pageType: custom
 ---
 
-<section className="isohub-hero">
-  <div className="isohub-hero-copy">
-    <div className="isohub-kicker">Hardware and firmware docs for an isolated USB hub</div>
+<section className="isolarail-hero">
+  <div className="isolarail-hero-copy">
+    <div className="isolarail-kicker">Hardware and firmware docs for an isolated USB hub</div>
     <h1>One clear path from product intent to bench bring-up.</h1>
-    <div className="isohub-hero-lede">
-      ISO USB Hub is a four-port isolated USB hub project built around ESP32-S3, CH335F, TCA6408A, INA226/TPS2490, M24C64, and a 160x50 front-panel display path. This site is organized by hardware, firmware, control plane, and specification index so the product boundary and current engineering truth stay connected.
+    <div className="isolarail-hero-lede">
+      IsolaRail is a four-port isolated USB hub project built around ESP32-S3, CH335F, TCA6408A, INA226/TPS2490, M24C64, and a 160x50 front-panel display path. This site is organized by hardware, firmware, control plane, and specification index so the product boundary and current engineering truth stay connected.
     </div>
-    <div className="isohub-actions">
-      <a className="isohub-button primary" href="start/quick-start">Start bring-up</a>
-      <a className="isohub-button secondary" href="hardware/topology">Read hardware topology</a>
-      <a className="isohub-button secondary" href="reference/specs">Specs index</a>
+    <div className="isolarail-actions">
+      <a className="isolarail-button primary" href="start/quick-start">Start bring-up</a>
+      <a className="isolarail-button secondary" href="hardware/topology">Read hardware topology</a>
+      <a className="isolarail-button secondary" href="reference/specs">Specs index</a>
     </div>
   </div>
-  <div className="isohub-visual" aria-label="ISO USB Hub system boundary diagram">
-    <div className="isohub-map">
-      <div className="isohub-node isohub-node-core">
+  <div className="isolarail-visual" aria-label="IsolaRail system boundary diagram">
+    <div className="isolarail-map">
+      <div className="isolarail-node isolarail-node-core">
         <span>Control</span>
         <strong>ESP32-S3</strong>
         <em>boot, self-check, front panel</em>
       </div>
-      <div className="isohub-node isohub-node-hub">
+      <div className="isolarail-node isolarail-node-hub">
         <span>USB hub</span>
         <strong>CH335F</strong>
         <em>sideband power control</em>
       </div>
-      <div className="isohub-map-bus">
+      <div className="isolarail-map-bus">
         <span>I2C buses and monitors</span>
         <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
       </div>
-      <div className="isohub-port-strip" aria-label="Four controlled USB power ports">
+      <div className="isolarail-port-strip" aria-label="Four controlled USB power ports">
         <span>port1</span>
         <span>port2</span>
         <span>port3</span>
         <span>port4</span>
       </div>
-      <div className="isohub-panel-link">
+      <div className="isolarail-panel-link">
         <span>160x50 display</span>
         <strong>dashboard state surface</strong>
       </div>
-      <div className="isohub-photo-reserve">
+      <div className="isolarail-photo-reserve">
         <strong>Real photo reserved</strong>
         <span>Board, front-panel, or bench bring-up photography goes here when hardware evidence is available.</span>
       </div>
@@ -51,38 +51,38 @@ pageType: custom
   </div>
 </section>
 
-<div className="isohub-evidence">
-  <a className="isohub-evidence-item" href="hardware/topology">
+<div className="isolarail-evidence">
+  <a className="isolarail-evidence-item" href="hardware/topology">
     <strong>Hardware topology</strong>
     <span>VIN, four USB power modules, I2C topology, and front-panel input.</span>
   </a>
-  <a className="isohub-evidence-item" href="firmware/boot-runtime">
+  <a className="isolarail-evidence-item" href="firmware/boot-runtime">
     <strong>Firmware startup</strong>
     <span>Boot init, self-checks, output gating, front panel, and fan path.</span>
   </a>
-  <a className="isohub-evidence-item" href="dashboard/front-panel">
+  <a className="isolarail-evidence-item" href="dashboard/front-panel">
     <strong>160x50 Dashboard</strong>
     <span>Four-column status, power bars, fault states, and display assets.</span>
   </a>
 </div>
 
-<h2 className="isohub-section-heading">Read by topic</h2>
+<h2 className="isolarail-section-heading">Read by topic</h2>
 
-<div className="isohub-doc-grid">
-  <a className="isohub-doc-card" href="start/quick-start">
+<div className="isolarail-doc-grid">
+  <a className="isolarail-doc-card" href="start/quick-start">
     <h3>Quick Start</h3>
     <span>Install the toolchain, build firmware and docs, and verify the local companion path.</span>
   </a>
-  <a className="isohub-doc-card" href="hardware/topology">
+  <a className="isolarail-doc-card" href="hardware/topology">
     <h3>Hardware Topology</h3>
     <span>Start from VIN, CH335F sideband, EN gating, the two I²C buses, and the front panel.</span>
   </a>
-  <a className="isohub-doc-card" href="control-plane/interfaces">
+  <a className="isolarail-doc-card" href="control-plane/interfaces">
     <h3>Control Plane</h3>
-    <span>Understand `isohub`, `isohub-devd`, USB JSONL, Web companion, and device operation boundaries.</span>
+    <span>Understand `isolarail`, `isolarail-devd`, USB JSONL, Web companion, and device operation boundaries.</span>
   </a>
 </div>
 
-<div className="isohub-note">
+<div className="isolarail-note">
   <strong>Current truth:</strong> the site curates and publishes; canonical engineering truth remains in <code>docs/</code> and <code>docs/specs/</code>.
 </div>

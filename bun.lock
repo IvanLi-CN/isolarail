@@ -11,7 +11,7 @@
       },
     },
     "docs-site": {
-      "name": "isohub-docs-site",
+      "name": "isolarail-docs-site",
       "devDependencies": {
         "@rspress/core": "2.0.16",
       },
@@ -340,7 +340,7 @@
 
     "is-text-path": ["is-text-path@2.0.0", "", { "dependencies": { "text-extensions": "^2.0.0" } }, "sha512-+oDTluR6WEjdXEJMnC2z6A4FRwFoYuvShVVEGsS7ewc0UTi2QtAKMDJuL4BDEVt+5T7MjFo12RP8ghOM75oKJw=="],
 
-    "isohub-docs-site": ["isohub-docs-site@workspace:docs-site"],
+    "isolarail-docs-site": ["isolarail-docs-site@workspace:docs-site"],
 
     "jiti": ["jiti@2.6.1", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ=="],
 

@@ -116,7 +116,7 @@ This project contains GitHub Actions workflows for automated building, docs depl
 
 Each workflow generates the following build artifacts:
 
-- `iso-usb-hub` - Main firmware file (ELF format)
+- `isolarail` - Main firmware file (ELF format)
 - `examples/*` - Example programs
 - Build logs and debug information
 

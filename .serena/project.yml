@@ -65,4 +65,4 @@ excluded_tools: []
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
 
-project_name: "iso-usb-hub_v2"
+project_name: "isolarail_v2"

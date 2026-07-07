@@ -3,8 +3,8 @@ use core::fmt::Write as _;
 use heapless::String;
 
 pub const DEVICE_VARIANT: &str = "v3";
-pub const FIRMWARE_NAME: &str = "iso-usb-hub";
-pub const HOSTNAME_PREFIX: &str = "isohub-";
+pub const FIRMWARE_NAME: &str = "isolarail";
+pub const HOSTNAME_PREFIX: &str = "isolarail-";
 
 /// Derive a 6-character lowercase hex short ID from the last 3 bytes of the MAC.
 pub fn short_id_from_mac(mac: [u8; 6]) -> String<6> {
@@ -15,7 +15,7 @@ pub fn short_id_from_mac(mac: [u8; 6]) -> String<6> {
     out
 }
 
-/// Build the hostname (`isohub-<short_id>`) from the provided short ID.
+/// Build the hostname (`isolarail-<short_id>`) from the provided short ID.
 pub fn hostname_from_short_id(short_id: &str) -> String<32> {
     let mut out: String<32> = String::new();
     let _ = out.push_str(HOSTNAME_PREFIX);
@@ -62,9 +62,9 @@ mod tests {
     #[test]
     fn hostname_and_fqdn_are_built_correctly() {
         let h = hostname_from_short_id("aabbcc");
-        assert_eq!(h.as_str(), "isohub-aabbcc");
+        assert_eq!(h.as_str(), "isolarail-aabbcc");
         let fqdn = fqdn_from_hostname(h.as_str());
-        assert_eq!(fqdn.as_str(), "isohub-aabbcc.local");
+        assert_eq!(fqdn.as_str(), "isolarail-aabbcc.local");
     }
 
     #[test]

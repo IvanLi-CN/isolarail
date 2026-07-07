@@ -1,17 +1,17 @@
-# iso-usb-hub
+# isolarail
 
 Four-port USB hub control plane for the current V3 hardware baseline:
 `ESP32-S3 + CH335F + M24C64@0x50 + EN1..EN4 + PWREN#/OVCUR# + LCD/front panel`.
 
 Owner-facing naming is fixed as:
 
-- firmware identity: `iso-usb-hub`
-- local CLI: `isohub`
-- local daemon: `isohub-devd`
+- firmware identity: `isolarail`
+- local CLI: `isolarail`
+- local daemon: `isolarail-devd`
 
 ## Product image
 
-![ISO USB Hub product hero](docs/assets/usb-c-hub-product-hero.png)
+![IsolaRail product hero](docs/assets/usb-c-hub-product-hero.png)
 
 ## Developer entrypoints
 
@@ -31,25 +31,25 @@ just flash-monitor
 Notes:
 
 - `just flash-monitor` builds the app image, validates the selected device identity, flashes at `0x10000`, resets, and opens the monitor path.
-- `cargo run --release` uses `tools/isohub-runner` and follows the same Local USB safety boundary.
-- `just flash-first-time` is the explicit download-mode/non-project firmware path and requires typed confirmation from `isohub`.
+- `cargo run --release` uses `tools/isolarail-runner` and follows the same Local USB safety boundary.
+- `just flash-first-time` is the explicit download-mode/non-project firmware path and requires typed confirmation from `isolarail`.
 - The previous Makefile, direct `espflash flash --monitor`, and `mcu-agentd` flashing entrypoints are retired.
 - No hardware command should be run against an unrelated board.
 
 ### Local companion tools
 
-`isohub` is the normal local USB entrypoint. It discovers or auto-starts the native-IPC `isohub-devd serve` singleton when needed.
+`isolarail` is the normal local USB entrypoint. It discovers or auto-starts the native-IPC `isolarail-devd serve` singleton when needed.
 
 Important:
 
 - Use the `just` entrypoints for companion development from the repo root.
-- If you run companion Cargo commands manually, run them from `tools/isohub-companion/`.
-- Do not rely on `cargo --manifest-path tools/isohub-companion/Cargo.toml ...` from the repo root; the root Xtensa default target can leak into that invocation.
+- If you run companion Cargo commands manually, run them from `tools/isolarail-companion/`.
+- Do not rely on `cargo --manifest-path tools/isolarail-companion/Cargo.toml ...` from the repo root; the root Xtensa default target can leak into that invocation.
 
 ```bash
 just tools-build
 just tools-test
-just isohub --help
+just isolarail --help
 just devd-help
 ```
 
@@ -60,7 +60,7 @@ Firmware exposes a read-only hardware snapshot through the Local USB JSONL metho
 
 ```bash
 SELECTOR='--device <device-id>' just diag-snapshot
-SELECTOR='--device <device-id>' just isohub --json diag-snapshot
+SELECTOR='--device <device-id>' just isolarail --json diag-snapshot
 ```
 
 The snapshot covers input power, I²C topology, CH335F sideband, front panel, MCU internal temperature, fan control/telemetry, buzzer runtime state, boot self-check state, per-port hardware control gates, and four output modules. Output-module INA226/TMP112 nodes include read-only readings and register values when online, not just probe booleans. Optional front-panel and output-module devices report `online` / `offline` / `skipped` / `error` locally; absence of one node must not fail the whole snapshot.
@@ -98,8 +98,8 @@ SELECTOR='--device <device-id>' just diagnostics-export
 
 Notes:
 
-- `just device-monitor` reads the recent Local USB serial activity timeline from `isohub-devd`.
-- `just diag-snapshot` returns the firmware `iso-usb-hub.hardware.snapshot.v1` object.
+- `just device-monitor` reads the recent Local USB serial activity timeline from `isolarail-devd`.
+- `just diag-snapshot` returns the firmware `isolarail.hardware.snapshot.v1` object.
 - `just diagnostics-export` exports a companion-aggregated diagnostics snapshot built from the current `status`, `ports`, `wifi`, `hardware_snapshot`, and recent serial session traces for the selected device.
 
 To restrict companion discovery and Local USB operations to one specific serial device during development, pass `USB_PORT`:
@@ -107,10 +107,10 @@ To restrict companion discovery and Local USB operations to one specific serial 
 ```bash
 USB_PORT=/dev/cu.usbmodem2123101 just discover
 USB_PORT=/dev/cu.usbmodem2123101 just devd-serve
-USB_PORT=/dev/cu.usbmodem2123101 just isohub --help
+USB_PORT=/dev/cu.usbmodem2123101 just isolarail --help
 ```
 
-`USB_PORT` is forwarded to `ISOHUB_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
+`USB_PORT` is forwarded to `ISOLARAIL_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
 
 Recommended HIL sequence for one board:
 
@@ -136,7 +136,7 @@ Selector rules:
 
 ### devd modes
 
-`isohub-devd` has two distinct modes:
+`isolarail-devd` has two distinct modes:
 
 - `serve`: native IPC only, default daemon mode
 - `web`: explicit localhost Web companion for browser development and same-origin Web hosting
@@ -152,9 +152,9 @@ Important:
 
 - `just devd-serve` starts the native IPC daemon path only.
 - `just devd-web` is the opt-in browser Web companion. It is not the default daemon mode.
-- Both repo-root `just` commands invoke the Rust `isohub-devd` binary directly from `tools/isohub-companion/`.
+- Both repo-root `just` commands invoke the Rust `isolarail-devd` binary directly from `tools/isolarail-companion/`.
 - On Unix, IPC uses the runtime socket returned by `default_ipc_endpoint()`.
-- On Windows, IPC uses `\\.\pipe\isohub-devd`.
+- On Windows, IPC uses `\\.\pipe\isolarail-devd`.
 
 ### Web
 
@@ -171,7 +171,7 @@ For browser development that needs Local USB or companion-backed storage:
 
 ```bash
 BIND=127.0.0.1:51200 ALLOW_DEV_CORS=1 just devd-web
-DEVD_ORIGINS=http://isohub-devd.local:51200,http://127.0.0.1:51200 just web-dev
+DEVD_ORIGINS=http://isolarail-devd.local:51200,http://127.0.0.1:51200 just web-dev
 ```
 
 The Web app never scans localhost ports. `DEVD_ORIGINS` is an explicit ordered list: put the mDNS URL first, then an IP or localhost fallback. `ALLOW_DEV_CORS=1` is only needed when the Vite page directly tries multiple configured origins; same-origin `--web-root` hosting does not need it.
@@ -204,7 +204,7 @@ source ~/export-esp.sh
 cargo install espflash
 ```
 
-`espflash` is an internal backend used by `isohub-devd`; do not use it as the firmware flashing entrypoint.
+`espflash` is an internal backend used by `isolarail-devd`; do not use it as the firmware flashing entrypoint.
 
 ## Validation status
 
@@ -216,7 +216,7 @@ Re-verified on the current `HEAD` in this dev environment:
 - `just web-check`
 - `just web-build`
 - `just web-test-unit`
-- `just isohub --help`
+- `just isolarail --help`
 - `just devd-help`
 - `just firmware-check`
 - `just firmware-contract-test`

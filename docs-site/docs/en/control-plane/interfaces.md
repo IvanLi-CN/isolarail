@@ -1,41 +1,41 @@
 ---
 title: Interfaces and Tools
-description: USB JSONL, HTTP, isohub CLI, isohub-devd daemon, and Web companion boundaries.
+description: USB JSONL, HTTP, isolarail CLI, isolarail-devd daemon, and Web companion boundaries.
 ---
 
 <!-- markdownlint-disable MD025 -->
 
 # Interfaces and Tools
 
-The ISO USB Hub control plane combines device firmware, a local daemon, a CLI, and the Web app. The current owner-facing entrypoint is the `isohub` CLI; `isohub-devd` is the local service and should not require ordinary users to manage it manually.
+The IsolaRail control plane combines device firmware, a local daemon, a CLI, and the Web app. The current owner-facing entrypoint is the `isolarail` CLI; `isolarail-devd` is the local service and should not require ordinary users to manage it manually.
 
 ## Layering
 
 ```text
 user
-  ├─ isohub CLI
-  │    └─ native IPC -> isohub-devd serve
+  ├─ isolarail CLI
+  │    └─ native IPC -> isolarail-devd serve
   │          └─ USB JSONL / flash / reset / monitor
   ├─ Web app
   │    ├─ Wi-Fi / LAN HTTP
   │    ├─ Web Serial
-  │    └─ explicit Local USB bridge from isohub-devd web
+  │    └─ explicit Local USB bridge from isolarail-devd web
   └─ direct firmware links
        ├─ USB CDC JSONL
        └─ HTTP / LAN v1
 ```
 
-The default path is `isohub` automatically finding or starting `isohub-devd serve`. `isohub-devd web` is explicit and only for browser development or same-origin Web hosting.
+The default path is `isolarail` automatically finding or starting `isolarail-devd serve`. `isolarail-devd web` is explicit and only for browser development or same-origin Web hosting.
 
 ## Naming and identity
 
 | Scope | Current name |
 | --- | --- |
-| Firmware identity | `iso-usb-hub` |
-| CLI | `isohub` |
-| Daemon | `isohub-devd` |
-| Companion source | `tools/isohub-companion/` |
-| Device hostname | `isohub-<shortid>` |
+| Firmware identity | `isolarail` |
+| CLI | `isolarail` |
+| Daemon | `isolarail-devd` |
+| Companion source | `tools/isolarail-companion/` |
+| Device hostname | `isolarail-<shortid>` |
 | Port IDs | `port1`, `port2`, `port3`, `port4` |
 
 These names are owned by `docs/specs/pw97u-control-plane-alignment/SPEC.md`. Web, CLI, README, and diagnostics should not invent alternate product names.
@@ -96,9 +96,9 @@ Device HTTP v1 is not an account or cloud-auth surface. Wi-Fi writes still requi
 
 Seeing the device on LAN does not authorize Wi-Fi credential writes.
 
-## `isohub-devd` modes
+## `isolarail-devd` modes
 
-`isohub-devd` has two modes:
+`isolarail-devd` has two modes:
 
 - `serve`: default native IPC daemon for local CLI/desktop paths.
 - `web`: explicit localhost Web companion for browser development and same-origin Web hosting.
@@ -107,8 +107,8 @@ Do not treat localhost HTTP as the default daemon transport. The Web runtime mus
 
 | Mode | Default exposure | Use |
 | --- | --- | --- |
-| `isohub-devd serve` | Unix domain socket / Windows named pipe | CLI, future desktop, local singleton daemon |
-| `isohub-devd web` | explicit localhost Web companion | browser development and same-origin Web hosting |
+| `isolarail-devd serve` | Unix domain socket / Windows named pipe | CLI, future desktop, local singleton daemon |
+| `isolarail-devd web` | explicit localhost Web companion | browser development and same-origin Web hosting |
 
 Ordinary users should not need to start the daemon first; the CLI connects to an existing instance or starts `serve`.
 
@@ -177,7 +177,7 @@ The Web app arbitrates three channels:
 - Web Serial
 - Local USB bridge
 
-It does not scan localhost, does not point users at implicit port discovery, and does not bypass `isohub-devd` identity checks.
+It does not scan localhost, does not point users at implicit port discovery, and does not bypass `isolarail-devd` identity checks.
 
 Web runtime arbitration:
 

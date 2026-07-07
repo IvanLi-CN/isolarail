@@ -92,7 +92,7 @@ export function AboutPage() {
                 theme
               </div>
               <div className="text-[12px] font-semibold">
-                isohub / isohub-dark / system
+                isolarail / isolarail-dark / system
               </div>
             </div>
           </div>

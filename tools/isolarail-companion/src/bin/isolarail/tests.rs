@@ -23,7 +23,7 @@ mod power_output_tests {
         let output = json!({
             "path": "/tmp/devices.json",
             "saved": [{
-                "id": "isohub-01",
+                "id": "isolarail-01",
                 "name": "Bench Hub",
                 "transport": {
                     "kind": "usb",
@@ -42,7 +42,7 @@ mod power_output_tests {
         let rendered = format_human_output(&output);
         assert!(rendered.contains("Registry: /tmp/devices.json"));
         assert!(rendered.contains("Saved hardware:"));
-        assert!(rendered.contains("- Bench Hub (isohub-01) usb:usb--dev-cu-usbmodem101"));
+        assert!(rendered.contains("- Bench Hub (isolarail-01) usb:usb--dev-cu-usbmodem101"));
         assert!(rendered.contains("Local devd devices:"));
         assert!(rendered.contains("- ESP32-S3 USB JTAG (usb--dev-cu-usbmodem101) - available"));
     }
@@ -54,14 +54,14 @@ mod power_output_tests {
             "result": {
                 "device": {
                     "device_id": "f1fb44",
-                    "hostname": "isohub-f1fb44"
+                    "hostname": "isolarail-f1fb44"
                 }
             }
         });
 
         let rendered = format_human_output(&output);
         assert!(rendered.contains("\"device_id\": \"f1fb44\""));
-        assert!(rendered.contains("\"hostname\": \"isohub-f1fb44\""));
+        assert!(rendered.contains("\"hostname\": \"isolarail-f1fb44\""));
         assert!(!rendered.trim().eq("ok"));
     }
 
@@ -119,17 +119,17 @@ mod power_output_tests {
     #[test]
     fn cli_uses_ipc_instead_of_devd_http_flag() {
         let cli = Cli::try_parse_from([
-            "isohub",
+            "isolarail",
             "--ipc",
-            "/tmp/isohub-test.sock",
+            "/tmp/isolarail-test.sock",
             "--no-auto-start",
             "devices",
         ])
         .expect("ipc flags should parse");
-        assert_eq!(cli.ipc, "/tmp/isohub-test.sock");
+        assert_eq!(cli.ipc, "/tmp/isolarail-test.sock");
         assert!(cli.no_auto_start);
 
-        let err = Cli::try_parse_from(["isohub", "--devd", "http://127.0.0.1:51200", "devices"])
+        let err = Cli::try_parse_from(["isolarail", "--devd", "http://127.0.0.1:51200", "devices"])
             .expect_err("legacy devd HTTP flag must not parse");
         assert!(err.to_string().contains("unexpected argument"));
     }
@@ -137,7 +137,7 @@ mod power_output_tests {
     #[test]
     fn devd_start_gate_allows_only_one_spawner_per_endpoint() {
         let endpoint = format!(
-            "{}/isohub-test-{}.sock",
+            "{}/isolarail-test-{}.sock",
             std::env::temp_dir().display(),
             std::process::id()
         );
@@ -159,7 +159,7 @@ mod power_output_tests {
 
     #[test]
     fn transient_ipc_errors_include_empty_response_after_connect() {
-        let connect_err = anyhow::anyhow!("connect IPC socket /tmp/isohub.sock");
+        let connect_err = anyhow::anyhow!("connect IPC socket /tmp/isolarail.sock");
         assert!(looks_like_transient_ipc_error(&connect_err));
 
         let empty_response_err =
@@ -167,7 +167,7 @@ mod power_output_tests {
         assert!(looks_like_transient_ipc_error(&empty_response_err));
 
         let refused_err = anyhow::anyhow!("Connection refused (os error 61)")
-            .context("connect IPC socket /tmp/isohub.sock");
+            .context("connect IPC socket /tmp/isolarail.sock");
         assert!(looks_like_transient_ipc_error(&refused_err));
 
         let request_err = anyhow::anyhow!("device busy: another Local USB operation is still running");
@@ -177,7 +177,7 @@ mod power_output_tests {
     #[test]
     fn ports_power_accepts_explicit_boolean_value() {
         let cli = Cli::try_parse_from([
-            "isohub",
+            "isolarail",
             "ports",
             "--device",
             "usb--dev-cu-usbmodem21221401",
@@ -202,7 +202,7 @@ mod power_output_tests {
     #[test]
     fn flash_accepts_non_project_confirmation_flag() {
         let cli = Cli::try_parse_from([
-            "isohub",
+            "isolarail",
             "flash",
             "--device",
             "usb--dev-cu-usbmodem21221401",
@@ -228,9 +228,9 @@ mod power_output_tests {
             ApiSelectorArgs {
                 hardware: None,
                 device: None,
-                url: Some("http://isohub-856a14.local".to_string()),
+                url: Some("http://isolarail-856a14.local".to_string()),
             },
-            "/tmp/isohub.sock",
+            "/tmp/isolarail.sock",
             "Wi-Fi configuration changes",
         )
         .expect_err("url selector must be rejected for Wi-Fi writes");
@@ -247,13 +247,13 @@ mod power_output_tests {
                 device: Some("usb--dev-cu-usbmodem2123101".to_string()),
                 url: None,
             },
-            "/tmp/isohub.sock",
+            "/tmp/isolarail.sock",
             "Wi-Fi configuration changes",
         )
         .expect("device selector should be accepted");
 
         assert_eq!(selected.device, "usb--dev-cu-usbmodem2123101");
-        assert_eq!(selected.devd, "/tmp/isohub.sock");
+        assert_eq!(selected.devd, "/tmp/isolarail.sock");
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod power_output_tests {
                 id: "bench-http".to_string(),
                 name: "Bench Hub Wi-Fi".to_string(),
                 transport: HardwareTransport::Http {
-                    base_url: "http://isohub-856a14.local".to_string(),
+                    base_url: "http://isolarail-856a14.local".to_string(),
                 },
                 identity: Some(DeviceIdentity {
                     device_id: Some("856a14".to_string()),
@@ -278,7 +278,7 @@ mod power_output_tests {
                         device: None,
                         url: None,
                     },
-                    "/tmp/isohub.sock",
+                    "/tmp/isolarail.sock",
                     "Wi-Fi configuration changes",
                 )
                 .expect_err("HTTP saved hardware must be rejected for Wi-Fi writes");
@@ -312,7 +312,7 @@ mod power_output_tests {
                         device: None,
                         url: None,
                     },
-                    "/tmp/isohub.sock",
+                    "/tmp/isolarail.sock",
                     "Wi-Fi configuration changes",
                 )
                 .expect("USB saved hardware should be accepted");
@@ -355,11 +355,11 @@ mod tests {
             json!({
                 "device": {
                     "device_id": "aabbccdd",
-                    "hostname": "isohub-aabbcc",
-                    "fqdn": "isohub-aabbcc.local",
+                    "hostname": "isolarail-aabbcc",
+                    "fqdn": "isolarail-aabbcc.local",
                     "mac": "AA:BB:CC:DD:EE:FF",
                     "firmware": {
-                        "name": "iso-usb-hub",
+                        "name": "isolarail",
                         "version": "0.1.0"
                     },
                     "wifi": {
@@ -371,7 +371,7 @@ mod tests {
         )
         .expect("discover info should parse");
 
-        assert_eq!(parsed.base_url, "http://isohub-aabbcc.local");
+        assert_eq!(parsed.base_url, "http://isolarail-aabbcc.local");
         assert_eq!(parsed.ipv4.as_deref(), Some("192.168.1.42"));
         let identity = parsed.identity.expect("identity should exist");
         assert_eq!(identity.device_id.as_deref(), Some("aabbccdd"));
@@ -379,7 +379,7 @@ mod tests {
         assert_eq!(
             parsed.firmware,
             DiscoverFirmware {
-                name: "iso-usb-hub".to_string(),
+                name: "isolarail".to_string(),
                 version: "0.1.0".to_string(),
             }
         );
@@ -389,7 +389,7 @@ mod tests {
     fn saved_hardware_match_uses_canonical_owner_facing_name() {
         let saved = vec![
             DeviceProfile {
-                id: "isohub-01".to_string(),
+                id: "isolarail-01".to_string(),
                 name: "Bench Hub".to_string(),
                 transport: HardwareTransport::Usb {
                     device_id: "usb--dev-cu-usbmodem21221401".to_string(),
@@ -402,10 +402,10 @@ mod tests {
                 last_seen_at: None,
             },
             DeviceProfile {
-                id: "isohub-01-wifi".to_string(),
+                id: "isolarail-01-wifi".to_string(),
                 name: "Bench Hub Wi-Fi".to_string(),
                 transport: HardwareTransport::Http {
-                    base_url: "http://isohub-856a14.local".to_string(),
+                    base_url: "http://isolarail-856a14.local".to_string(),
                 },
                 identity: Some(DeviceIdentity {
                     device_id: Some("856a14".to_string()),
@@ -427,17 +427,17 @@ mod tests {
         let http_match = saved_hardware_match_for_transport(
             &saved,
             &[
-                "http:http://isohub-856a14.local".to_string(),
+                "http:http://isolarail-856a14.local".to_string(),
                 "device:856a14".to_string(),
             ],
             Some("http"),
         );
 
         assert_eq!(usb_match.len(), 1);
-        assert_eq!(usb_match[0].id, "isohub-01");
+        assert_eq!(usb_match[0].id, "isolarail-01");
         assert_eq!(usb_match[0].name, "Bench Hub");
         assert_eq!(http_match.len(), 1);
-        assert_eq!(http_match[0].id, "isohub-01");
+        assert_eq!(http_match[0].id, "isolarail-01");
         assert_eq!(http_match[0].name, "Bench Hub");
         assert_eq!(http_match[0].transport, "http");
     }
@@ -462,7 +462,7 @@ fn with_temp_hardware_registry<T>(devices: Vec<DeviceProfile>, run: impl FnOnce(
         std::env::set_var("HOME", temp.path());
     }
 
-    isohub_companion::write_hardware_registry(&isohub_companion::HardwareRegistry {
+    isolarail_companion::write_hardware_registry(&isolarail_companion::HardwareRegistry {
         schema_version: 1,
         devices,
     })

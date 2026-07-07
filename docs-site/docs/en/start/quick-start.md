@@ -27,20 +27,20 @@ cargo install just
 bun install --frozen-lockfile
 ```
 
-`espflash` is used behind the `isohub-devd` path. It is not the normal direct flashing entrypoint for this project.
+`espflash` is used behind the `isolarail-devd` path. It is not the normal direct flashing entrypoint for this project.
 
 ## Entrypoint rules
 
 Run normal development commands from the repository root through `just`.
 
 - Firmware checks consistently use the `+esp` toolchain and `xtensa-esp32s3-none-elf` target.
-- Companion tools build from the correct `tools/isohub-companion/` context instead of inheriting the root Xtensa target.
-- Flash, reset, and monitor paths go through `isohub` / `isohub-devd` identity checks before touching hardware.
+- Companion tools build from the correct `tools/isolarail-companion/` context instead of inheriting the root Xtensa target.
+- Flash, reset, and monitor paths go through `isolarail` / `isolarail-devd` identity checks before touching hardware.
 
 Avoid these as routine paths:
 
 - raw `espflash flash --monitor`
-- hand-written `cargo --manifest-path tools/isohub-companion/Cargo.toml ...` from the repo root
+- hand-written `cargo --manifest-path tools/isolarail-companion/Cargo.toml ...` from the repo root
 - state-changing commands without an explicit `SELECTOR`
 
 ## Build firmware
@@ -89,16 +89,16 @@ USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem2123410
 USB_PORT=/dev/cu.usbmodem21234101 SELECTOR='--device usb--dev-cu-usbmodem21234101' TAIL=12 just device-monitor
 ```
 
-`USB_PORT` is forwarded to `ISOHUB_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
+`USB_PORT` is forwarded to `ISOLARAIL_USB_PORT`, so scan, JSONL, flash, reset, and monitor paths reject other serial ports.
 
 ## Use the local control plane
 
-`isohub` is the CLI portal. `isohub-devd` is the local daemon. The default daemon mode is native IPC:
+`isolarail` is the CLI portal. `isolarail-devd` is the local daemon. The default daemon mode is native IPC:
 
 ```bash
 just tools-build
 just tools-test
-just isohub --help
+just isolarail --help
 just devd-help
 ```
 
@@ -156,7 +156,7 @@ For subpath deployment or GitHub Pages project paths, override `DOCS_BASE`:
 DOCS_BASE=/preview/ bun run docs:build
 ```
 
-Handwritten links do not depend on a fixed `/iso-usb-hub/` path.
+Handwritten links do not depend on a fixed `/isolarail/` path.
 
 ## Local quality gates
 
@@ -164,7 +164,7 @@ Handwritten links do not depend on a fixed `/iso-usb-hub/` path.
 | --- | --- | --- |
 | Firmware | `just firmware-check` | Fast ESP32-S3 firmware check |
 | Firmware | `cargo +esp build --release --target xtensa-esp32s3-none-elf` | Release-shape firmware build |
-| Companion | `just tools-build` | Build `isohub` and `isohub-devd` |
+| Companion | `just tools-build` | Build `isolarail` and `isolarail-devd` |
 | Companion | `just tools-test` | Local companion tests |
 | Web | `just web-check` / `just web-build` | Frontend checks and build |
 | Docs site | `bun run docs:build` | Rspress static build |

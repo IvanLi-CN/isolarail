@@ -2,7 +2,7 @@
 
 ## 固件
 
-- 新增 `src/hardware_snapshot.rs`，使用 `heapless::String` 渲染 `iso-usb-hub.hardware.snapshot.v1`。
+- 新增 `src/hardware_snapshot.rs`，使用 `heapless::String` 渲染 `isolarail.hardware.snapshot.v1`。
 - boot gate 完成后生成并缓存一次硬件快照，fatal 自检循环前也能留下快照。
 - runtime 以低频刷新快照缓存，复用 dashboard 当轮端口读数与 sideband snapshot。
 - 快照新增 MCU/fan/buzzer 运行期状态：ESP32-S3 内部温度、过温告警、风扇使能/实测 RPM/目标 RPM/控制百分比/硬件 PWM duty、蜂鸣器 LEDC ready/播放状态/tone/alarm/频率/duty。
@@ -13,9 +13,9 @@
 
 ## Host Tools
 
-- `isohub` CLI 增加 `diag-snapshot`，输出 `iso-usb-hub.hardware.snapshot.v1` 纯快照对象。
-- `isohub-devd` IPC 增加 `device.hardware.snapshot`。
-- `isohub-devd` HTTP bridge 增加 `/api/v1/devices/:id/diag-snapshot`，返回同一纯快照对象。
+- `isolarail` CLI 增加 `diag-snapshot`，输出 `isolarail.hardware.snapshot.v1` 纯快照对象。
+- `isolarail-devd` IPC 增加 `device.hardware.snapshot`。
+- `isolarail-devd` HTTP bridge 增加 `/api/v1/devices/:id/diag-snapshot`，返回同一纯快照对象。
 - `diagnostics export` 同步包含 `hardware_snapshot` 字段；快照读取失败不会阻断其它诊断字段。
 
 ## Web
@@ -30,9 +30,9 @@
 
 ## 真机验证
 
-- `/dev/cu.usbmodem21224101` 已通过 `just flash` 使用 `isohub` 正常烧录 app 分区。
-- reset 后 `status` 返回 `device_id=f1fb44`、`firmware.name=iso-usb-hub`、Wi-Fi connected。
-- `isohub --json diag-snapshot --device usb--dev-cu-usbmodem21224101` 返回 `iso-usb-hub.hardware.snapshot.v1` 纯快照对象。
+- `/dev/cu.usbmodem21224101` 已通过 `just flash` 使用 `isolarail` 正常烧录 app 分区。
+- reset 后 `status` 返回 `device_id=f1fb44`、`firmware.name=isolarail`、Wi-Fi connected。
+- `isolarail --json diag-snapshot --device usb--dev-cu-usbmodem21224101` 返回 `isolarail.hardware.snapshot.v1` 纯快照对象。
 - 真机快照中四个端口均 `online`，四路 INA226/TMP112 均 present，front panel 与 sideband 均 `online`。
 - devd HTTP bridge `/api/v1/devices/usb--dev-cu-usbmodem21224101/diag-snapshot` 返回同一纯快照对象。
 - `diagnostics export` 已包含 `hardware_snapshot` 字段。

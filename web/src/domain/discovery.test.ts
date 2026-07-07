@@ -72,8 +72,8 @@ describe("parseDiscoveredDeviceFromApiInfo", () => {
       {
         device: {
           device_id: "aabbccdd",
-          hostname: "isohub-aabbccdd",
-          fqdn: "isohub-aabbccdd.local",
+          hostname: "isolarail-aabbccdd",
+          fqdn: "isolarail-aabbccdd.local",
           variant: "v3",
           firmware: { name: "other", version: "0.0.0" },
           wifi: { ipv4: "192.168.1.42", is_static: false, state: "connected" },
@@ -91,10 +91,10 @@ describe("parseDiscoveredDeviceFromApiInfo", () => {
       {
         device: {
           device_id: "aabbccdd",
-          hostname: "isohub-aabbccdd",
-          fqdn: "isohub-aabbccdd.local",
+          hostname: "isolarail-aabbccdd",
+          fqdn: "isolarail-aabbccdd.local",
           variant: "v3",
-          firmware: { name: "iso-usb-hub", version: "0.1.0" },
+          firmware: { name: "isolarail", version: "0.1.0" },
           wifi: { ipv4: "192.168.1.42", is_static: false, state: "connected" },
         },
       },
@@ -102,13 +102,13 @@ describe("parseDiscoveredDeviceFromApiInfo", () => {
       "2026-01-14T00:00:00.000Z",
     );
     expect(res).toEqual({
-      baseUrl: "http://isohub-aabbccdd.local",
+      baseUrl: "http://isolarail-aabbccdd.local",
       device_id: "aabbccdd",
-      hostname: "isohub-aabbccdd",
-      fqdn: "isohub-aabbccdd.local",
+      hostname: "isolarail-aabbccdd",
+      fqdn: "isolarail-aabbccdd.local",
       ipv4: "192.168.1.42",
       variant: "v3",
-      firmware: { name: "iso-usb-hub", version: "0.1.0" },
+      firmware: { name: "isolarail", version: "0.1.0" },
       last_seen_at: "2026-01-14T00:00:00.000Z",
     });
   });

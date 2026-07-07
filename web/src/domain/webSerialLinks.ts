@@ -1,6 +1,6 @@
 import type { WebSerialJsonlTransport } from "./hardwareConsole";
 
-const EVENT_NAME = "isohub-web-serial-link";
+const EVENT_NAME = "isolarail-web-serial-link";
 
 export type WebSerialDeviceLink = {
   deviceId: string;

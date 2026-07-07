@@ -19,10 +19,10 @@ describe("theme preference", () => {
     } as unknown as Window;
 
     store.set(THEME_STORAGE_KEY, "not-json");
-    expect(loadThemePreference()).toBe("isohub");
+    expect(loadThemePreference()).toBe("isolarail");
 
     store.set(THEME_STORAGE_KEY, JSON.stringify("bad"));
-    expect(loadThemePreference()).toBe("isohub");
+    expect(loadThemePreference()).toBe("isolarail");
   });
 
   test("round-trips theme id as JSON string", () => {
@@ -34,7 +34,7 @@ describe("theme preference", () => {
       },
     } as unknown as Window;
 
-    const value: ThemeId = "isohub-dark";
+    const value: ThemeId = "isolarail-dark";
     saveThemePreference(value);
     expect(store.get(THEME_STORAGE_KEY)).toBe(JSON.stringify(value));
     expect(loadThemePreference()).toBe(value);
@@ -49,8 +49,8 @@ describe("theme preference", () => {
       },
     } as unknown as Document;
 
-    applyThemePreference("isohub");
-    expect(attrs.get("data-theme")).toBe("isohub");
+    applyThemePreference("isolarail");
+    expect(attrs.get("data-theme")).toBe("isolarail");
 
     applyThemePreference("system");
     expect(attrs.has("data-theme")).toBe(false);

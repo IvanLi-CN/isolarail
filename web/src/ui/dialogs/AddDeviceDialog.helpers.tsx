@@ -67,11 +67,11 @@ export function hydrateInitialUsbLog(
   return entries?.map((entry, index) => ({ ...entry, id: index + 1 })) ?? [];
 }
 
-export function isIsoHubDeviceInfo(device: UsbDeviceInfo): boolean {
+export function isIsolaRailDeviceInfo(device: UsbDeviceInfo): boolean {
   return (
-    device.firmware?.name === "iso-usb-hub" ||
-    device.hostname?.startsWith("isohub-") ||
-    device.fqdn?.startsWith("isohub-") ||
+    device.firmware?.name === "isolarail" ||
+    device.hostname?.startsWith("isolarail-") ||
+    device.fqdn?.startsWith("isolarail-") ||
     device.device_id !== undefined
   );
 }

@@ -1,5 +1,5 @@
 fn configured_usb_port_allowlist() -> Option<Vec<String>> {
-    let raw = std::env::var("ISOHUB_USB_PORT").ok()?;
+    let raw = std::env::var("ISOLARAIL_USB_PORT").ok()?;
     let ports = raw
         .split(',')
         .map(str::trim)
@@ -17,7 +17,7 @@ fn ensure_port_allowed(port_path: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     Err(anyhow!(
-        "serial port {port_path} is not allowed by ISOHUB_USB_PORT"
+        "serial port {port_path} is not allowed by ISOLARAIL_USB_PORT"
     ))
 }
 
@@ -439,7 +439,7 @@ async fn run_uploaded_flash_request(
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("firmware.bin");
-    let temp_path = std::env::temp_dir().join(format!("isohub-flash-{}-{file_name}", next_id()));
+    let temp_path = std::env::temp_dir().join(format!("isolarail-flash-{}-{file_name}", next_id()));
     fs::write(&temp_path, bytes).with_context(|| format!("write {}", temp_path.display()))?;
     struct TempFirmwareFile(PathBuf);
     impl Drop for TempFirmwareFile {

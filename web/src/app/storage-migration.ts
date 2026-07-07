@@ -5,7 +5,7 @@ import {
 } from "../domain/devices";
 import { THEME_STORAGE_KEY, type ThemeId } from "./theme";
 
-const VALID_THEMES = ["isohub", "isohub-dark", "system"] as const;
+const VALID_THEMES = ["isolarail", "isolarail-dark", "system"] as const;
 
 function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && VALID_THEMES.includes(value as ThemeId);

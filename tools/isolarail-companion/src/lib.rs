@@ -32,10 +32,10 @@ use tower_http::{
 };
 
 pub const DEFAULT_BIND: &str = "127.0.0.1:51200";
-pub const DEFAULT_WEB_MDNS_NAME: &str = "isohub-devd";
-pub const WEB_MDNS_SERVICE_TYPE: &str = "_isohub-devd._tcp.local.";
+pub const DEFAULT_WEB_MDNS_NAME: &str = "isolarail-devd";
+pub const WEB_MDNS_SERVICE_TYPE: &str = "_isolarail-devd._tcp.local.";
 pub const DEFAULT_IPC_FILE_NAME: &str = "devd.sock";
-pub const DEFAULT_WINDOWS_PIPE_NAME: &str = r"\\.\pipe\isohub-devd";
+pub const DEFAULT_WINDOWS_PIPE_NAME: &str = r"\\.\pipe\isolarail-devd";
 const STORAGE_FILE_NAME: &str = "devices.json";
 const STORAGE_SETTINGS_FILE_NAME: &str = "settings.json";
 const STORAGE_SCHEMA_VERSION: u8 = 1;
@@ -47,11 +47,11 @@ const SERIAL_TIMEOUT_MS: u64 = 1_500;
 const SERIAL_POWER_CONFIG_TIMEOUT_MS: u64 = 8_000;
 const MAX_SESSION_ITEMS: usize = 500;
 pub const DEFAULT_IPC_IDLE_TIMEOUT_SECS: u64 = 30;
-const PROJECT_FIRMWARE_NAME: &str = "iso-usb-hub";
+const PROJECT_FIRMWARE_NAME: &str = "isolarail";
 const MIN_COMPATIBLE_FIRMWARE_VERSION: &str = "0.1.0";
 
 pub fn release_version() -> &'static str {
-    option_env!("ISOHUB_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
+    option_env!("ISOLARAIL_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
 #[derive(Debug, Clone)]
@@ -87,7 +87,7 @@ impl Drop for WebMdnsAdvertiser {
     fn drop(&mut self) {
         if let Err(err) = self.mdns.unregister(&self.fullname) {
             tracing::warn!(
-                "isohub-devd web mDNS unregister failed (service={}): {}",
+                "isolarail-devd web mDNS unregister failed (service={}): {}",
                 self.fullname,
                 err
             );
@@ -97,7 +97,7 @@ impl Drop for WebMdnsAdvertiser {
 
 pub fn build_web_mdns_service_info(instance_name: &str, port: u16) -> anyhow::Result<ServiceInfo> {
     let properties = [
-        ("app", "isohub-devd"),
+        ("app", "isolarail-devd"),
         ("mode", "web"),
         ("version", release_version()),
         ("api", "/api/v1/bootstrap"),
@@ -170,8 +170,8 @@ pub fn default_ipc_endpoint() -> String {
     {
         let base = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::temp_dir().join(format!("isohub-{}", user_id_hint())));
-        base.join("isohub")
+            .unwrap_or_else(|| std::env::temp_dir().join(format!("isolarail-{}", user_id_hint())));
+        base.join("isolarail")
             .join(DEFAULT_IPC_FILE_NAME)
             .to_string_lossy()
             .to_string()
@@ -825,7 +825,7 @@ mod tests {
                     serial_number: None,
                 }),
                 http: Some(HttpTarget {
-                    base_url: "http://isohub.local".to_string(),
+                    base_url: "http://isolarail.local".to_string(),
                 }),
                 identity: None,
                 firmware_info: None,
@@ -865,12 +865,12 @@ mod tests {
     #[test]
     fn usb_port_allowlist_filters_non_matching_ports() {
         unsafe {
-            std::env::set_var("ISOHUB_USB_PORT", "/dev/cu.usbmodem2123101");
+            std::env::set_var("ISOLARAIL_USB_PORT", "/dev/cu.usbmodem2123101");
         }
         let allowed = ensure_port_allowed("/dev/cu.usbmodem2123101");
         let blocked = ensure_port_allowed("/dev/cu.usbmodem9999999");
         unsafe {
-            std::env::remove_var("ISOHUB_USB_PORT");
+            std::env::remove_var("ISOLARAIL_USB_PORT");
         }
 
         assert!(allowed.is_ok());
@@ -893,7 +893,7 @@ mod tests {
                     devd_url: None,
                 },
                 identity: Some(DeviceIdentity {
-                    device_id: Some("isohub-abc".to_string()),
+                    device_id: Some("isolarail-abc".to_string()),
                     mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
                 }),
                 last_seen_at: Some(1),
@@ -920,7 +920,7 @@ mod tests {
                 .identity
                 .as_ref()
                 .and_then(|identity| identity.device_id.as_deref()),
-            Some("isohub-abc")
+            Some("isolarail-abc")
         );
     }
 
@@ -930,8 +930,8 @@ mod tests {
             schema_version: STORAGE_SCHEMA_VERSION,
             devices: vec![
                 DeviceProfile {
-                    id: "isohub-01".to_string(),
-                    name: "isohub-01".to_string(),
+                    id: "isolarail-01".to_string(),
+                    name: "isolarail-01".to_string(),
                     transport: HardwareTransport::Usb {
                         device_id: "usb--dev-cu-usbmodem21221401".to_string(),
                         devd_url: None,
@@ -943,10 +943,10 @@ mod tests {
                     last_seen_at: Some(10),
                 },
                 DeviceProfile {
-                    id: "isohub-01-wifi".to_string(),
-                    name: "isohub-01 Wi-Fi".to_string(),
+                    id: "isolarail-01-wifi".to_string(),
+                    name: "isolarail-01 Wi-Fi".to_string(),
                     transport: HardwareTransport::Http {
-                        base_url: "http://isohub-856a14.local".to_string(),
+                        base_url: "http://isolarail-856a14.local".to_string(),
                     },
                     identity: None,
                     last_seen_at: Some(11),
@@ -957,12 +957,12 @@ mod tests {
         let devices = web_storage_devices(&registry);
 
         assert_eq!(devices.len(), 1);
-        assert_eq!(devices[0]["id"], "isohub-01");
-        assert_eq!(devices[0]["name"], "isohub-01");
-        assert_eq!(devices[0]["baseUrl"], "http://isohub-856a14.local");
+        assert_eq!(devices[0]["id"], "isolarail-01");
+        assert_eq!(devices[0]["name"], "isolarail-01");
+        assert_eq!(devices[0]["baseUrl"], "http://isolarail-856a14.local");
         assert_eq!(
             devices[0]["transports"]["httpBaseUrl"],
-            "http://isohub-856a14.local"
+            "http://isolarail-856a14.local"
         );
         assert_eq!(
             devices[0]["transports"]["localUsbDeviceId"],
@@ -977,9 +977,9 @@ mod tests {
             devices: vec![
                 DeviceProfile {
                     id: "f1fb44".to_string(),
-                    name: "isohub-f1fb44".to_string(),
+                    name: "isolarail-f1fb44".to_string(),
                     transport: HardwareTransport::Http {
-                        base_url: "http://isohub-f1fb44.local".to_string(),
+                        base_url: "http://isolarail-f1fb44.local".to_string(),
                     },
                     identity: Some(DeviceIdentity {
                         device_id: Some("f1fb44".to_string()),
@@ -989,7 +989,7 @@ mod tests {
                 },
                 DeviceProfile {
                     id: "f1fb44--usb".to_string(),
-                    name: "isohub-f1fb44".to_string(),
+                    name: "isolarail-f1fb44".to_string(),
                     transport: HardwareTransport::Usb {
                         device_id: "usb--dev-cu-usbmodem21234101".to_string(),
                         devd_url: None,
@@ -1019,7 +1019,7 @@ mod tests {
             schema_version: STORAGE_SCHEMA_VERSION,
             devices: vec![DeviceProfile {
                 id: "f1fb44--usb".to_string(),
-                name: "isohub-f1fb44".to_string(),
+                name: "isolarail-f1fb44".to_string(),
                 transport: HardwareTransport::Usb {
                     device_id: "usb--dev-cu-usbmodem21234101".to_string(),
                     devd_url: None,
@@ -1047,10 +1047,10 @@ mod tests {
         let profiles = parse_storage_save_input(json!({
             "device": {
                 "id": "f1fb44",
-                "name": "isohub-f1fb44",
-                "baseUrl": "http://isohub-f1fb44.local",
+                "name": "isolarail-f1fb44",
+                "baseUrl": "http://isolarail-f1fb44.local",
                 "transports": {
-                    "httpBaseUrl": "http://isohub-f1fb44.local",
+                    "httpBaseUrl": "http://isolarail-f1fb44.local",
                     "localUsbDeviceId": "usb--dev-cu-usbmodem21234101"
                 }
             }
@@ -1061,7 +1061,7 @@ mod tests {
         assert!(matches!(
             profiles[0].transport,
             HardwareTransport::Http { ref base_url }
-                if base_url == "http://isohub-f1fb44.local"
+                if base_url == "http://isolarail-f1fb44.local"
         ));
         assert!(matches!(
             profiles[1].transport,
@@ -1084,7 +1084,7 @@ mod tests {
             devices: vec![
                 DeviceProfile {
                     id: "f1fb44".to_string(),
-                    name: "isohub-f1fb44".to_string(),
+                    name: "isolarail-f1fb44".to_string(),
                     transport: HardwareTransport::Http {
                         base_url: "http://192.0.2.10".to_string(),
                     },
@@ -1096,7 +1096,7 @@ mod tests {
                 },
                 DeviceProfile {
                     id: "f1fb44--usb".to_string(),
-                    name: "isohub-f1fb44".to_string(),
+                    name: "isolarail-f1fb44".to_string(),
                     transport: HardwareTransport::Usb {
                         device_id: "usb--dev-cu-usbmodem21234101".to_string(),
                         devd_url: None,
@@ -1217,7 +1217,7 @@ mod tests {
             "result": {
                 "device": {
                     "firmware": {
-                        "name": "iso-usb-hub",
+                        "name": "isolarail",
                         "version": "0.1.0"
                     }
                 }
@@ -1244,7 +1244,7 @@ mod tests {
             "result": {
                 "device": {
                     "firmware": {
-                        "name": "iso-usb-hub",
+                        "name": "isolarail",
                         "version": "0.0.1"
                     }
                 }
@@ -1288,10 +1288,10 @@ mod tests {
             "result": {
                 "device": {
                     "device_id": "f1fb44",
-                    "hostname": "isohub-f1fb44",
+                    "hostname": "isolarail-f1fb44",
                     "mac": "a0:f2:62:f1:fb:44",
                     "firmware": {
-                        "name": "iso-usb-hub",
+                        "name": "isolarail",
                         "version": "0.1.0"
                     }
                 }
@@ -1355,7 +1355,7 @@ mod tests {
             devices: vec![json!({
                 "id": "web",
                 "name": "Web device",
-                "baseUrl": "isohub-devd://usb--dev-cu-usbmodem101"
+                "baseUrl": "isolarail-devd://usb--dev-cu-usbmodem101"
             })],
             profiles: vec![DeviceProfile {
                 id: "cli".to_string(),
@@ -1368,7 +1368,7 @@ mod tests {
                 last_seen_at: Some(1),
             }],
             settings: Some(StorageSettings {
-                theme: "isohub-dark".to_string(),
+                theme: "isolarail-dark".to_string(),
             }),
         };
         let profiles =
@@ -1378,7 +1378,7 @@ mod tests {
             req.settings
                 .as_ref()
                 .map(|settings| settings.theme.as_str()),
-            Some("isohub-dark")
+            Some("isolarail-dark")
         );
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].id, "cli");
@@ -1387,7 +1387,7 @@ mod tests {
             devices: vec![json!({
                 "id": "web",
                 "name": "Web device",
-                "baseUrl": "isohub-devd://usb--dev-cu-usbmodem101"
+                "baseUrl": "isolarail-devd://usb--dev-cu-usbmodem101"
             })],
             profiles: vec![],
             settings: None,
@@ -1563,13 +1563,16 @@ mod tests {
 
     #[test]
     fn web_mdns_service_info_uses_expected_shape() {
-        let info =
-            build_web_mdns_service_info("isohub-devd", 51200).expect("service info should build");
+        let info = build_web_mdns_service_info("isolarail-devd", 51200)
+            .expect("service info should build");
 
-        assert_eq!(info.get_fullname(), "isohub-devd._isohub-devd._tcp.local.");
-        assert_eq!(info.get_hostname(), "isohub-devd.local.");
+        assert_eq!(
+            info.get_fullname(),
+            "isolarail-devd._isolarail-devd._tcp.local."
+        );
+        assert_eq!(info.get_hostname(), "isolarail-devd.local.");
         assert_eq!(info.get_port(), 51200);
-        assert_eq!(info.get_property_val_str("app"), Some("isohub-devd"));
+        assert_eq!(info.get_property_val_str("app"), Some("isolarail-devd"));
         assert_eq!(info.get_property_val_str("mode"), Some("web"));
         assert_eq!(info.get_property_val_str("api"), Some("/api/v1/bootstrap"));
         assert_eq!(

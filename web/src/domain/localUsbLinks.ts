@@ -1,5 +1,5 @@
-const STORAGE_KEY = "isohub.local_usb_links";
-const EVENT_NAME = "isohub-local-usb-link";
+const STORAGE_KEY = "isolarail.local_usb_links";
+const EVENT_NAME = "isolarail-local-usb-link";
 
 export type LocalUsbDeviceLink = {
   deviceId: string;

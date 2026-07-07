@@ -35,7 +35,7 @@ import { DeviceDiscoveryPanel } from "../panels/DeviceDiscoveryPanel";
 import {
   hydrateInitialUsbLog,
   InlineAddError,
-  isIsoHubDeviceInfo,
+  isIsolaRailDeviceInfo,
   normalizeDeviceId,
   parseUsbInfoEnvelope,
   readLocalUsbInfo,
@@ -374,7 +374,7 @@ export function AddDeviceDialog({
           setLocalUsbPorts([]);
           setSelectedLocalUsbPort("");
           setAddError(
-            "Local USB needs an explicit isohub-devd web companion. Start `just devd-web` and retry.",
+            "Local USB needs an explicit isolarail-devd web companion. Start `just devd-web` and retry.",
           );
           return;
         }
@@ -459,7 +459,10 @@ export function AddDeviceDialog({
     }
     const input: AddDeviceInput = {
       name:
-        device.hostname ?? device.fqdn ?? device.device_id ?? "IsoHub USB Hub",
+        device.hostname ??
+        device.fqdn ??
+        device.device_id ??
+        "IsolaRail USB Hub",
       baseUrl: device.baseUrl,
       id: device.device_id,
     };
@@ -546,7 +549,7 @@ export function AddDeviceDialog({
       return false;
     }
 
-    const hostname = device.hostname?.trim() || `isohub-${id}`;
+    const hostname = device.hostname?.trim() || `isolarail-${id}`;
     const baseUrl = await resolveReachableUsbBaseUrl(device, id, hostname, run);
     if (run && !isActiveUsbRun(run.id, run.method)) {
       return false;
@@ -631,7 +634,7 @@ export function AddDeviceDialog({
         return;
       }
       if (!agent) {
-        setAddError("isohub-devd web companion is not running.");
+        setAddError("isolarail-devd web companion is not running.");
         return;
       }
       const ports =
@@ -652,7 +655,7 @@ export function AddDeviceDialog({
         setSelectedLocalUsbPort(selectedPortPath);
         const port = ports.find((p) => p.path === selectedPortPath);
         if (!port) {
-          setUsbStep("Choose the IsoHub ESP32 USB device to connect.");
+          setUsbStep("Choose the IsolaRail ESP32 USB device to connect.");
           return;
         }
         setUsbStep(`Opening Local USB port ${port.path}...`);
@@ -665,7 +668,7 @@ export function AddDeviceDialog({
         return;
       }
 
-      setUsbStep("Identifying IsoHub USB hub...");
+      setUsbStep("Identifying IsolaRail USB hub...");
       for (const port of ports) {
         try {
           setUsbStep(`Trying Local USB port ${port.path}...`);
@@ -674,7 +677,7 @@ export function AddDeviceDialog({
             return;
           }
           const parsed = parseUsbInfoEnvelope(response);
-          if (!parsed.ok || !isIsoHubDeviceInfo(parsed.device)) {
+          if (!parsed.ok || !isIsolaRailDeviceInfo(parsed.device)) {
             continue;
           }
           setSelectedLocalUsbPort(port.path);
@@ -690,14 +693,14 @@ export function AddDeviceDialog({
       }
 
       if (ports.length === 1) {
-        setAddError("The ESP32 USB port did not respond as IsoHub.");
+        setAddError("The ESP32 USB port did not respond as IsolaRail.");
         appendUsbLog(
-          "Local USB info request did not identify IsoHub.",
+          "Local USB info request did not identify IsolaRail.",
           "error",
         );
         return;
       }
-      setUsbStep("Choose the IsoHub ESP32 USB device to connect.");
+      setUsbStep("Choose the IsolaRail ESP32 USB device to connect.");
     } catch (err) {
       if (isActiveUsbRun(runId, "local_usb")) {
         const message =
@@ -1023,7 +1026,7 @@ export function AddDeviceDialog({
                   <div className="mt-3 text-[13px] font-semibold leading-6 text-[var(--muted)]">
                     {method === "web_serial"
                       ? "Select the hub in the browser serial picker. The app reads device info over USB and adds it here."
-                      : "Use the explicit isohub-devd web companion to read the connected hub over Local USB and add it here."}
+                      : "Use the explicit isolarail-devd web companion to read the connected hub over Local USB and add it here."}
                   </div>
                   {method === "web_serial" && !isWebSerialSupported() ? (
                     <div className="mt-4 rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-[12px] font-semibold text-[var(--warning)]">

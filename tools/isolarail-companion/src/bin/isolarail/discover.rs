@@ -295,7 +295,7 @@ fn parse_discovered_http_info(
 ) -> Option<ParsedDiscoverHttpInfo> {
     let env: DiscoverApiInfoEnvelope = serde_json::from_value(value).ok()?;
     let firmware_name = env.device.firmware.as_ref()?.name.as_deref()?.trim();
-    if firmware_name != "iso-usb-hub" {
+    if firmware_name != "isolarail" {
         return None;
     }
     let firmware = DiscoverFirmware {
@@ -537,7 +537,7 @@ fn default_hostname_short_id(base_url: &str) -> Option<String> {
     let url = reqwest::Url::parse(base_url).ok()?;
     let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
     let host = host.strip_suffix(".local").unwrap_or(&host);
-    let short_id = host.strip_prefix("isohub-")?;
+    let short_id = host.strip_prefix("isolarail-")?;
     (short_id.len() == 6 && short_id.chars().all(|ch| ch.is_ascii_hexdigit()))
         .then(|| short_id.to_string())
 }

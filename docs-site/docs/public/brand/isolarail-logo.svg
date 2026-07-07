@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="420" viewBox="0 0 1600 420" role="img" aria-labelledby="title desc">
+  <title id="title">IsolaRail logo</title>
+  <desc id="desc">IsolaRail wordmark with isolated USB rail brand mark.</desc>
+  <defs>
+    <linearGradient id="word" x1="454" y1="78" x2="1374" y2="336" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17231f"/>
+      <stop offset=".48" stop-color="#2a5e55"/>
+      <stop offset="1" stop-color="#c88928"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(48 38) scale(.335)">
+    <defs>
+    <linearGradient id="appBg" x1="112" y1="86" x2="918" y2="936" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17231f"/>
+      <stop offset=".46" stop-color="#23423d"/>
+      <stop offset="1" stop-color="#0d1110"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="184" y1="252" x2="840" y2="772" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#50e0c2"/>
+      <stop offset=".52" stop-color="#78f7ff"/>
+      <stop offset="1" stop-color="#f6b94f"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="310" y1="246" x2="732" y2="764" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9fff7"/>
+      <stop offset=".55" stop-color="#e5fff8"/>
+      <stop offset="1" stop-color="#b5dcd1"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#07100e" flood-opacity=".38"/>
+    </filter>
+  </defs>
+    <g transform="translate(0 0)">
+      <path d="M244 270H596C707 270 797 360 797 471V754" fill="none" stroke="url(#rail)" stroke-width="72" stroke-linecap="round"/>
+      <path d="M780 754H428C317 754 227 664 227 553V270" fill="none" stroke="url(#rail)" stroke-width="72" stroke-linecap="round"/>
+      <path d="M512 232L690 334V544C690 665 617 740 512 792C407 740 334 665 334 544V334L512 232Z" fill="url(#shield)" stroke="#17231f" stroke-width="28" stroke-linejoin="round"/>
+      <path d="M512 302L628 370V535C628 614 580 664 512 700C444 664 396 614 396 535V370L512 302Z" fill="#17231f"/>
+      <path d="M466 382H558L510 492H604L454 652L504 532H420L466 382Z" fill="#f6b94f"/>
+      <circle cx="244" cy="270" r="58" fill="#17231f" stroke="#50e0c2" stroke-width="32"/>
+      <circle cx="780" cy="754" r="58" fill="#17231f" stroke="#f6b94f" stroke-width="32"/>
+    </g>
+  </g>
+  <text x="440" y="230" font-family="Inter, IBM Plex Sans, Avenir Next, Helvetica, Arial, sans-serif" font-size="154" font-weight="800" fill="url(#word)">IsolaRail</text>
+  <text x="448" y="302" font-family="Inter, IBM Plex Sans, Avenir Next, Helvetica, Arial, sans-serif" font-size="38" font-weight="650" fill="#43645e">isolated USB power control - four monitored rails</text>
+</svg>

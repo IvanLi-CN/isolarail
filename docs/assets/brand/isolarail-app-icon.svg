@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">IsolaRail brand mark</title>
+  <desc id="desc">Four isolated USB rails crossing a protected control core.</desc>
+  <defs>
+    <linearGradient id="appBg" x1="112" y1="86" x2="918" y2="936" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17231f"/>
+      <stop offset=".46" stop-color="#23423d"/>
+      <stop offset="1" stop-color="#0d1110"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="184" y1="252" x2="840" y2="772" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#50e0c2"/>
+      <stop offset=".52" stop-color="#78f7ff"/>
+      <stop offset="1" stop-color="#f6b94f"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="310" y1="246" x2="732" y2="764" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9fff7"/>
+      <stop offset=".55" stop-color="#e5fff8"/>
+      <stop offset="1" stop-color="#b5dcd1"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#07100e" flood-opacity=".38"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="232" fill="url(#appBg)"/>
+  <path d="M138 820C268 900 448 924 624 872C779 826 899 730 946 606C998 467 945 318 816 222C686 124 500 90 332 138C176 182 82 292 76 430C70 586 150 728 138 820Z" fill="#f7faf8" opacity=".08"/>
+
+  <g filter="url(#softShadow)">
+    <path d="M244 270H596C707 270 797 360 797 471V754" fill="none" stroke="url(#rail)" stroke-width="72" stroke-linecap="round"/>
+    <path d="M780 754H428C317 754 227 664 227 553V270" fill="none" stroke="url(#rail)" stroke-width="72" stroke-linecap="round"/>
+    <path d="M321 345H555C632 345 694 407 694 484V679" fill="none" stroke="#f7faf8" stroke-width="20" stroke-linecap="round" opacity=".84"/>
+    <path d="M704 679H469C392 679 330 617 330 540V345" fill="none" stroke="#17231f" stroke-width="16" stroke-linecap="round" opacity=".5"/>
+    <path d="M512 232L690 334V544C690 665 617 740 512 792C407 740 334 665 334 544V334L512 232Z" fill="url(#shield)" stroke="#17231f" stroke-width="28" stroke-linejoin="round"/>
+    <path d="M512 302L628 370V535C628 614 580 664 512 700C444 664 396 614 396 535V370L512 302Z" fill="#17231f"/>
+    <path d="M466 382H558L510 492H604L454 652L504 532H420L466 382Z" fill="#f6b94f"/>
+    <circle cx="244" cy="270" r="58" fill="#17231f" stroke="#50e0c2" stroke-width="32"/>
+    <circle cx="780" cy="754" r="58" fill="#17231f" stroke="#f6b94f" stroke-width="32"/>
+    <circle cx="227" cy="270" r="28" fill="#f7faf8"/>
+    <circle cx="797" cy="754" r="28" fill="#f7faf8"/>
+  </g>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">IsolaRail GitHub social preview</title>
+  <desc id="desc">Social preview for the IsolaRail repository.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7faf8"/>
+      <stop offset=".58" stop-color="#d7f1ea"/>
+      <stop offset="1" stop-color="#f2d79b"/>
+    </linearGradient>
+    <linearGradient id="railGrad" x1="680" y1="170" x2="1160" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#50e0c2"/>
+      <stop offset=".5" stop-color="#78f7ff"/>
+      <stop offset="1" stop-color="#f6b94f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect x="58" y="58" width="1164" height="524" rx="34" fill="#fbfffc" stroke="#17231f" stroke-width="8"/>
+  <text x="116" y="204" font-family="Inter, IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="126" font-weight="850" fill="#17231f">IsolaRail</text>
+  <text x="124" y="282" font-family="Inter, IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#42645e">isolated USB power control</text>
+  <text x="124" y="332" font-family="Inter, IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#42645e">for bench bring-up</text>
+  <text x="124" y="408" font-family="Inter, IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="28" font-weight="650" fill="#17231f">ESP32-S3 / CH335F / INA226 / 160x50 front panel</text>
+  <g transform="translate(820 148) scale(.34)">
+    <path d="M244 270H596C707 270 797 360 797 471V754" fill="none" stroke="url(#railGrad)" stroke-width="72" stroke-linecap="round"/>
+    <path d="M780 754H428C317 754 227 664 227 553V270" fill="none" stroke="url(#railGrad)" stroke-width="72" stroke-linecap="round"/>
+    <path d="M512 232L690 334V544C690 665 617 740 512 792C407 740 334 665 334 544V334L512 232Z" fill="#f7faf8" stroke="#17231f" stroke-width="28" stroke-linejoin="round"/>
+    <path d="M512 302L628 370V535C628 614 580 664 512 700C444 664 396 614 396 535V370L512 302Z" fill="#17231f"/>
+    <path d="M466 382H558L510 492H604L454 652L504 532H420L466 382Z" fill="#f6b94f"/>
+    <circle cx="244" cy="270" r="58" fill="#17231f" stroke="#50e0c2" stroke-width="32"/>
+    <circle cx="780" cy="754" r="58" fill="#17231f" stroke="#f6b94f" stroke-width="32"/>
+  </g>
+  <g font-family="Inter, IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="24" font-weight="750">
+    <rect x="124" y="472" width="154" height="58" rx="14" fill="#17231f"/>
+    <text x="150" y="510" fill="#78f7ff">4 PORTS</text>
+    <rect x="300" y="472" width="190" height="58" rx="14" fill="#d4f4e9"/>
+    <text x="326" y="510" fill="#17231f">MEASURED</text>
+    <rect x="512" y="472" width="154" height="58" rx="14" fill="#f6d99b"/>
+    <text x="540" y="510" fill="#17231f">FAULT UI</text>
+  </g>
+</svg>

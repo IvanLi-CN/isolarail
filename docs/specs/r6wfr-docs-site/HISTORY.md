@@ -10,6 +10,8 @@
 - 首页系统图只展示当前 V3 主路径；`PCA9545A@0x70` 保留在硬件文档的兼容命名语境中，不作为首页主视觉事实。
 - Rspress 语言配置从全局共享导航改为 locale-specific 导航与侧栏，避免中文页点击主题导航时跳到英文或无语言前缀路径。
 - 原 `tools/buzzer_audio_preview/` 静态试听页迁入 docs-site，保持固件音效候选数据，同时改用站点主题和双语路由。
+- Pages 发布基址从“默认固定 project-pages 子路径”收敛为“显式 `DOCS_BASE` 优先，其次随
+  `CNAME` 自动切到根路径”，避免自定义域名首页继续引用 `/isolarail/...` 资源。
 
 ## References
 

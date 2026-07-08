@@ -23,13 +23,16 @@
 ## Remaining Gaps
 
 - 真机或实物照片尚未提供，首页保留真实照片位。
-- Custom domain 具体域名尚未确定，首版不提交 `CNAME`。
 - 视觉证据已补入 `SPEC.md`；后续 PR 阶段如有 UI 改动需重新绑定最新截图。
 
 ## Related Changes
 
 - GitHub Pages build uses `bun run docs:build`.
+- `docs-site/docs/public/CNAME` now carries the production custom domain so Pages artifacts keep
+  the custom-domain mapping in versioned source.
 - `DOCS_BASE` and `DOCS_PORT` provide deploy and preview overrides.
+- The Pages workflow resolves `DOCS_BASE` in this order: explicit `vars.DOCS_BASE`, `/` when
+  `docs-site/docs/public/CNAME` exists, otherwise `/${repo}/`.
 - Local preview verified on leased port `57850`.
 - Rspress locale routing uses explicit `zh` and `en` theme configs with `localeRedirect: 'never'`;
   the internal `x-default` locale is hidden from the language menu so topic navigation cannot drift

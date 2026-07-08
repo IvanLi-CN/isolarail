@@ -3,6 +3,9 @@ import path from 'node:path';
 
 const docsBase = process.env.DOCS_BASE ?? '/';
 const normalizedBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
+const withBase = (assetPath: string) => `${normalizedBase}${assetPath.replace(/^\//, '')}`;
+const publicAssetOrigin = 'https://isolarail.ivanli.cc';
+const socialPreviewUrl = `${publicAssetOrigin}/isolarail-social-preview.png`;
 
 const zhNav = [
   { text: '快速开始', link: '/zh/start/quick-start' },
@@ -126,9 +129,52 @@ export default defineConfig({
     ),
   title: 'IsolaRail',
   description: 'Bilingual product and engineering documentation for IsolaRail.',
+  icon: '/favicon.ico',
+  logo: {
+    light: withBase('isolarail-logo-lockup-light.svg'),
+    dark: withBase('isolarail-logo-lockup-dark.svg'),
+  },
   logoText: 'IsolaRail',
   outDir: 'doc_build',
   globalStyles: path.join(__dirname, 'styles/global.css'),
+  head: [
+    ['link', { rel: 'icon', href: withBase('favicon.ico') }],
+    ['link', { rel: 'icon', href: withBase('favicon-light.ico'), media: '(prefers-color-scheme: light)' }],
+    ['link', { rel: 'icon', href: withBase('favicon-dark.ico'), media: '(prefers-color-scheme: dark)' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: withBase('favicon-32x32.png') }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '16x16', href: withBase('favicon-16x16.png') }],
+    [
+      'link',
+      {
+        rel: 'icon',
+        type: 'image/png',
+        sizes: '32x32',
+        href: withBase('favicon-light-32x32.png'),
+        media: '(prefers-color-scheme: light)',
+      },
+    ],
+    [
+      'link',
+      {
+        rel: 'icon',
+        type: 'image/png',
+        sizes: '32x32',
+        href: withBase('favicon-dark-32x32.png'),
+        media: '(prefers-color-scheme: dark)',
+      },
+    ],
+    ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: withBase('apple-touch-icon.png') }],
+    ['link', { rel: 'manifest', href: withBase('site.webmanifest') }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'IsolaRail' }],
+    ['meta', { property: 'og:description', content: 'Bilingual product and engineering documentation for IsolaRail.' }],
+    ['meta', { property: 'og:image', content: socialPreviewUrl }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 'IsolaRail' }],
+    ['meta', { name: 'twitter:description', content: 'Bilingual product and engineering documentation for IsolaRail.' }],
+    ['meta', { name: 'twitter:image', content: socialPreviewUrl }],
+    ['meta', { name: 'theme-color', content: '#0f1720' }],
+  ],
   route: {
     cleanUrls: true,
   },

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="IsolaRail app icon light">
+  <defs>
+    <filter id="rail-shadow" x="-8%" y="-80%" width="116%" height="260%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+    <filter id="band-glow" x="-4%" y="-16%" width="108%" height="132%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#ffffff" flood-opacity="0.95"/>
+    </filter>
+  </defs>
+  <rect x="104" y="104" width="816" height="816" rx="181" fill="#fbfbfc" stroke="#dfe3e8" stroke-width="4"/>
+  <rect x="152" y="420" width="720" height="184" fill="#ffffff" filter="url(#band-glow)"/>
+  <g filter="url(#rail-shadow)">
+    <rect x="212" y="497" width="214" height="19" rx="1" fill="#030303"/>
+    <rect x="212" y="544" width="214" height="19" rx="1" fill="#030303"/>
+    <rect x="600" y="497" width="213" height="19" rx="1" fill="#030303"/>
+    <rect x="600" y="544" width="213" height="19" rx="1" fill="#030303"/>
+  </g>
+  <g filter="url(#rail-shadow)">
+    <rect x="481" y="469" width="19" height="121" rx="1" fill="#f20755"/>
+    <rect x="525" y="469" width="19" height="121" rx="1" fill="#f20755"/>
+  </g>
+</svg>

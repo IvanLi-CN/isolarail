@@ -1,0 +1,30 @@
+{
+  "name": "IsolaRail Documentation",
+  "short_name": "IsolaRail",
+  "description": "Bilingual product and engineering documentation for IsolaRail.",
+  "icons": [
+    {
+      "src": "isolarail-icon-light-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "isolarail-icon-light-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "isolarail-icon-dark-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "isolarail-icon-dark-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#0f1720",
+  "background_color": "#f8fafc",
+  "display": "standalone"
+}

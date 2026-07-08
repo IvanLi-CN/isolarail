@@ -50,17 +50,6 @@ if (await exists(cnameSource)) {
 }
 
 await writeFile(path.join(outputDir, ".nojekyll"), "");
-await writeFile(
-  path.join(outputDir, "package.json"),
-  JSON.stringify(
-    {
-      name: "isolarail-site",
-      private: true,
-    },
-    null,
-    2,
-  ) + "\n",
-);
 
 process.stdout.write(
   `Assembled combined publish artifact at ${path.relative(rootDir, outputDir)}\n`,

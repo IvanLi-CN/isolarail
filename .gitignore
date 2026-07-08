@@ -39,6 +39,7 @@ docs-site/.rspress/
 docs-site/.cache/
 web/dist/
 .site-publish/
+.edgeone/
 
 # Exception for required binary files
 !startup_bitmap.bin

@@ -37,6 +37,8 @@ docs/assets/*.ppm
 docs-site/doc_build/
 docs-site/.rspress/
 docs-site/.cache/
+web/dist/
+.site-publish/
 
 # Exception for required binary files
 !startup_bitmap.bin

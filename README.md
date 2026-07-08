@@ -186,9 +186,11 @@ DEVD_ORIGINS=http://isolarail-devd.local:51200,http://127.0.0.1:51200 just web-d
 
 The Web app never scans localhost ports. `DEVD_ORIGINS` is an explicit ordered list: put the mDNS URL first, then an IP or localhost fallback. `ALLOW_DEV_CORS=1` is only needed when the Vite page directly tries multiple configured origins; same-origin `--web-root` hosting does not need it.
 
+The publishable primary site is the `web/` app. In the combined static publish artifact, it owns the root path `/` and the docs site is mounted under `/docs/`.
+
 ### Documentation site
 
-The publishable documentation site lives in `docs-site/`. It is a bilingual product and engineering documentation entrypoint built with Rspress.
+The publishable documentation site lives in `docs-site/`. It is a bilingual product and engineering documentation entrypoint built with Rspress and published under `/docs/` inside the combined site artifact.
 
 ```bash
 bun install --frozen-lockfile
@@ -196,13 +198,25 @@ bun run docs:build
 DOCS_PORT=50885 bun run docs:preview
 ```
 
-Local builds default to a root path. The GitHub Pages workflow defaults to the repository project path
-and can be overridden with `DOCS_BASE`. When `docs-site/docs/public/CNAME` exists, the workflow
-publishes with `/` automatically for the configured custom domain:
+Local docs builds default to a root path. Production deploys set `DOCS_BASE=/docs/` so the docs site can be served under the main web app. The combined `Site Publish` workflow builds `web/` at `/`, builds `docs-site/` at `/docs/`, and deploys the same merged artifact to GitHub Pages and EdgeOne. When `docs-site/docs/public/CNAME` exists, the workflow also copies it to the artifact root for the custom-domain hot backup:
 
 ```bash
 DOCS_BASE=/preview/ bun run docs:build
 ```
+
+Owner-side deploy contract:
+
+- GitHub Actions secret: `EDGEONE_API_TOKEN`
+- GitHub Actions variable: `EDGEONE_PROJECT_NAME`
+- EdgeOne project type: Makers direct upload
+- GitHub Pages role: hot backup and rollback source
+
+Owner-side rollout order:
+
+1. Configure the EdgeOne Makers project, custom domain, certificate, and the two GitHub Actions values above.
+2. Trigger `Site Publish` with `workflow_dispatch` on `main`, then smoke-test the EdgeOne default domain before touching DNS.
+3. Point `isolarail.ivanli.cc` to the EdgeOne production target after the default domain looks correct.
+4. If rollback is needed, restore the `isolarail.ivanli.cc` DNS record to the GitHub Pages target that serves the artifact carrying the same `CNAME`.
 
 ## Toolchain
 
@@ -245,6 +259,7 @@ Additional quality gates that remain part of the expected developer workflow, bu
 ## Reference docs
 
 - [docs-site](docs-site/docs/zh/index.mdx)
+- [web](web/README.md)
 - [docs/hardware_connection_overview.md](docs/hardware_connection_overview.md)
 - [docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md](docs/specs/j6nvw-hardware-v3-pin-assignment/SPEC.md)
 - [docs/software_design.md](docs/software_design.md)

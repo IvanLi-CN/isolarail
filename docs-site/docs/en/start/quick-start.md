@@ -150,7 +150,7 @@ bun run docs:build
 DOCS_PORT=50885 bun run docs:preview
 ```
 
-For subpath deployment or GitHub Pages project paths, override `DOCS_BASE`:
+Production publish mounts the docs site under `/docs/` beneath the main `web/` site. For other subpath deployments or GitHub Pages project paths, override `DOCS_BASE`:
 
 ```bash
 DOCS_BASE=/preview/ bun run docs:build

@@ -4,6 +4,7 @@ import path from 'node:path';
 const docsBase = process.env.DOCS_BASE ?? '/';
 const normalizedBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
 const withBase = (assetPath: string) => `${normalizedBase}${assetPath.replace(/^\//, '')}`;
+const socialPreviewUrl = 'https://isolarail.ivanli.cc/isolarail-social-preview.png';
 
 const zhNav = [
   { text: '快速开始', link: '/zh/start/quick-start' },
@@ -166,11 +167,11 @@ export default defineConfig({
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'IsolaRail' }],
     ['meta', { property: 'og:description', content: 'Bilingual product and engineering documentation for IsolaRail.' }],
-    ['meta', { property: 'og:image', content: withBase('isolarail-social-preview.png') }],
+    ['meta', { property: 'og:image', content: socialPreviewUrl }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 'IsolaRail' }],
     ['meta', { name: 'twitter:description', content: 'Bilingual product and engineering documentation for IsolaRail.' }],
-    ['meta', { name: 'twitter:image', content: withBase('isolarail-social-preview.png') }],
+    ['meta', { name: 'twitter:image', content: socialPreviewUrl }],
     ['meta', { name: 'theme-color', content: '#0f1720' }],
   ],
   route: {

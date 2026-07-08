@@ -13,7 +13,7 @@ description: 文档站关联的 canonical specs、项目文档与实现状态。
 
 | ID | 标题 | 状态 | 作用 |
 | --- | --- | --- | --- |
-| `r6wfr` | 文档 Web 站点 | 首版实现中 | 定义 Rspress/Bun 双语站点、发布 workflow、视觉证据和验收门禁 |
+| `r6wfr` | 文档 Web 站点 | 已实现 / 待外部切流 | 定义 Rspress/Bun 双语站点、组合发布 workflow、视觉证据和验收门禁 |
 
 对应目录：
 
@@ -21,7 +21,7 @@ description: 文档站关联的 canonical specs、项目文档与实现状态。
 - `docs/specs/r6wfr-docs-site/IMPLEMENTATION.md`
 - `docs/specs/r6wfr-docs-site/HISTORY.md`
 
-本规格只定义站点本身：Rspress 结构、双语路由、GitHub Pages workflow、视觉证据和文档边界。它不替代硬件、固件或控制面规格。
+本规格只定义站点本身：Rspress 结构、双语路由、组合静态发布 workflow、视觉证据和文档边界。它不替代硬件、固件或控制面规格。
 
 ## 产品与控制面规格
 

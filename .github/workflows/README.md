@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-This project contains GitHub Actions workflows for automated building, docs deployment, release processes, and release/deploy failure notification.
+This project contains GitHub Actions workflows for automated building, combined site deployment, release processes, and release/deploy failure notification.
 
 ## Workflow Descriptions
 
@@ -51,7 +51,7 @@ This project contains GitHub Actions workflows for automated building, docs depl
 
 **Purpose:** Create official software release versions
 
-### 4. Docs Pages (`docs-pages.yml`)
+### 4. Site Publish (`docs-pages.yml`)
 
 **Trigger Conditions:**
 
@@ -61,18 +61,20 @@ This project contains GitHub Actions workflows for automated building, docs depl
 
 **Features:**
 
-- Build the docs site with Bun
-- Upload the GitHub Pages artifact on non-PR runs
-- Deploy the docs site to the `github-pages` environment
+- Build the root `web/` app and `docs-site/` in one workflow
+- Assemble a single static artifact with the web app at `/` and docs at `/docs/`
+- Upload the shared artifact to GitHub Pages on non-PR runs
+- Stage the artifact outside the repository before the EdgeOne deploy step so the CLI stays in pure static direct-upload mode
+- Deploy the same artifact to the EdgeOne direct-upload project on `main`
 
-**Purpose:** Publish the project documentation site through GitHub Pages
+**Purpose:** Publish the complete static site while keeping GitHub Pages as a hot backup
 
 ### 5. Notify failed release (`notify-release-failure.yml`)
 
 **Trigger Conditions:**
 
 - Failed `Release` or `Development Release` workflow runs
-- Failed non-PR `Docs Pages` workflow runs
+- Failed non-PR `Site Publish` workflow runs
 - Manual trigger (`workflow_dispatch`) for notifier smoke tests
 
 **Features:**
@@ -81,7 +83,7 @@ This project contains GitHub Actions workflows for automated building, docs depl
 - Reports repository, workflow, conclusion, branch, SHA, attempt, actor, event, and run URL
 - Keeps alert delivery in a sidecar workflow instead of embedding notification logic in release or deploy jobs
 
-**Purpose:** Notify maintainers when release or docs deployment workflows fail
+**Purpose:** Notify maintainers when release or site deployment workflows fail
 
 ## Usage
 

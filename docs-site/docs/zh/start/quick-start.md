@@ -150,7 +150,7 @@ bun run docs:build
 DOCS_PORT=50885 bun run docs:preview
 ```
 
-如果部署到子路径或 GitHub Pages project path，构建时覆盖 `DOCS_BASE`：
+生产发布会把文档站挂到主 `web/` 站点下的 `/docs/`。如果需要部署到其他子路径或 GitHub Pages project path，构建时覆盖 `DOCS_BASE`：
 
 ```bash
 DOCS_BASE=/preview/ bun run docs:build

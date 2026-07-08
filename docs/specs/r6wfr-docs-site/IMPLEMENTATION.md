@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-首版已实现到本地验证状态：新增 Rspress/Bun 文档站、主题式双语精选内容、GitHub Pages workflow、产品/设计上下文与视觉证据。主题页已从薄导览扩展为基于 `README.md`、`docs/software_design.md`、`docs/hardware_connection_overview.md`、`docs/dashboard_spec.md` 与相关 specs 的可操作文档。
+首版已实现到本地验证状态：新增 Rspress/Bun 文档站、主题式双语精选内容、组合静态发布 workflow、产品/设计上下文与视觉证据。主题页已从薄导览扩展为基于 `README.md`、`docs/software_design.md`、`docs/hardware_connection_overview.md`、`docs/dashboard_spec.md` 与相关 specs 的可操作文档。
 
 ## Coverage
 
@@ -15,8 +15,9 @@
 - `docs-site/docs/{zh,en}/control-plane/interfaces.md`: USB JSONL、HTTP、`isolarail`、`isolarail-devd`、CLI 选择器、诊断导出、Web app 仲裁和安全边界。
 - `docs-site/docs/{zh,en}/dashboard/front-panel.md`: 160x50 dashboard 布局、状态优先级、格式化规则、刷新来源、颜色约束和预览资产。
 - `docs-site/docs/{zh,en}/reference/specs.md`: specs/current-truth 索引、阅读顺序和事实优先级。
+- `scripts/assemble-site-artifact.mjs`: 组合根站点与 `/docs/` 子站点的发布目录。
 - `PRODUCT.md` / `DESIGN.md`: 站点战略与视觉合同。
-- `.github/workflows/docs-pages.yml`: docs-site 发布链路。
+- `.github/workflows/docs-pages.yml`: `web/` + `docs-site/` 组合发布链路。
 - `README.md`: 文档站入口。
 - `docs/specs/r6wfr-docs-site/assets/`: 桌面、移动和内容页视觉证据。
 
@@ -27,12 +28,12 @@
 
 ## Related Changes
 
-- GitHub Pages build uses `bun run docs:build`.
-- `docs-site/docs/public/CNAME` now carries the production custom domain so Pages artifacts keep
-  the custom-domain mapping in versioned source.
-- `DOCS_BASE` and `DOCS_PORT` provide deploy and preview overrides.
-- The Pages workflow resolves `DOCS_BASE` in this order: explicit `vars.DOCS_BASE`, `/` when
-  `docs-site/docs/public/CNAME` exists, otherwise `/${repo}/`.
+- The root site now builds `web/` at `/` and `docs-site/` at `/docs/`, then assembles both into one publish directory.
+- `docs-site/docs/public/CNAME` is copied to the artifact root so GitHub Pages can keep the custom-domain hot backup mapping.
+- `DOCS_BASE` and `DOCS_PORT` still provide docs deploy and preview overrides; production publish now fixes `DOCS_BASE=/docs/`.
+- The publish workflow resolves the site root base to `/` when `docs-site/docs/public/CNAME` exists, otherwise `/${repo}/`, and derives the docs base from that root as `/docs/` or `/${repo}/docs/`.
+- EdgeOne direct-upload deploy reuses the same combined artifact through `edgeone makers deploy`.
+- The EdgeOne deploy step must stage `.site-publish` into a temporary directory outside the repository before invoking the CLI; deploying the same files from an in-repo path caused EdgeOne preview URLs to return `504 CLOUD_FUNCTION_INVOCATION_TIMEOUT` even though the deployment logs reported a pure static project.
 - Local preview verified on leased port `57850`.
 - Rspress locale routing uses explicit `zh` and `en` theme configs with `localeRedirect: 'never'`;
   the internal `x-default` locale is hidden from the language menu so topic navigation cannot drift

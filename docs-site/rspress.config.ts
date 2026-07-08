@@ -4,7 +4,9 @@ import path from 'node:path';
 const docsBase = process.env.DOCS_BASE ?? '/';
 const normalizedBase = docsBase.endsWith('/') ? docsBase : `${docsBase}/`;
 const withBase = (assetPath: string) => `${normalizedBase}${assetPath.replace(/^\//, '')}`;
-const socialPreviewUrl = 'https://isolarail.ivanli.cc/isolarail-social-preview.png';
+const publicAssetOrigin = 'https://isolarail.ivanli.cc';
+const publicAssetUrl = (assetPath: string) => `${publicAssetOrigin}/${assetPath.replace(/^\//, '')}`;
+const socialPreviewUrl = publicAssetUrl('isolarail-social-preview.png');
 
 const zhNav = [
   { text: '快速开始', link: '/zh/start/quick-start' },
@@ -130,8 +132,8 @@ export default defineConfig({
   description: 'Bilingual product and engineering documentation for IsolaRail.',
   icon: '/favicon.ico',
   logo: {
-    light: withBase('isolarail-logo-lockup-light.svg'),
-    dark: withBase('isolarail-logo-lockup-dark.svg'),
+    light: publicAssetUrl('isolarail-logo-lockup-light.svg'),
+    dark: publicAssetUrl('isolarail-logo-lockup-dark.svg'),
   },
   logoText: 'IsolaRail',
   outDir: 'doc_build',

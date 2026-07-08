@@ -64,6 +64,7 @@ This project contains GitHub Actions workflows for automated building, combined 
 - Build the root `web/` app and `docs-site/` in one workflow
 - Assemble a single static artifact with the web app at `/` and docs at `/docs/`
 - Upload the shared artifact to GitHub Pages on non-PR runs
+- Stage the artifact outside the repository before the EdgeOne deploy step so the CLI stays in pure static direct-upload mode
 - Deploy the same artifact to the EdgeOne direct-upload project on `main`
 
 **Purpose:** Publish the complete static site while keeping GitHub Pages as a hot backup

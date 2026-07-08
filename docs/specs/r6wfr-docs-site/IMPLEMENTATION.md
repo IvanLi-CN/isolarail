@@ -33,6 +33,7 @@
 - `DOCS_BASE` and `DOCS_PORT` still provide docs deploy and preview overrides; production publish now fixes `DOCS_BASE=/docs/`.
 - The publish workflow resolves the site root base to `/` when `docs-site/docs/public/CNAME` exists, otherwise `/${repo}/`, and derives the docs base from that root as `/docs/` or `/${repo}/docs/`.
 - EdgeOne direct-upload deploy reuses the same combined artifact through `edgeone makers deploy`.
+- The EdgeOne deploy step must stage `.site-publish` into a temporary directory outside the repository before invoking the CLI; deploying the same files from an in-repo path caused EdgeOne preview URLs to return `504 CLOUD_FUNCTION_INVOCATION_TIMEOUT` even though the deployment logs reported a pure static project.
 - Local preview verified on leased port `57850`.
 - Rspress locale routing uses explicit `zh` and `en` theme configs with `localeRedirect: 'never'`;
   the internal `x-default` locale is hidden from the language menu so topic navigation cannot drift

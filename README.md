@@ -198,7 +198,7 @@ bun run docs:build
 DOCS_PORT=50885 bun run docs:preview
 ```
 
-Local docs builds default to a root path. Production deploys set `DOCS_BASE=/docs/` so the docs site can be served under the main web app. The combined `Site Publish` workflow builds `web/` at `/`, builds `docs-site/` at `/docs/`, and deploys the same merged artifact to GitHub Pages and EdgeOne. When `docs-site/docs/public/CNAME` exists, the workflow also copies it to the artifact root for the custom-domain hot backup:
+Local docs builds default to a root path. Production deploys set `DOCS_BASE=/docs/` so the docs site can be served under the main web app. The combined `Site Publish` workflow builds `web/` at `/`, builds `docs-site/` at `/docs/`, and deploys the same merged artifact to GitHub Pages and EdgeOne. The EdgeOne deploy step first stages `.site-publish` into a temporary directory outside the repository because `edgeone makers deploy` can mis-detect repository-local builder metadata when the artifact is deployed from an in-repo path. When `docs-site/docs/public/CNAME` exists, the workflow also copies it to the artifact root for the custom-domain hot backup:
 
 ```bash
 DOCS_BASE=/preview/ bun run docs:build

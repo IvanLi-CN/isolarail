@@ -121,8 +121,14 @@ jobs:
         with:
           node-version: '22.11.0'
 
+      - name: Stage EdgeOne artifact outside repository
+        run: |
+          edgeone_artifact_dir="$(mktemp -d "$RUNNER_TEMP/edgeone-site.XXXXXX")"
+          cp -R .site-publish/. "$edgeone_artifact_dir/"
+          echo "EDGEONE_ARTIFACT_DIR=$edgeone_artifact_dir" >> "$GITHUB_ENV"
+
       - name: Deploy to EdgeOne Makers direct-upload project
         env:
           EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
           EDGEONE_PROJECT_NAME: ${{ vars.EDGEONE_PROJECT_NAME }}
-        run: npx edgeone makers deploy ./.site-publish -n "$EDGEONE_PROJECT_NAME" -t "$EDGEONE_API_TOKEN" -e production
+        run: npx edgeone makers deploy "$EDGEONE_ARTIFACT_DIR" -n "$EDGEONE_PROJECT_NAME" -t "$EDGEONE_API_TOKEN" -e production

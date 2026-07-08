@@ -8,7 +8,6 @@ This directory contains the project brand image assets.
 - `isolarail-app-icon.png`: square app icon derived from the logo symbol.
 - `isolarail-poster.png`: portrait poster image.
 - `isolarail-github-social-preview.png`: GitHub social preview image.
-- `isolarail-brand-background.png`: generated campaign background used by the poster and social preview.
 - `isolarail-logo-proposal-sheet.png`: source proposal sheet for the selected logo direction.
 
 ## Usage

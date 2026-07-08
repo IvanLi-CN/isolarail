@@ -19,11 +19,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve docs base
+        run: |
+          if [ -n "${{ vars.DOCS_BASE }}" ]; then
+            echo "DOCS_BASE=${{ vars.DOCS_BASE }}" >> "$GITHUB_ENV"
+          elif [ -f docs-site/docs/public/CNAME ]; then
+            echo "DOCS_BASE=/" >> "$GITHUB_ENV"
+          else
+            echo "DOCS_BASE=/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

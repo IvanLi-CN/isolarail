@@ -197,7 +197,8 @@ DOCS_PORT=50885 bun run docs:preview
 ```
 
 Local builds default to a root path. The GitHub Pages workflow defaults to the repository project path
-and can be overridden with `DOCS_BASE`, including `/` for a configured custom domain:
+and can be overridden with `DOCS_BASE`. When `docs-site/docs/public/CNAME` exists, the workflow
+publishes with `/` automatically for the configured custom domain:
 
 ```bash
 DOCS_BASE=/preview/ bun run docs:build

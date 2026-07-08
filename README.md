@@ -15,12 +15,13 @@ Owner-facing naming is fixed as:
 
 ## Brand assets
 
-Project brand assets live in [docs/assets/brand](docs/assets/brand/README.md):
+Project brand assets live in [docs/assets/brand](docs/assets/brand/README.md). The complete asset inventory and previews are tracked in [brand visual assets spec](docs/specs/b8r3n-brand-visual-assets/SPEC.md):
 
 - Primary logo: [isolarail-logo-lockup.png](docs/assets/brand/isolarail-logo-lockup.png)
 - App icon: [isolarail-app-icon.png](docs/assets/brand/isolarail-app-icon.png)
 - Poster: [isolarail-poster.png](docs/assets/brand/isolarail-poster.png)
 - GitHub social preview: [isolarail-github-social-preview.png](docs/assets/brand/isolarail-github-social-preview.png)
+- GitHub social preview variant: [isolarail-github-social-preview-variant.png](docs/assets/brand/isolarail-github-social-preview-variant.png)
 
 ## Developer entrypoints
 

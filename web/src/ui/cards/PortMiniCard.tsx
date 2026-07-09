@@ -48,20 +48,20 @@ function ConfirmPopover({
           className="absolute left-[40px] top-[-6px] h-3 w-3 rotate-45 border border-[var(--border)] bg-[var(--panel)]"
           aria-hidden
         />
-        <div className="flex h-[44px] w-[260px] items-center gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-4">
+        <div className="iso-panel flex h-[52px] w-[272px] items-center gap-2 px-4">
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Power off?
           </div>
           <div className="flex-1" />
           <button
-            className="flex h-6 w-11 items-center justify-center rounded-[8px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
+            className="iso-button h-7 w-12 px-0 text-[11px]"
             type="button"
             onClick={onClose}
           >
             No
           </button>
           <button
-            className="flex h-6 w-11 items-center justify-center rounded-[8px] bg-[var(--primary)] text-[12px] font-extrabold text-[var(--primary-text)]"
+            className="iso-button iso-button--primary h-7 w-12 px-0 text-[11px]"
             type="button"
             onClick={() => {
               onConfirm();
@@ -165,12 +165,12 @@ export function PortMiniCard({
           <button
             className={[
               compact
-                ? "flex h-[32px] items-center justify-center rounded-[10px] text-[11px] font-bold"
-                : "flex h-[34px] items-center justify-center rounded-[10px] text-[12px] font-bold",
+                ? "iso-button h-[32px] text-[11px]"
+                : "iso-button h-[34px] text-[12px]",
               powerWidth,
               actionDisabled
-                ? "bg-[var(--btn-disabled-fill)] text-[var(--btn-disabled-text)]"
-                : "bg-[var(--primary)] text-[var(--primary-text)]",
+                ? "[--iso-button-bg:var(--btn-disabled-fill)] [--iso-button-border:var(--border)] [--iso-button-text:var(--btn-disabled-text)]"
+                : "iso-button--primary",
             ].join(" ")}
             type="button"
             disabled={actionDisabled}
@@ -196,12 +196,12 @@ export function PortMiniCard({
         <button
           className={[
             compact
-              ? "flex h-[32px] items-center justify-center rounded-[10px] border border-[var(--border)] text-[11px] font-bold"
-              : "flex h-[34px] items-center justify-center rounded-[10px] border border-[var(--border)] text-[12px] font-bold",
+              ? "iso-button h-[32px] text-[11px]"
+              : "iso-button h-[34px] text-[12px]",
             replugWidth,
             actionDisabled
-              ? "bg-[var(--btn-disabled-fill-soft)] text-[var(--btn-disabled-text)]"
-              : "bg-transparent text-[var(--text)]",
+              ? "[--iso-button-bg:var(--btn-disabled-fill-soft)] [--iso-button-border:var(--border)] [--iso-button-text:var(--btn-disabled-text)]"
+              : "iso-button--ghost",
           ].join(" ")}
           type="button"
           disabled={actionDisabled}

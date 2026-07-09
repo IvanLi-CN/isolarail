@@ -7,13 +7,35 @@ pageType: custom
 <section className="isolarail-hero">
   <div className="isolarail-hero-copy">
     <div className="isolarail-kicker">IsolaRail documentation</div>
-    <h1>Choose your documentation language.</h1>
+    <h1>Choose the bench manual.</h1>
     <div className="isolarail-hero-lede">
-      The documentation site is available in Chinese and English. Both routes cover the product entry, quick start, hardware topology, firmware runtime, control plane, dashboard contract, and specs index.
+      The documentation site is available in Chinese and English. Both routes
+      cover product entry, bring-up, hardware topology, firmware runtime,
+      control-plane surfaces, dashboard behavior, and the specs index.
+    </div>
+    <div className="isolarail-chip-row">
+      <span className="isolarail-chip isolarail-chip--signal">bench first</span>
+      <span className="isolarail-chip">zh + en</span>
+      <span className="isolarail-chip">shared topology</span>
+      <span className="isolarail-chip">spec-linked</span>
     </div>
     <div className="isolarail-actions">
       <a className="isolarail-button primary" href="zh/">进入中文文档</a>
       <a className="isolarail-button secondary" href="en/">Read English docs</a>
+    </div>
+    <div className="isolarail-hero-metrics">
+      <div className="isolarail-metric">
+        <strong>Routes</strong>
+        <span>same product truth, two reading languages</span>
+      </div>
+      <div className="isolarail-metric">
+        <strong>Tone</strong>
+        <span>public manual, not marketing shell</span>
+      </div>
+      <div className="isolarail-metric">
+        <strong>Scope</strong>
+        <span>hardware boundary before repo boundary</span>
+      </div>
     </div>
   </div>
   <div className="isolarail-visual" aria-label="IsolaRail system boundary diagram">
@@ -43,9 +65,24 @@ pageType: custom
         <strong>dashboard state surface</strong>
       </div>
       <div className="isolarail-photo-reserve">
-        <strong>Real photo reserved</strong>
-        <span>This root entry keeps the custom-domain homepage usable while hardware photography waits for real device evidence.</span>
+        <strong>Shared entry</strong>
+        <span>Use this root page to choose language, then stay inside one complete documentation route.</span>
       </div>
     </div>
   </div>
 </section>
+
+<div className="isolarail-evidence">
+  <a className="isolarail-evidence-item" href="zh/">
+    <strong>中文文档</strong>
+    <span>产品入口、快速开始、硬件拓扑、控制面和规格索引。</span>
+  </a>
+  <a className="isolarail-evidence-item" href="en/">
+    <strong>English Docs</strong>
+    <span>Product entry, bring-up, hardware topology, firmware, and specs.</span>
+  </a>
+  <div className="isolarail-evidence-item">
+    <strong>Canonical truth</strong>
+    <span>Both language routes point back to the same repository docs and specs.</span>
+  </div>
+</div>

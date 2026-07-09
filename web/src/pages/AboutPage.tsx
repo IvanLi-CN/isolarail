@@ -18,6 +18,12 @@ function envLink(key: string): string | null {
   return value.trim() ? value.trim() : null;
 }
 
+function defaultDocsUrl(): string {
+  const base = ((import.meta.env.BASE_URL as string | undefined) ?? "/").trim();
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  return normalizedBase === "/" ? "/docs/" : `${normalizedBase}docs/`;
+}
+
 export function AboutPage() {
   const { sha, date, version } = buildInfo();
   const { agent, status } = useCompanionBridge();
@@ -25,7 +31,7 @@ export function AboutPage() {
   const [resetting, setResetting] = useState(false);
 
   const repoUrl = envLink("VITE_REPO_URL");
-  const docsUrl = envLink("VITE_DOCS_URL");
+  const docsUrl = envLink("VITE_DOCS_URL") ?? defaultDocsUrl();
   const issuesUrl = envLink("VITE_ISSUES_URL");
 
   const onResetStorage = async () => {

@@ -2,7 +2,7 @@
 
 ## 背景
 
-仓库当前已有 `Release`、`Development Release` 与 `Docs Pages` 等交付流，但发布或部署失败时如果没有统一的 Telegram 主动告警，容易在无人值守时错过失败。
+仓库当前已有 `Release`、`Development Release` 与 `Site Publish` 等交付流，但发布或部署失败时如果没有统一的 Telegram 主动告警，容易在无人值守时错过失败。
 
 ## 目标
 
@@ -24,7 +24,7 @@
 
 ### MUST
 
-- 监听 `Release`、`Development Release` 与非 PR `Docs Pages` workflow 的失败结果。
+- 监听 `Release`、`Development Release` 与非 PR `Site Publish` workflow 的失败结果。
 - 手动触发 `notify-release-failure.yml` 时发送 smoke test 消息。
 - 显式把 `SHOUTRRR_URL` 传给共享 reusable workflow。
 
@@ -34,7 +34,7 @@
 
 ## 验收标准
 
-- Given `Release`、`Development Release` 或非 PR `Docs Pages` 失败，When workflow 结束，Then `Notify failed release` 自动发送 Telegram 告警。
+- Given `Release`、`Development Release` 或非 PR `Site Publish` 失败，When workflow 结束，Then `Notify failed release` 自动发送 Telegram 告警。
 - Given 在默认分支手动触发 `notify-release-failure.yml`，When workflow 成功结束，Then Telegram 收到 smoke test 消息。
 
 ## 文档更新
@@ -46,4 +46,4 @@
 - [x] 新增 repo-local notifier wrapper。
 - [x] 配置 repo secret `SHOUTRRR_URL`。
 - [x] 合并后验证 smoke test。
-- [x] 将 `Docs Pages` 部署失败纳入同一通知 sidecar。
+- [x] 将 `Site Publish` 部署失败纳入同一通知 sidecar。

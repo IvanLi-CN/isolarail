@@ -13,7 +13,7 @@ The docs site curates and publishes. It does not replace canonical repository sp
 
 | ID | Title | Status | Role |
 | --- | --- | --- | --- |
-| `r6wfr` | Docs Web Site | First implementation in progress | Defines the Rspress/Bun bilingual site, publishing workflow, visual evidence, and acceptance gates |
+| `r6wfr` | Docs Web Site | Implemented / pending external cutover | Defines the Rspress/Bun bilingual site, combined publishing workflow, visual evidence, and acceptance gates |
 
 Spec directory:
 
@@ -21,7 +21,7 @@ Spec directory:
 - `docs/specs/r6wfr-docs-site/IMPLEMENTATION.md`
 - `docs/specs/r6wfr-docs-site/HISTORY.md`
 
-This spec only owns the site itself: Rspress structure, bilingual routes, GitHub Pages workflow, visual evidence, and documentation boundaries. It does not replace hardware, firmware, or control-plane specs.
+This spec only owns the site itself: Rspress structure, bilingual routes, the combined static publishing workflow, visual evidence, and documentation boundaries. It does not replace hardware, firmware, or control-plane specs.
 
 ## Product and control-plane specs
 

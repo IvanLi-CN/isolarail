@@ -16,8 +16,8 @@
 - 新增独立 `docs-site/` 子工程，作为可发布的双语文档站点。
 - 首版覆盖首页、快速开始、硬件拓扑、固件运行、蜂鸣器音效预览、控制面、Dashboard 和规格索引。
 - 使用 Rspress + Bun，提供 `docs:dev`、`docs:build` 和 `docs:preview`。
-- 接入 GitHub Pages workflow，默认适配仓库 project-pages 子路径，并支持 `DOCS_BASE`
-  覆盖到自定义域名根路径。
+- 接入与主站联动的组合静态发布 workflow：`web/` 占根路径 `/`，`docs-site/` 作为
+  `/docs/` 子目录一起发布到 GitHub Pages 热备与 EdgeOne 正式入口。
 - 将站点视觉证据写回本 spec。
 
 ### Non-goals
@@ -33,15 +33,16 @@
 
 - `PRODUCT.md` / `DESIGN.md` 站点上下文。
 - `docs-site/` Rspress 配置、样式、双语内容与静态资产。
-- 根 `package.json` docs scripts 与 Bun lockfile。
-- `.github/workflows/docs-pages.yml` 发布 workflow。
+- 根 `package.json` docs/site 组装 scripts 与 Bun lockfile。
+- `web/` 根站点构建产物与组合静态发布目录。
+- `.github/workflows/docs-pages.yml` 组合站点发布 workflow。
 - README 文档入口同步。
 
 ### Out of scope
 
 - Firmware source behavior changes.
 - Hardware netlist or BOM changes.
-- Custom domain DNS / CNAME 具体域名配置。
+- EdgeOne 控制台首配、备案申请与 DNS 服务商侧操作。
 
 ## 需求
 
@@ -49,15 +50,15 @@
 
 - 文档站必须能通过 `bun run docs:build` 构建。
 - 文档站必须提供中文和英文等价的精选首版内容。
-- 本地站点默认 `DOCS_BASE=/`；GitHub Pages workflow 默认使用仓库 project-pages 子路径，并能通过
-  `DOCS_BASE` 覆盖。
+- 本地站点默认 `DOCS_BASE=/`；组合发布时必须使用 `DOCS_BASE=/docs/`。
+- 发布 workflow 必须生成单一组合静态产物：主 `web/` 位于根路径，文档站位于 `/docs/`。
 - 站内手写链接和图片引用不得依赖固定 `/isolarail/` 路径。
 - 本地预览必须使用端口租约，不直接抢默认端口。
 - UI 视觉证据必须在合入前回传给主人，并写入本 spec。
 
 ### SHOULD
 
-- README 保持快速入口，把完整阅读路径交给 docs-site。
+- README 保持快速入口，并明确 `web/` 是主站、`docs-site/` 是 `/docs/` 子站。
 - 内容应明确 canonical sources，避免站点漂移成第二套真相源。
 - 视觉风格应体现产品官网入口与工程文档的混合形态，但信息架构按主题组织，不按用户类型拆分页面。
 
@@ -76,8 +77,11 @@
 ## 验收标准
 
 - `bun install --frozen-lockfile` 成功。
+- `bun install --cwd web --frozen-lockfile` 成功。
+- `just web-build` 成功。
 - `bun run docs:build` 成功。
-- `DOCS_BASE=/preview/ bun run docs:build` 成功。
+- `DOCS_BASE=/docs/ bun run docs:build` 成功。
+- 组合发布目录组装成功，且根路径与 `/docs/` 子路径都存在可用入口文件。
 - 预览中 `/zh/`、`/en/`、quick-start、hardware、firmware、control-plane、dashboard、reference 页面可访问。
 - 桌面和移动端截图证明首页与至少一个内容页无明显布局溢出。
 - `cargo +esp check --target xtensa-esp32s3-none-elf` 成功。
@@ -87,9 +91,9 @@
 
 ### Testing
 
-- Rspress build and preview smoke test.
+- Web build, Rspress build, and combined publish-asset smoke test.
 - ESP32-S3 firmware check and release build.
-- GitHub Pages workflow uses the same docs build command.
+- GitHub Pages 与 EdgeOne 使用同一份组合静态产物。
 
 ### UI / Visual Evidence
 
@@ -143,6 +147,6 @@
 
 ## 风险 / 开放问题 / 假设
 
-- 自定义域名的实际域名暂未写入仓库，因此首版不提交 `CNAME`。
+- `docs-site/docs/public/CNAME` 仅作为 GitHub Pages 热备的 artifact-root 映射来源；正式入口域名绑定与切流由 EdgeOne 控制台负责。
 - 没有真实设备照片，首页只保留照片位，不生成替代渲染图。
 - Rspress i18n 和 route behavior 以本地 build/preview 验证为准。

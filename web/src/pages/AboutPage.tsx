@@ -135,11 +135,8 @@ export function AboutPage() {
               Repo
             </a>
             <a
-              className={[
-                "iso-button w-[120px]",
-                docsUrl ? "" : "pointer-events-none opacity-40",
-              ].join(" ")}
-              href={docsUrl ?? undefined}
+              className="iso-button w-[120px]"
+              href={docsUrl}
               target="_blank"
               rel="noreferrer"
             >

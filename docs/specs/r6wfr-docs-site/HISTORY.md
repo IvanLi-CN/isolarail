@@ -12,6 +12,7 @@
 - 原 `tools/buzzer_audio_preview/` 静态试听页迁入 docs-site，保持固件音效候选数据，同时改用站点主题和双语路由。
 - Pages 发布基址从“默认固定 project-pages 子路径”收敛为“显式 `DOCS_BASE` 优先，其次随
   `CNAME` 自动切到根路径”，避免自定义域名首页继续引用 `/isolarail/...` 资源。
+- 发布拓扑从“文档站单独占发布入口”修正为“`web/` 主站占根路径，`docs-site/` 挂在 `/docs/` 子目录”，并让 GitHub Pages 与 EdgeOne 共同复用同一份组合静态产物。
 
 ## References
 

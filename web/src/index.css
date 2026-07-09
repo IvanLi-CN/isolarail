@@ -13,66 +13,80 @@ body {
 }
 
 :root {
-  --bg: #f6f7fb;
+  --bg: #edf2f6;
   --panel: #ffffff;
-  --panel-2: #f8fafc;
-  --border: #e5e7eb;
-  --text: #111827;
-  --muted: #6b7280;
-  --primary: #5c6ac4;
-  --primary-2: #6b78d6;
+  --panel-2: #f4f7fa;
+  --panel-3: #e1e8f0;
+  --border: #cdd7e2;
+  --text: #131925;
+  --muted: #617084;
+  --rail: #10151d;
+  --primary: #ff0050;
+  --primary-2: #ff2d6f;
   --primary-text: #ffffff;
-  --success: #16a34a;
-  --warning: #d97706;
-  --error: #dc2626;
-  --shadow: rgba(17, 24, 39, 0.08);
+  --trace: #33becd;
+  --success: #19ad72;
+  --warning: #c5881f;
+  --error: #d95d66;
+  --shadow: rgba(17, 24, 39, 0.06);
   --overlay: rgba(15, 23, 42, 0.32);
 
-  --sidebar-bg: rgba(248, 250, 252, 0.85);
+  --sidebar-bg: rgba(244, 247, 250, 0.84);
 
-  --badge-success-bg: rgba(22, 163, 74, 0.12);
-  --badge-success-text: #16a34a;
-  --badge-warning-bg: rgba(217, 119, 6, 0.12);
-  --badge-warning-text: #d97706;
-  --badge-error-bg: rgba(220, 38, 38, 0.1);
-  --badge-error-text: #dc2626;
+  --badge-success-bg: rgba(25, 173, 114, 0.12);
+  --badge-success-text: #179965;
+  --badge-warning-bg: rgba(197, 136, 31, 0.12);
+  --badge-warning-text: #b57312;
+  --badge-error-bg: rgba(217, 93, 102, 0.12);
+  --badge-error-text: #c14d57;
+  --badge-trace-bg: rgba(51, 190, 205, 0.12);
+  --badge-trace-text: #249eab;
+  --badge-signal-bg: rgba(255, 0, 80, 0.1);
+  --badge-signal-text: #e00049;
 
   --btn-disabled-fill: var(--panel-2);
   --btn-disabled-fill-soft: rgba(17, 24, 39, 0.04);
   --btn-disabled-text: var(--muted);
   --power-track-off: rgba(107, 114, 128, 0.32);
 
-  --add-placeholder-bg: rgba(248, 250, 252, 0.75);
-  --tab-inactive-bg: rgba(248, 250, 252, 0.7);
+  --add-placeholder-bg: rgba(255, 255, 255, 0.54);
+  --tab-inactive-bg: rgba(244, 247, 250, 0.88);
 
-  --card-filter: drop-shadow(0 8px 18px var(--shadow));
-  --popover-filter: drop-shadow(0 8px 18px var(--shadow));
-  --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+  --card-filter: none;
+  --popover-filter: drop-shadow(0 12px 24px rgba(17, 24, 39, 0.08));
+  --modal-filter: drop-shadow(0 18px 36px rgba(17, 24, 39, 0.12));
 }
 
 :root[data-theme="isolarail-dark"] {
-  --bg: #0b1220;
-  --panel: #111827;
-  --panel-2: #0f172a;
-  --border: #1f2937;
-  --text: #e5e7eb;
-  --muted: #94a3b8;
-  --primary: #9aa2f0;
-  --primary-2: #a7aef5;
-  --primary-text: #0b1220;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #f87171;
+  --bg: #091018;
+  --panel: #101722;
+  --panel-2: #141c28;
+  --panel-3: #0b121b;
+  --border: #243143;
+  --text: #edf2f7;
+  --muted: #97a4b7;
+  --rail: #f5f8fb;
+  --primary: #ff2d6f;
+  --primary-2: #ff4d82;
+  --primary-text: #ffffff;
+  --trace: #38c6d2;
+  --success: #2acb87;
+  --warning: #efb54b;
+  --error: #f16e78;
   --shadow: rgba(0, 0, 0, 0.45);
 
-  --sidebar-bg: rgba(15, 23, 42, 0.7);
+  --sidebar-bg: rgba(11, 18, 27, 0.82);
 
-  --badge-success-bg: rgba(34, 197, 94, 0.12);
-  --badge-success-text: #22c55e;
-  --badge-warning-bg: rgba(245, 158, 11, 0.12);
-  --badge-warning-text: #f59e0b;
-  --badge-error-bg: rgba(248, 113, 113, 0.1);
-  --badge-error-text: #f87171;
+  --badge-success-bg: rgba(42, 203, 135, 0.14);
+  --badge-success-text: #35d792;
+  --badge-warning-bg: rgba(239, 181, 75, 0.14);
+  --badge-warning-text: #f2c467;
+  --badge-error-bg: rgba(241, 110, 120, 0.14);
+  --badge-error-text: #ff98a0;
+  --badge-trace-bg: rgba(56, 198, 210, 0.14);
+  --badge-trace-text: #4fd5df;
+  --badge-signal-bg: rgba(255, 45, 111, 0.14);
+  --badge-signal-text: #ff6a98;
 
   --btn-disabled-fill: rgba(148, 163, 184, 0.12);
   --btn-disabled-fill-soft: rgba(148, 163, 184, 0.08);
@@ -80,37 +94,44 @@ body {
   --power-track-off: rgba(148, 163, 184, 0.34);
 
   --add-placeholder-bg: rgba(255, 255, 255, 0.04);
-  --tab-inactive-bg: rgba(15, 23, 42, 0.7);
+  --tab-inactive-bg: rgba(20, 28, 40, 0.94);
 
-  --card-filter: drop-shadow(0 10px 22px var(--shadow));
-  --popover-filter: drop-shadow(0 10px 22px var(--shadow));
-  --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+  --card-filter: none;
+  --popover-filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.3));
+  --modal-filter: drop-shadow(0 20px 38px rgba(0, 0, 0, 0.36));
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0b1220;
-    --panel: #111827;
-    --panel-2: #0f172a;
-    --border: #1f2937;
-    --text: #e5e7eb;
-    --muted: #94a3b8;
-    --primary: #9aa2f0;
-    --primary-2: #a7aef5;
-    --primary-text: #0b1220;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --error: #f87171;
+    --bg: #091018;
+    --panel: #101722;
+    --panel-2: #141c28;
+    --panel-3: #0b121b;
+    --border: #243143;
+    --text: #edf2f7;
+    --muted: #97a4b7;
+    --rail: #f5f8fb;
+    --primary: #ff2d6f;
+    --primary-2: #ff4d82;
+    --primary-text: #ffffff;
+    --trace: #38c6d2;
+    --success: #2acb87;
+    --warning: #efb54b;
+    --error: #f16e78;
     --shadow: rgba(0, 0, 0, 0.45);
 
-    --sidebar-bg: rgba(15, 23, 42, 0.7);
+    --sidebar-bg: rgba(11, 18, 27, 0.82);
 
-    --badge-success-bg: rgba(34, 197, 94, 0.12);
-    --badge-success-text: #22c55e;
-    --badge-warning-bg: rgba(245, 158, 11, 0.12);
-    --badge-warning-text: #f59e0b;
-    --badge-error-bg: rgba(248, 113, 113, 0.1);
-    --badge-error-text: #f87171;
+    --badge-success-bg: rgba(42, 203, 135, 0.14);
+    --badge-success-text: #35d792;
+    --badge-warning-bg: rgba(239, 181, 75, 0.14);
+    --badge-warning-text: #f2c467;
+    --badge-error-bg: rgba(241, 110, 120, 0.14);
+    --badge-error-text: #ff98a0;
+    --badge-trace-bg: rgba(56, 198, 210, 0.14);
+    --badge-trace-text: #4fd5df;
+    --badge-signal-bg: rgba(255, 45, 111, 0.14);
+    --badge-signal-text: #ff6a98;
 
     --btn-disabled-fill: rgba(148, 163, 184, 0.12);
     --btn-disabled-fill-soft: rgba(148, 163, 184, 0.08);
@@ -118,16 +139,18 @@ body {
     --power-track-off: rgba(148, 163, 184, 0.34);
 
     --add-placeholder-bg: rgba(255, 255, 255, 0.04);
-    --tab-inactive-bg: rgba(15, 23, 42, 0.7);
+    --tab-inactive-bg: rgba(20, 28, 40, 0.94);
 
-    --card-filter: drop-shadow(0 10px 22px var(--shadow));
-    --popover-filter: drop-shadow(0 10px 22px var(--shadow));
-    --modal-filter: drop-shadow(0 10px 24px var(--shadow));
+    --card-filter: none;
+    --popover-filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.3));
+    --modal-filter: drop-shadow(0 20px 38px rgba(0, 0, 0, 0.36));
   }
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 86% 6%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 20%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 100%, white 0%), color-mix(in srgb, var(--bg) 94%, white 6%));
   color: var(--text);
 }
 
@@ -256,6 +279,158 @@ body {
 .hardware-json-null,
 .hardware-json-other {
   color: var(--warning);
+}
+
+.iso-brand-mark {
+  display: inline-block;
+  width: 42px;
+  height: 10px;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--rail) 0 38%,
+      transparent 38% 47%,
+      var(--primary) 47% 53%,
+      transparent 53% 62%,
+      var(--primary) 62% 68%,
+      transparent 68% 100%
+    );
+}
+
+.iso-kicker {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.iso-chip {
+  --iso-chip-bg: var(--panel);
+  --iso-chip-border: var(--border);
+  --iso-chip-text: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--iso-chip-border);
+  border-radius: 8px;
+  background: var(--iso-chip-bg);
+  color: var(--iso-chip-text);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.iso-chip--neutral {
+  --iso-chip-text: var(--text);
+}
+
+.iso-chip--signal {
+  --iso-chip-bg: var(--badge-signal-bg);
+  --iso-chip-border: color-mix(in srgb, var(--primary) 28%, var(--border));
+  --iso-chip-text: var(--badge-signal-text);
+}
+
+.iso-chip--trace {
+  --iso-chip-bg: var(--badge-trace-bg);
+  --iso-chip-border: color-mix(in srgb, var(--trace) 26%, var(--border));
+  --iso-chip-text: var(--badge-trace-text);
+}
+
+.iso-chip--success {
+  --iso-chip-bg: var(--badge-success-bg);
+  --iso-chip-border: color-mix(in srgb, var(--success) 26%, var(--border));
+  --iso-chip-text: var(--badge-success-text);
+}
+
+.iso-chip--warning {
+  --iso-chip-bg: var(--badge-warning-bg);
+  --iso-chip-border: color-mix(in srgb, var(--warning) 28%, var(--border));
+  --iso-chip-text: var(--badge-warning-text);
+}
+
+.iso-chip--error {
+  --iso-chip-bg: var(--badge-error-bg);
+  --iso-chip-border: color-mix(in srgb, var(--error) 26%, var(--border));
+  --iso-chip-text: var(--badge-error-text);
+}
+
+.iso-button {
+  --iso-button-bg: var(--panel);
+  --iso-button-border: var(--border);
+  --iso-button-text: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--iso-button-border);
+  border-radius: 8px;
+  background: var(--iso-button-bg);
+  color: var(--iso-button-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.iso-button--primary {
+  --iso-button-bg: var(--primary);
+  --iso-button-border: color-mix(in srgb, var(--primary) 76%, black 10%);
+  --iso-button-text: var(--primary-text);
+}
+
+.iso-button--signal-soft {
+  --iso-button-bg: var(--badge-signal-bg);
+  --iso-button-border: color-mix(in srgb, var(--primary) 28%, var(--border));
+  --iso-button-text: var(--badge-signal-text);
+}
+
+.iso-button--ghost {
+  --iso-button-bg: transparent;
+}
+
+.iso-button--soft {
+  --iso-button-bg: var(--panel-2);
+}
+
+.iso-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+.iso-panel-subtle {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
 }
 
 .hardware-json-expander {

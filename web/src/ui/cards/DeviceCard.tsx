@@ -12,27 +12,23 @@ export type DeviceTransportBadge = {
 };
 
 function badgeStyles(state: ConnectionState): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
 } {
   if (state === "online") {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
       width: "w-[96px]",
     };
   }
   if (state === "offline") {
     return {
-      bg: "bg-[var(--badge-error-bg)]",
-      text: "text-[var(--badge-error-text)]",
+      tone: "iso-chip--error",
       width: "w-[96px]",
     };
   }
   return {
-    bg: "bg-[var(--badge-warning-bg)]",
-    text: "text-[var(--badge-warning-text)]",
+    tone: "iso-chip--warning",
     width: "w-[96px]",
   };
 }
@@ -73,31 +69,23 @@ function transportFullLabel(transport: DeviceTransport): string {
 }
 
 function transportBadgeStyles(state: DeviceTransportBadge["state"]): {
-  bg: string;
-  text: string;
-  border: string;
+  tone: string;
   opacity: string;
 } {
   if (state === "primary") {
     return {
-      bg: "bg-[var(--primary)]",
-      text: "text-[var(--primary-text)]",
-      border: "border-transparent",
+      tone: "iso-chip--signal",
       opacity: "",
     };
   }
   if (state === "connected") {
     return {
-      bg: "bg-[var(--panel-2)]",
-      text: "text-[var(--text)]",
-      border: "border-[var(--border)]",
+      tone: "iso-chip--neutral",
       opacity: "",
     };
   }
   return {
-    bg: "bg-[var(--panel)]",
-    text: "text-[var(--muted)]",
-    border: "border-[var(--border)]",
+    tone: "",
     opacity: "opacity-70",
   };
 }
@@ -214,8 +202,9 @@ export function DeviceCard({
   unselectedFill,
   onSelect,
 }: DeviceCardProps) {
-  const fill =
-    selected || unselectedFill === "panel"
+  const fill = selected
+    ? ""
+    : unselectedFill === "panel"
       ? "bg-[var(--panel)]"
       : "bg-[var(--panel-2)]";
   const badge = badgeStyles(status);
@@ -251,17 +240,23 @@ export function DeviceCard({
     <button
       data-testid={`device-card-${device.id}`}
       className={[
-        "w-full rounded-[14px] border border-[var(--border)]",
-        "px-5 py-4 text-left",
+        "w-full rounded-[16px] border px-4 py-4 text-left",
         fill,
-        selected ? "iso-card" : "",
+        selected
+          ? "border-[color-mix(in_srgb,var(--primary)_42%,var(--border))] bg-[color-mix(in_srgb,var(--badge-signal-bg)_55%,var(--panel))]"
+          : "border-[var(--border)]",
       ].join(" ")}
       type="button"
       onClick={() => onSelect(device.id)}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-[14px] font-medium">{device.name}</div>
+          <div className="truncate text-[16px] font-bold leading-5">
+            {device.name}
+          </div>
+          <div className="mt-2 truncate font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+            {device.baseUrl.replace(/^https?:\/\//, "")}
+          </div>
           <div className="relative mt-3 min-w-0">
             <div
               ref={transportMeasureRef}
@@ -274,12 +269,10 @@ export function DeviceCard({
                   <div
                     key={`${device.id}-${badge.transport}-measure`}
                     className={[
-                      "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2",
-                      styles.bg,
-                      styles.text,
-                      styles.border,
+                      "iso-chip h-7 shrink-0 gap-1.5 px-2",
+                      styles.tone,
                       styles.opacity,
-                      "text-[12px] font-semibold",
+                      "text-[11px]",
                     ].join(" ")}
                   >
                     {transportIcon(badge.transport)}
@@ -301,13 +294,11 @@ export function DeviceCard({
                     key={`${device.id}-${badge.transport}`}
                     title={transportFullLabel(badge.transport)}
                     className={[
-                      "inline-flex h-7 shrink-0 items-center rounded-full border",
+                      "iso-chip h-7 shrink-0 items-center",
                       iconOnly ? "w-7 justify-center px-0" : "gap-1.5 px-2",
-                      styles.bg,
-                      styles.text,
-                      styles.border,
+                      styles.tone,
                       styles.opacity,
-                      "text-[12px] font-semibold",
+                      "text-[11px]",
                     ].join(" ")}
                   >
                     {transportIcon(badge.transport)}
@@ -324,11 +315,10 @@ export function DeviceCard({
         </div>
         <div
           className={[
-            "flex h-[22px] items-center justify-center rounded-full",
+            "iso-chip h-7 items-center justify-center",
             badge.width,
-            badge.bg,
-            badge.text,
-            "text-[12px] font-semibold",
+            badge.tone,
+            "text-[11px]",
           ].join(" ")}
         >
           {status}

@@ -96,15 +96,27 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6" data-testid="dashboard">
-      <div>
-        <div className="text-[24px] font-bold">Dashboard</div>
-        <div className="mt-2 text-[14px] font-medium text-[var(--muted)]">
-          Multi-device dashboard — V/A/W, status, quick actions
+    <div className="flex flex-col gap-5" data-testid="dashboard">
+      <div className="iso-panel px-5 py-5 sm:px-6">
+        <div className="iso-kicker">operator deck</div>
+        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+          Multi-device relay dashboard
+        </div>
+        <div className="mt-3 max-w-[72ch] text-[14px] font-medium leading-[1.6] text-[var(--muted)]">
+          Scan live ports, compare power rails, and jump into per-device control
+          without losing the measured state.
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="iso-chip iso-chip--signal">
+            {devices.length} device{devices.length === 1 ? "" : "s"}
+          </span>
+          <span className="iso-chip">v / a / w telemetry</span>
+          <span className="iso-chip">power + replug controls</span>
+          <span className="iso-chip iso-chip--trace">proof before chrome</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 min-[1600px]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 min-[1600px]:grid-cols-2">
         {items.map((item) => (
           <DeviceSummaryCard
             key={item.device.id}
@@ -124,26 +136,28 @@ export function DashboardPage() {
 
         <button
           className={[
-            "iso-card flex min-h-[248px] w-full flex-col items-center justify-center",
-            "rounded-[18px] border border-dashed border-[var(--border)]",
-            "bg-[var(--add-placeholder-bg)] text-center",
+            "iso-panel flex min-h-[248px] w-full flex-col items-center justify-center",
+            "border-dashed bg-[var(--add-placeholder-bg)] px-6 text-center",
             addDeviceCardSpan,
           ].join(" ")}
           type="button"
           onClick={openAddDevice}
           data-testid="dashboard-add-device-card"
         >
-          <div className="text-[56px] font-extrabold text-[var(--muted)]">
-            +
+          <div className="iso-brand-mark" aria-hidden="true" />
+          <div className="mt-5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[var(--primary)]">
+            claim a new route
           </div>
-          <div className="mt-4 text-[16px] font-bold">Add device</div>
-          <div className="mt-2 text-[12px] font-semibold text-[var(--muted)]">
-            Create a new hub entry
+          <div className="mt-3 text-[20px] font-black tracking-[-0.04em]">
+            Add device
+          </div>
+          <div className="mt-2 max-w-[28ch] text-[12px] font-semibold leading-[1.55] text-[var(--muted)]">
+            Create another hub entry and fold it into the same operator deck.
           </div>
         </button>
       </div>
 
-      <div className="text-[12px] font-semibold text-[var(--muted)]">
+      <div className="iso-panel-subtle px-4 py-3 text-[12px] font-semibold leading-[1.55] text-[var(--muted)]">
         Saved devices keep their last successful channel and fall back
         automatically when another path is available.
       </div>

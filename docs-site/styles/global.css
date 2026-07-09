@@ -985,3 +985,361 @@ html.rp-dark .isolarail-audio-console {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* docs-site home refresh: logo-derived structure, neutral type, hard-edged modules */
+
+#__rspress_root .isolarail-hero,
+#__rspress_root .isolarail-evidence,
+#__rspress_root .isolarail-doc-grid,
+#__rspress_root .isolarail-note,
+#__rspress_root .isolarail-warning,
+#__rspress_root .isolarail-section-heading,
+#__rspress_root > h2 {
+  width: min(100% - 40px, 1360px);
+}
+
+.isolarail-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.isolarail-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--iso-line);
+  border-radius: 10px;
+  background: var(--iso-surface);
+  color: var(--iso-ink);
+  font-size: 0.8rem;
+  font-weight: 760;
+  line-height: 1;
+  text-transform: uppercase;
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.isolarail-chip--signal {
+  border-color: color-mix(in oklch, var(--iso-primary) 34%, var(--iso-line));
+  background: color-mix(in oklch, var(--iso-primary) 10%, var(--iso-bg));
+  color: var(--iso-primary-strong);
+}
+
+.isolarail-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.94fr);
+  gap: 22px;
+  align-items: stretch;
+  min-height: auto;
+  padding: 24px 0 12px;
+}
+
+.isolarail-hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  border: 1px solid var(--iso-line);
+  border-radius: 18px;
+  background: var(--iso-bg);
+}
+
+.isolarail-kicker {
+  gap: 12px;
+  margin-bottom: 16px;
+  color: var(--iso-primary-strong);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.isolarail-kicker::before {
+  width: 42px;
+  height: 10px;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--iso-dark) 0 36%,
+      transparent 36% 46%,
+      var(--iso-primary) 46% 54%,
+      transparent 54% 64%,
+      var(--iso-primary) 64% 72%,
+      transparent 72% 100%
+    );
+}
+
+.isolarail-hero h1 {
+  max-width: 9ch;
+  font-size: clamp(3rem, 3.5vw + 1rem, 4.85rem);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+}
+
+.isolarail-hero-lede {
+  max-width: 60ch;
+  margin-top: 18px;
+  font-size: 1rem;
+  line-height: 1.64;
+}
+
+.isolarail-actions {
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.isolarail-button {
+  min-height: 42px;
+  border: 1px solid var(--iso-line);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.isolarail-button.primary {
+  border-color: color-mix(in oklch, var(--iso-primary) 80%, black 10%);
+  background: var(--iso-primary);
+}
+
+.isolarail-button.secondary {
+  background: var(--iso-bg);
+}
+
+.isolarail-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.isolarail-metric {
+  padding: 14px;
+  border: 1px solid var(--iso-line);
+  border-radius: 14px;
+  background: var(--iso-surface);
+}
+
+.isolarail-metric strong,
+.isolarail-metric span {
+  display: block;
+}
+
+.isolarail-metric strong {
+  color: var(--iso-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.isolarail-metric span {
+  margin-top: 6px;
+  color: var(--iso-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.isolarail-visual {
+  border: 1px solid var(--iso-line);
+  border-radius: 18px;
+  background: var(--iso-bg);
+}
+
+.isolarail-map {
+  min-height: 100%;
+  gap: 10px;
+  padding: 18px;
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--iso-line) 36%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in oklch, var(--iso-line) 36%, transparent) 1px, transparent 1px),
+    var(--iso-surface);
+  background-size: 24px 24px;
+}
+
+.isolarail-map::before {
+  inset: 34px 18px auto;
+  height: 4px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--iso-dark) 0 38%,
+      transparent 38% 47%,
+      var(--iso-primary) 47% 50%,
+      transparent 50% 53%,
+      var(--iso-primary) 53% 56%,
+      transparent 56% 62%,
+      var(--iso-dark) 62% 100%
+    );
+}
+
+.isolarail-map::after {
+  inset: auto 70px 82px;
+  height: 3px;
+  background: var(--iso-accent);
+}
+
+.isolarail-node,
+.isolarail-map-bus,
+.isolarail-port-strip,
+.isolarail-panel-link,
+.isolarail-photo-reserve,
+.isolarail-evidence-item,
+.isolarail-doc-card,
+.isolarail-note,
+.isolarail-warning {
+  box-shadow: none;
+}
+
+.isolarail-node,
+.isolarail-map-bus,
+.isolarail-panel-link,
+.isolarail-photo-reserve {
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--iso-bg) 92%, transparent);
+}
+
+.isolarail-port-strip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.isolarail-port-strip span {
+  min-height: 44px;
+  border: 1px solid var(--iso-line);
+  border-radius: 8px;
+  background: var(--iso-bg);
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.isolarail-evidence {
+  gap: 10px;
+  margin: 18px auto 0;
+}
+
+.isolarail-evidence-item,
+.isolarail-doc-card {
+  border-radius: 16px;
+  background: var(--iso-bg);
+}
+
+.isolarail-evidence-item {
+  padding: 16px;
+  background: var(--iso-surface);
+}
+
+.isolarail-evidence-item strong,
+.isolarail-doc-card h3 {
+  color: var(--iso-ink);
+}
+
+.isolarail-doc-grid {
+  gap: 12px;
+  margin: 18px auto 28px;
+}
+
+.isolarail-section-heading {
+  margin-top: 30px;
+  margin-bottom: 0;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.isolarail-doc-card {
+  padding: 18px;
+  background: var(--iso-surface);
+}
+
+.isolarail-doc-card h3 {
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+}
+
+.isolarail-note,
+.isolarail-warning {
+  margin: 22px auto;
+  border-radius: 16px;
+}
+
+.isolarail-note {
+  background: color-mix(in oklch, var(--iso-surface) 78%, var(--iso-bg));
+}
+
+.isolarail-warning {
+  background: color-mix(in oklch, var(--iso-caution) 12%, var(--iso-bg));
+}
+
+html.rp-dark .isolarail-hero-copy,
+html.rp-dark .isolarail-visual,
+html.rp-dark .isolarail-evidence-item,
+html.rp-dark .isolarail-doc-card,
+html.rp-dark .isolarail-note,
+html.rp-dark .isolarail-warning,
+html.rp-dark .isolarail-port-strip span {
+  background: var(--iso-surface);
+}
+
+html.rp-dark .isolarail-map {
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in oklch, var(--iso-line) 42%, transparent) 1px, transparent 1px),
+    var(--iso-surface);
+  background-size: 24px 24px;
+}
+
+html.rp-dark .isolarail-node,
+html.rp-dark .isolarail-map-bus,
+html.rp-dark .isolarail-panel-link,
+html.rp-dark .isolarail-photo-reserve {
+  background: color-mix(in oklch, var(--iso-bg) 26%, var(--iso-surface));
+}
+
+@media (max-width: 980px) {
+  .isolarail-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .isolarail-hero-copy {
+    padding: 20px;
+  }
+
+  .isolarail-hero-metrics {
+    grid-template-columns: 1fr;
+  }
+}

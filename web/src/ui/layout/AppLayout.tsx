@@ -16,36 +16,52 @@ export function AppLayout({
   const showTheme = location.pathname === "/" || location.pathname === "/about";
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="h-16 border-b border-[var(--border)] bg-[var(--panel-2)]">
-        <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          <Link className="min-w-0 truncate text-[16px] font-bold" to="/">
-            IsolaRail Control
-          </Link>
-          <div className="flex items-center gap-3">
-            {showTheme ? (
-              <div className="hidden sm:block">
-                <ThemeMenu value={theme} onChange={setTheme} />
+    <div className="min-h-screen">
+      <header className="border-b border-[var(--border)] px-4 pb-4 pt-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1680px]">
+          <div className="iso-panel-subtle flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+            <Link className="min-w-0 no-underline" to="/">
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="iso-brand-mark mt-[6px] shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="iso-kicker">IsolaRail Control</div>
+                  <div className="mt-2 text-[28px] font-black leading-[0.96] tracking-[-0.05em] text-[var(--text)]">
+                    Relay Console
+                  </div>
+                  <div className="mt-2 max-w-[52ch] text-[13px] font-medium leading-[1.55] text-[var(--muted)]">
+                    Device discovery, route control, and measured power
+                    telemetry in one operator surface.
+                  </div>
+                </div>
               </div>
-            ) : null}
-            <Link
-              className="flex h-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent px-3 text-[12px] font-bold text-[var(--text)] sm:px-4"
-              to="/about"
-            >
-              About
             </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              {showTheme ? (
+                <div className="w-full sm:w-auto">
+                  <ThemeMenu value={theme} onChange={setTheme} />
+                </div>
+              ) : null}
+              <Link className="iso-button iso-button--ghost" to="/about">
+                About Surface
+              </Link>
+            </div>
           </div>
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 overflow-x-hidden">
-        <div className="mx-auto flex w-full min-h-0 max-w-[1600px] flex-col xl:flex-row xl:overflow-hidden">
-          <aside className="w-full min-h-0 shrink-0 border-b border-[var(--border)] bg-[var(--sidebar-bg)] xl:w-[360px] xl:overflow-y-auto xl:border-b-0 xl:border-r">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-5 pt-5 sm:px-6 lg:px-8 xl:min-h-[calc(100vh-148px)] xl:flex-row">
+        <aside className="w-full shrink-0 xl:w-[372px]">
+          <div className="iso-panel-subtle h-full overflow-hidden bg-[var(--sidebar-bg)]">
             {sidebar}
-          </aside>
-          <main className="min-h-0 min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 xl:overflow-y-auto">
+          </div>
+        </aside>
+        <main className="min-w-0 flex-1">
+          <div className="flex h-full min-h-[560px] flex-col gap-5">
             {children}
-          </main>
-        </div>
+          </div>
+        </main>
       </div>
     </div>
   );

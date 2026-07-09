@@ -31,21 +31,25 @@ export function DeviceDashboardPage() {
   const shortId = device.id.length > 6 ? device.id.slice(0, 6) : device.id;
 
   return (
-    <div className="flex flex-col" data-testid="device-dashboard-page">
-      <div>
-        <div className="text-[24px] font-bold">{device.name}</div>
-        <div className="mt-2 truncate font-mono text-[12px] font-semibold text-[var(--muted)]">
-          dashboard · id: {shortId} • {device.baseUrl}
+    <div className="flex flex-col gap-5" data-testid="device-dashboard-page">
+      <div className="iso-panel px-5 py-5 sm:px-6">
+        <div className="iso-kicker">claimed route</div>
+        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+          {device.name}
+        </div>
+        <div className="mt-3 truncate font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+          dashboard · id: {shortId} · {device.baseUrl}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="iso-chip iso-chip--signal">device dashboard</span>
+          <span className="iso-chip">per-port rail control</span>
+          <span className="iso-chip iso-chip--trace">measured telemetry</span>
         </div>
       </div>
 
-      <div className="mt-4">
-        <DevicePageTabs deviceId={deviceId} />
-      </div>
+      <DevicePageTabs deviceId={deviceId} />
 
-      <div className="mt-[14px]">
-        <DeviceDashboardPanel device={device} />
-      </div>
+      <DeviceDashboardPanel device={device} />
     </div>
   );
 }

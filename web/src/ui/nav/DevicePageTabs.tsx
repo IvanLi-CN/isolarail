@@ -10,11 +10,10 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
       <NavLink
         className={({ isActive }) =>
           [
-            "flex h-[38px] w-[132px] items-center justify-center rounded-[14px] border border-[var(--border)]",
-            "text-[14px] font-medium",
+            "iso-button w-[132px] text-[12px]",
             isActive
-              ? "bg-[var(--panel)] text-[var(--text)]"
-              : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
+              ? "iso-button--signal-soft"
+              : "[--iso-button-bg:var(--tab-inactive-bg)] [--iso-button-text:var(--muted)]",
           ].join(" ")
         }
         to={`/devices/${deviceId}`}
@@ -26,11 +25,10 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
       <NavLink
         className={({ isActive }) =>
           [
-            "flex h-[38px] w-[132px] items-center justify-center rounded-[14px] border border-[var(--border)]",
-            "text-[14px] font-medium",
+            "iso-button w-[132px] text-[12px]",
             isActive
-              ? "bg-[var(--panel)] text-[var(--text)]"
-              : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
+              ? "iso-button--signal-soft"
+              : "[--iso-button-bg:var(--tab-inactive-bg)] [--iso-button-text:var(--muted)]",
           ].join(" ")
         }
         to={`/devices/${deviceId}/settings`}
@@ -41,11 +39,10 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
       <NavLink
         className={({ isActive }) =>
           [
-            "flex h-[38px] w-[132px] items-center justify-center rounded-[14px] border border-[var(--border)]",
-            "text-[14px] font-medium",
+            "iso-button w-[132px] text-[12px]",
             isActive
-              ? "bg-[var(--panel)] text-[var(--text)]"
-              : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
+              ? "iso-button--signal-soft"
+              : "[--iso-button-bg:var(--tab-inactive-bg)] [--iso-button-text:var(--muted)]",
           ].join(" ")
         }
         to={`/devices/${deviceId}/debug/hardware`}
@@ -56,11 +53,10 @@ export function DevicePageTabs({ deviceId }: { deviceId: string }) {
       <NavLink
         className={({ isActive }) =>
           [
-            "flex h-[38px] w-[132px] items-center justify-center rounded-[14px] border border-[var(--border)]",
-            "text-[14px] font-medium",
+            "iso-button w-[132px] text-[12px]",
             isActive
-              ? "bg-[var(--panel)] text-[var(--text)]"
-              : "bg-[var(--tab-inactive-bg)] text-[var(--muted)]",
+              ? "iso-button--signal-soft"
+              : "[--iso-button-bg:var(--tab-inactive-bg)] [--iso-button-text:var(--muted)]",
           ].join(" ")
         }
         to={`/devices/${deviceId}/info`}

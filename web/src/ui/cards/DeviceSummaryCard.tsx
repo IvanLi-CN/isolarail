@@ -27,27 +27,23 @@ export type DeviceSummaryCardProps = {
 };
 
 function connectionBadge(state: ConnectionState): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
 } {
   if (state === "online") {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
       width: "w-[72px]",
     };
   }
   if (state === "offline") {
     return {
-      bg: "bg-[var(--badge-error-bg)]",
-      text: "text-[var(--badge-error-text)]",
+      tone: "iso-chip--error",
       width: "w-[72px]",
     };
   }
   return {
-    bg: "bg-[var(--badge-warning-bg)]",
-    text: "text-[var(--badge-warning-text)]",
+    tone: "iso-chip--warning",
     width: "w-[96px]",
   };
 }
@@ -72,13 +68,13 @@ export function DeviceSummaryCard({
 
   return (
     <div
-      className="iso-card w-full rounded-[18px] bg-[var(--panel)] shadow-[inset_0_0_0_1px_var(--border)]"
+      className="iso-panel w-full"
       data-testid={`device-summary-${device.id}`}
     >
       <div className="flex flex-col gap-4 px-5 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="truncate text-[16px] font-bold leading-5">
+            <div className="truncate text-[18px] font-black leading-5 tracking-[-0.03em]">
               {device.name}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] font-semibold leading-[18px] text-[var(--muted)]">
@@ -89,11 +85,10 @@ export function DeviceSummaryCard({
           </div>
           <div
             className={[
-              "flex h-6 shrink-0 items-center justify-center rounded-full px-3",
+              "iso-chip h-7 shrink-0 items-center justify-center px-3",
               badge.width,
-              badge.bg,
-              badge.text,
-              "text-[12px] font-semibold",
+              badge.tone,
+              "text-[11px]",
             ].join(" ")}
           >
             {connection.state}
@@ -117,11 +112,11 @@ export function DeviceSummaryCard({
         </div>
 
         <button
-          className="flex h-[34px] w-full flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
+          className="iso-button iso-button--ghost w-full"
           type="button"
           onClick={() => onOpenDashboard(device.id)}
         >
-          Open dashboard →
+          Open Dashboard
         </button>
       </div>
     </div>

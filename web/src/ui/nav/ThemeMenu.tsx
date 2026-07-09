@@ -43,19 +43,20 @@ export function ThemeMenu({
 
   return (
     <div className="relative flex items-center gap-2" ref={ref}>
-      <div className="text-[12px] font-semibold text-[var(--muted)]">Theme</div>
+      <div className="iso-kicker text-[10px]">Theme</div>
       <button
-        className="flex h-9 w-[150px] items-center rounded-[10px] border border-[var(--border)] bg-transparent px-5 text-[12px] font-bold text-[var(--text)]"
+        className="iso-button w-[172px] justify-between px-4"
         type="button"
         onClick={() => setOpen((v) => !v)}
       >
-        {buttonLabel} ▾
+        <span>{buttonLabel}</span>
+        <span aria-hidden="true">▾</span>
       </button>
       {open ? (
         <div
           className={[
             "iso-popover absolute right-0 top-full z-50 mt-2",
-            "w-[200px] rounded-[14px] border border-[var(--border)] bg-[var(--panel)] p-2",
+            "iso-panel w-[220px] p-2",
           ].join(" ")}
           role="menu"
         >
@@ -63,8 +64,10 @@ export function ThemeMenu({
             <button
               key={opt.id}
               className={[
-                "flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-[12px] font-semibold",
-                opt.id === value ? "bg-[var(--panel-2)]" : "bg-transparent",
+                "flex w-full items-center justify-between rounded-[12px] border px-3 py-2 text-left text-[12px] font-semibold",
+                opt.id === value
+                  ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] bg-[var(--badge-signal-bg)] text-[var(--badge-signal-text)]"
+                  : "border-transparent bg-transparent text-[var(--text)]",
               ].join(" ")}
               type="button"
               onClick={() => {

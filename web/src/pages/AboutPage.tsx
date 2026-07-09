@@ -58,16 +58,25 @@ export function AboutPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6" data-testid="about">
-      <div>
-        <div className="text-[24px] font-bold">About</div>
-        <div className="mt-2 text-[14px] font-medium text-[var(--muted)]">
-          Build info, links, and quick usage
+    <div className="flex flex-col gap-5" data-testid="about">
+      <div className="iso-panel px-5 py-5 sm:px-6">
+        <div className="iso-kicker">surface notes</div>
+        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+          About the control surface
+        </div>
+        <div className="mt-3 max-w-[72ch] text-[14px] font-medium leading-[1.6] text-[var(--muted)]">
+          Build identity, repository routes, defaults, and local storage
+          behavior for the operator shell.
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="iso-chip iso-chip--signal">build identity</span>
+          <span className="iso-chip">repo + docs links</span>
+          <span className="iso-chip">local companion state</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+        <div className="iso-panel px-6 py-6">
           <div className="text-[16px] font-bold leading-5">Build</div>
 
           <div className="mt-3 flex flex-col gap-[10px] leading-4">
@@ -104,7 +113,7 @@ export function AboutPage() {
           </div>
         </div>
 
-        <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+        <div className="iso-panel px-6 py-6">
           <div className="text-[16px] font-bold leading-5">
             Links & defaults
           </div>
@@ -116,7 +125,7 @@ export function AboutPage() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <a
               className={[
-                "flex h-9 w-[120px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]",
+                "iso-button w-[120px]",
                 repoUrl ? "" : "pointer-events-none opacity-40",
               ].join(" ")}
               href={repoUrl ?? undefined}
@@ -126,8 +135,11 @@ export function AboutPage() {
               Repo
             </a>
             <a
-              className="flex h-9 w-[120px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
-              href={docsUrl}
+              className={[
+                "iso-button w-[120px]",
+                docsUrl ? "" : "pointer-events-none opacity-40",
+              ].join(" ")}
+              href={docsUrl ?? undefined}
               target="_blank"
               rel="noreferrer"
             >
@@ -135,7 +147,7 @@ export function AboutPage() {
             </a>
             <a
               className={[
-                "flex h-9 w-[120px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]",
+                "iso-button w-[120px]",
                 issuesUrl ? "" : "pointer-events-none opacity-40",
               ].join(" ")}
               href={issuesUrl ?? undefined}
@@ -160,7 +172,7 @@ export function AboutPage() {
         </div>
 
         {agent ? (
-          <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+          <div className="iso-panel px-6 py-6">
             <div className="text-[16px] font-bold leading-5">
               Local companion storage
             </div>
@@ -169,8 +181,10 @@ export function AboutPage() {
             </div>
             <button
               className={[
-                "mt-4 h-9 rounded-[10px] border border-[var(--border)] px-4 text-[12px] font-bold",
-                "hover:bg-[var(--panel-2)]",
+                "iso-button mt-4",
+                resetting || status !== "ready"
+                  ? "[--iso-button-bg:var(--btn-disabled-fill-soft)] [--iso-button-text:var(--btn-disabled-text)]"
+                  : "iso-button--ghost",
               ].join(" ")}
               type="button"
               disabled={resetting || status !== "ready"}
@@ -182,7 +196,7 @@ export function AboutPage() {
         ) : null}
       </div>
 
-      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+      <div className="iso-panel px-6 py-6">
         <div className="text-[16px] font-bold">Quick usage</div>
 
         <div className="mt-4 text-[14px] font-medium">

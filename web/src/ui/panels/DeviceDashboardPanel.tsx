@@ -41,56 +41,48 @@ function mergedPortState(
 }
 
 function statusBadge(state: "online" | "offline" | "unknown"): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
 } {
   if (state === "online") {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
       width: "min-w-[96px]",
     };
   }
   if (state === "offline") {
     return {
-      bg: "bg-[var(--badge-error-bg)]",
-      text: "text-[var(--badge-error-text)]",
+      tone: "iso-chip--error",
       width: "min-w-[96px]",
     };
   }
   return {
-    bg: "bg-[var(--badge-warning-bg)]",
-    text: "text-[var(--badge-warning-text)]",
+    tone: "iso-chip--warning",
     width: "min-w-[96px]",
   };
 }
 
 function upstreamBadge(upstreamConnected: boolean | null): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
   label: string;
 } {
   if (upstreamConnected === null) {
     return {
-      bg: "bg-[var(--badge-warning-bg)]",
-      text: "text-[var(--badge-warning-text)]",
+      tone: "iso-chip--warning",
       width: "min-w-[96px]",
       label: "HOST —",
     };
   }
   if (upstreamConnected) {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
       width: "min-w-[96px]",
       label: "HOST LINK",
     };
   }
   return {
-    bg: "bg-[var(--badge-error-bg)]",
-    text: "text-[var(--badge-error-text)]",
+    tone: "iso-chip--error",
     width: "min-w-[96px]",
     label: "NO HOST",
   };
@@ -100,60 +92,52 @@ function isolatedBadge(
   value: boolean | null,
   labels: { unknown: string; on: string; off: string },
 ): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
   label: string;
 } {
   if (value === null) {
     return {
-      bg: "bg-[var(--badge-warning-bg)]",
-      text: "text-[var(--badge-warning-text)]",
+      tone: "iso-chip--warning",
       width: "min-w-[112px]",
       label: labels.unknown,
     };
   }
   if (value) {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
       width: "min-w-[112px]",
       label: labels.on,
     };
   }
   return {
-    bg: "bg-[var(--badge-error-bg)]",
-    text: "text-[var(--badge-error-text)]",
+    tone: "iso-chip--error",
     width: "min-w-[112px]",
     label: labels.off,
   };
 }
 
 function isolatedFaultBadge(value: boolean | null): {
-  bg: string;
-  text: string;
+  tone: string;
   width: string;
   label: string;
 } {
   if (value === null) {
     return {
-      bg: "bg-[var(--badge-warning-bg)]",
-      text: "text-[var(--badge-warning-text)]",
+      tone: "iso-chip--warning",
       width: "min-w-[112px]",
       label: "ISO FAULT —",
     };
   }
   if (value) {
     return {
-      bg: "bg-[var(--badge-error-bg)]",
-      text: "text-[var(--badge-error-text)]",
+      tone: "iso-chip--error",
       width: "min-w-[112px]",
       label: "ISO FAULT",
     };
   }
   return {
-    bg: "bg-[var(--badge-success-bg)]",
-    text: "text-[var(--badge-success-text)]",
+    tone: "iso-chip--success",
     width: "min-w-[112px]",
     label: "ISO OK",
   };
@@ -225,37 +209,26 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
     {
       key: "connection",
       label: connectionState.toUpperCase(),
-      className: [badge.width, badge.bg, badge.text, "text-[12px]"].join(" "),
+      className: [badge.width, badge.tone, "text-[11px]"].join(" "),
     },
     {
       key: "upstream",
       label: upstream.label,
-      className: [
-        upstream.width,
-        upstream.bg,
-        upstream.text,
-        "text-[12px]",
-      ].join(" "),
+      className: [upstream.width, upstream.tone, "text-[11px]"].join(" "),
     },
     {
       key: "isolated-fault",
       label: isolatedFault.label,
-      className: [
-        isolatedFault.width,
-        isolatedFault.bg,
-        isolatedFault.text,
-        "text-[11px]",
-      ].join(" "),
+      className: [isolatedFault.width, isolatedFault.tone, "text-[11px]"].join(
+        " ",
+      ),
     },
     {
       key: "isolated-ready",
       label: isolatedReady.label,
-      className: [
-        isolatedReady.width,
-        isolatedReady.bg,
-        isolatedReady.text,
-        "text-[11px]",
-      ].join(" "),
+      className: [isolatedReady.width, isolatedReady.tone, "text-[11px]"].join(
+        " ",
+      ),
     },
   ];
 
@@ -298,8 +271,8 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
   }, [connectionState, device.id, runtime]);
 
   return (
-    <div className="flex flex-col gap-6" data-testid="device-dashboard">
-      <div className="iso-card rounded-[18px] bg-[var(--panel)] px-6 py-6 shadow-[inset_0_0_0_1px_var(--border)]">
+    <div className="flex flex-col gap-5" data-testid="device-dashboard">
+      <div className="iso-panel px-6 py-6">
         <div className="grid grid-cols-1 gap-5 leading-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] xl:items-start">
           <div className="grid min-w-0 gap-3 sm:grid-cols-[54px_minmax(0,1fr)] sm:items-start sm:gap-x-4">
             <div className="pt-[6px] text-[12px] font-semibold text-[var(--muted)] sm:pt-[4px]">
@@ -310,7 +283,7 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
                 <div
                   key={item.key}
                   className={[
-                    "flex h-[26px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3 font-semibold",
+                    "iso-chip h-7 shrink-0 items-center justify-center whitespace-nowrap px-3",
                     item.className,
                   ].join(" ")}
                 >
@@ -346,7 +319,7 @@ export function DeviceDashboardPanel({ device }: { device: StoredDevice }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
         {CANONICAL_PORT_IDS.map((portId) => (
           <PortCard
             key={portId}

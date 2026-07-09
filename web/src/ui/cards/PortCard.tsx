@@ -2,22 +2,19 @@ import { Circle, LoaderCircle, Power, RotateCw, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { PortCardProps } from "./types";
 
-function statusBadgeStyles(status: string): { bg: string; text: string } {
+function statusBadgeStyles(status: string): { tone: string } {
   if (status === "ok") {
     return {
-      bg: "bg-[var(--badge-success-bg)]",
-      text: "text-[var(--badge-success-text)]",
+      tone: "iso-chip--success",
     };
   }
   if (status === "error") {
     return {
-      bg: "bg-[var(--badge-error-bg)]",
-      text: "text-[var(--badge-error-text)]",
+      tone: "iso-chip--error",
     };
   }
   return {
-    bg: "bg-[var(--badge-warning-bg)]",
-    text: "text-[var(--badge-warning-text)]",
+    tone: "iso-chip--warning",
   };
 }
 
@@ -80,20 +77,20 @@ function ConfirmPopover({
           className="absolute left-[56px] top-[-6px] h-3 w-3 rotate-45 border border-[var(--border)] bg-[var(--panel)]"
           aria-hidden
         />
-        <div className="flex h-[44px] w-[252px] items-center gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--panel)] px-4">
+        <div className="iso-panel flex h-[52px] w-[272px] items-center gap-2 px-4">
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Power off?
           </div>
           <div className="flex-1" />
           <button
-            className="flex h-6 w-11 items-center justify-center rounded-[8px] border border-[var(--border)] bg-transparent text-[12px] font-bold text-[var(--text)]"
+            className="iso-button h-7 w-12 px-0 text-[11px]"
             type="button"
             onClick={onClose}
           >
             No
           </button>
           <button
-            className="flex h-6 w-11 items-center justify-center rounded-[8px] bg-[var(--primary)] text-[12px] font-extrabold text-[var(--primary-text)]"
+            className="iso-button iso-button--primary h-7 w-12 px-0 text-[11px]"
             type="button"
             onClick={() => {
               onConfirm();
@@ -151,25 +148,26 @@ export function PortCard({
 
   return (
     <div
-      className="iso-card relative flex h-full min-h-[248px] flex-col rounded-[18px] bg-[var(--panel)] p-6 shadow-[inset_0_0_0_1px_var(--border)]"
+      className="iso-panel relative flex h-full min-h-[248px] flex-col p-6"
       data-testid={`port-card-${portId}`}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 text-[16px] font-bold">{label}</div>
+        <div className="min-w-0 text-[18px] font-black tracking-[-0.03em]">
+          {label}
+        </div>
         <div
           className={[
-            "flex h-6 min-w-[60px] items-center justify-center rounded-full px-3",
-            badge.bg,
-            badge.text,
-            "whitespace-nowrap text-[12px] font-semibold",
+            "iso-chip h-7 min-w-[72px] items-center justify-center px-3",
+            badge.tone,
+            "whitespace-nowrap text-[11px]",
           ].join(" ")}
         >
           {statusLabel(telemetry.status)}
         </div>
       </div>
 
-      <div className="mt-7 grid grid-cols-3 gap-6 sm:gap-10">
-        <div>
+      <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-3">
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Voltage
           </div>
@@ -177,7 +175,7 @@ export function PortCard({
             {formatValue(telemetry.voltage_mv, "V")}
           </div>
         </div>
-        <div>
+        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-3">
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Current
           </div>
@@ -185,7 +183,7 @@ export function PortCard({
             {formatValue(telemetry.current_ma, "A")}
           </div>
         </div>
-        <div>
+        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-3">
           <div className="text-[12px] font-semibold text-[var(--muted)]">
             Power
           </div>
@@ -226,7 +224,7 @@ export function PortCard({
           >
             <span
               className={[
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border",
                 powerEnabled
                   ? "border-[var(--badge-success-text)] bg-[var(--badge-success-text)] text-[var(--panel)]"
                   : "border-[var(--power-track-off)] bg-[var(--btn-disabled-fill-soft)] text-[var(--muted)]",
@@ -266,12 +264,11 @@ export function PortCard({
             </span>
             <span
               className={[
-                "flex h-7 min-w-[54px] items-center justify-center rounded-[8px] px-2 text-[10px] font-bold",
+                "iso-chip h-7 min-w-[54px] items-center justify-center px-2 text-[10px]",
+                powerEnabled ? "iso-chip--success" : "iso-chip--neutral",
                 actionDisabled
-                  ? "bg-[var(--btn-disabled-fill-soft)]"
-                  : powerEnabled
-                    ? "bg-[var(--panel)] text-[var(--badge-success-text)]"
-                    : "bg-[var(--panel)] text-[var(--text)]",
+                  ? "[--iso-chip-bg:var(--btn-disabled-fill-soft)] [--iso-chip-border:var(--border)] [--iso-chip-text:var(--btn-disabled-text)]"
+                  : "",
               ].join(" ")}
             >
               {powerEnabled ? "Cut" : "Restore"}
@@ -285,12 +282,12 @@ export function PortCard({
         </div>
         <button
           className={[
-            "flex h-12 w-full items-center justify-center gap-2 rounded-[12px] border text-[12px] font-bold transition-colors duration-150 sm:w-[112px]",
+            "iso-button h-12 w-full gap-2 text-[12px] transition-colors duration-150 sm:w-[112px]",
             actionDisabled
-              ? "border-[var(--border)] bg-[var(--btn-disabled-fill-soft)] text-[var(--btn-disabled-text)]"
+              ? "[--iso-button-bg:var(--btn-disabled-fill-soft)] [--iso-button-border:var(--border)] [--iso-button-text:var(--btn-disabled-text)]"
               : state.replugging
-                ? "border-[var(--primary)] bg-[var(--btn-disabled-fill-soft)] text-[var(--primary)]"
-                : "border-[var(--border)] bg-transparent text-[var(--text)]",
+                ? "[--iso-button-bg:var(--btn-disabled-fill-soft)] [--iso-button-border:var(--primary)] [--iso-button-text:var(--primary)]"
+                : "iso-button--ghost",
             replugPulse ? "iso-control-pulse" : "",
           ].join(" ")}
           type="button"
@@ -316,7 +313,7 @@ export function PortCard({
           Replug
         </button>
         {state.replugging ? (
-          <div className="flex h-8 items-center gap-2 rounded-full bg-[var(--btn-disabled-fill-soft)] px-3 text-[11px] font-bold text-[var(--muted)]">
+          <div className="iso-chip h-8 items-center gap-2 px-3 text-[11px] [--iso-chip-bg:var(--btn-disabled-fill-soft)] [--iso-chip-border:var(--border)] [--iso-chip-text:var(--muted)]">
             <RotateCw
               className="iso-control-spin"
               size={12}

@@ -4,109 +4,66 @@ description: 产品入口、硬件拓扑、固件运行和控制面文档。
 pageType: custom
 ---
 
-<section className="isolarail-hero">
-  <div className="isolarail-hero-copy">
-    <div className="isolarail-kicker">隔离 USB Hub 的硬件与固件文档站</div>
-    <h1>从产品边界到 bring-up 证据，一条清晰路线。</h1>
-    <div className="isolarail-hero-lede">
-      IsolaRail 是围绕 ESP32-S3、CH335F、TCA6408A、INA226/TPS2490、M24C64 和 160x50 前面板显示链路构建的四路隔离 USB Hub 项目。这个站点按硬件、固件、控制面和规格索引组织内容，帮助你从产品边界一路读到当前工程真相。
+<section className="docs-manual docs-manual--zh">
+  <div className="docs-manual-copy">
+    <div className="docs-brandline">
+      <span className="docs-brand-mark" aria-hidden="true"></span>
+      <span className="docs-register-note">台架手册 / 公开文档</span>
     </div>
-    <div className="isolarail-chip-row">
-      <span className="isolarail-chip isolarail-chip--signal">公开手册</span>
-      <span className="isolarail-chip">图先于装饰</span>
-      <span className="isolarail-chip">bring-up 路线</span>
-      <span className="isolarail-chip">规格归档</span>
+    <h1>IsolaRail 文档入口</h1>
+    <p className="docs-manual-lede">这里按产品边界组织 IsolaRail 的公开说明。你可以从快速开始进入 bring-up，也可以直接跳到硬件拓扑、固件运行时、控制面接口和长期规格索引。</p>
+    <div className="docs-manual-actions">
+      <a className="docs-button" href="start/quick-start">开始 bring-up</a>
+      <div className="docs-manual-links">
+        <a href="hardware/topology">硬件拓扑</a>
+        <a href="reference/specs">规格索引</a>
+        <a href="dashboard/front-panel">前面板状态</a>
+      </div>
     </div>
-    <div className="isolarail-actions">
-      <a className="isolarail-button primary" href="start/quick-start">开始 bring-up</a>
-      <a className="isolarail-button secondary" href="hardware/topology">查看硬件拓扑</a>
-      <a className="isolarail-button secondary" href="reference/specs">规格索引</a>
-    </div>
-    <div className="isolarail-hero-metrics">
-      <div className="isolarail-metric">
-        <strong>核心</strong>
-        <span>先说明产品边界，再进入实现细节</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>行为</strong>
-        <span>平直阅读面，明确路线标记</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>证据</strong>
-        <span>dashboard、bring-up 与规格互相可追溯</span>
-      </div>
+    <div className="docs-manual-meta">
+      <span>4 路隔离 rail</span>
+      <span>ESP32-S3 控制面</span>
+      <span>160x50 前面板</span>
+      <span>公开维护文档</span>
     </div>
   </div>
-  <div className="isolarail-visual" aria-label="IsolaRail 系统边界图">
-    <div className="isolarail-map">
-      <div className="isolarail-node isolarail-node-core">
-        <span>Control</span>
-        <strong>ESP32-S3</strong>
-        <em>boot、自检、前面板</em>
-      </div>
-      <div className="isolarail-node isolarail-node-hub">
-        <span>USB hub</span>
-        <strong>CH335F</strong>
-        <em>sideband power control</em>
-      </div>
-      <div className="isolarail-map-bus">
-        <span>I2C buses and monitors</span>
-        <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
-      </div>
-      <div className="isolarail-port-strip" aria-label="四路受控 USB 供电端口">
-        <span>port1</span>
-        <span>port2</span>
-        <span>port3</span>
-        <span>port4</span>
-      </div>
-      <div className="isolarail-panel-link">
-        <span>160x50 display</span>
-        <strong>dashboard state surface</strong>
-      </div>
-      <div className="isolarail-photo-reserve">
-        <strong>实物照片预留</strong>
-        <span>真实主板、前面板或桌面 bring-up 照片会在硬件证据可用后放在这里。</span>
-      </div>
-    </div>
-  </div>
+  <figure className="docs-manual-figure">
+    <img
+      src="/isolarail-docs-hero.jpg"
+      alt="IsolaRail 产品场景图，展示前面板旋钮、四路 USB-C rail 和共享路由语言。"
+    />
+  </figure>
 </section>
 
-<div className="isolarail-evidence">
-  <a className="isolarail-evidence-item" href="hardware/topology">
-    <strong>硬件连接</strong>
-    <span>VIN、四路 USB 供电模块、I2C 拓扑与前面板输入。</span>
+<nav className="docs-manual-route" aria-label="Bench route">
+  <a className="docs-manual-stop" href="start/quick-start">
+    <strong>快速开始</strong>
+    <small>装好工具链并确认 companion 路径</small>
   </a>
-  <a className="isolarail-evidence-item" href="firmware/boot-runtime">
-    <strong>固件启动</strong>
-    <span>Boot init、自检、输出门控、前面板和风扇链路。</span>
+  <a className="docs-manual-stop" href="hardware/topology">
+    <strong>硬件拓扑</strong>
+    <small>先锁定 VIN、sideband、遥测和前面板路径</small>
   </a>
-  <a className="isolarail-evidence-item" href="dashboard/front-panel">
-    <strong>160x50 Dashboard</strong>
-    <span>四列状态、功率条、异常状态和显示资产。</span>
+  <a className="docs-manual-stop" href="firmware/boot-runtime">
+    <strong>固件运行时</strong>
+    <small>再看 boot、自检、门控和告警行为</small>
   </a>
-</div>
+  <a className="docs-manual-stop" href="control-plane/interfaces">
+    <strong>控制面与规格</strong>
+    <small>最后进入接口边界和长期 specs</small>
+  </a>
+</nav>
 
-<h2 className="isolarail-section-heading">按主题阅读</h2>
+<a className="docs-manual-proof" href="dashboard/front-panel">
+  <div className="docs-manual-proof-copy">
+    <h2>四列 dashboard 必须对应四个物理端口。</h2>
+    <p>去 dashboard 页面看 V/I/W 布局、状态优先级、字符串预算和刷新规则。</p>
+  </div>
+  <figure className="docs-manual-proof-figure">
+    <img decoding="async" loading="lazy" src="../assets/dashboard_wireframe_160x50_color_bold.svg" alt="IsolaRail 160x50 前面板 dashboard 预览图。" />
+  </figure>
+</a>
 
-<div className="isolarail-doc-grid">
-  <a className="isolarail-doc-card" href="start/quick-start">
-    <h3>快速开始</h3>
-    <span>安装工具链，构建固件与文档站，确认本地 companion 和硬件路径。</span>
-  </a>
-  <a className="isolarail-doc-card" href="hardware/topology">
-    <h3>硬件拓扑</h3>
-    <span>从 VIN、CH335F sideband、四路 EN 门控、两条 I²C 总线和前面板开始。</span>
-  </a>
-  <a className="isolarail-doc-card" href="control-plane/interfaces">
-    <h3>控制面</h3>
-    <span>理解 `isolarail`、`isolarail-devd`、USB JSONL、Web companion 和设备操作边界。</span>
-  </a>
-  <a className="isolarail-doc-card" href="reference/specs">
-    <h3>规格索引</h3>
-    <span>查看长期规格、实现历史，以及当前对外契约所在的位置。</span>
-  </a>
-</div>
-
-<div className="isolarail-note">
-  <strong>Current truth:</strong> 站点负责导览与发布，规范真相仍保存在仓库的 <code>docs/</code> 与 <code>docs/specs/</code>。
+<div className="docs-manual-source">
+  <p>这个站点负责公开说明与导航；长期工程规范仍以仓库中的 <code>docs/</code> 和 <code>docs/specs/</code> 为准。</p>
 </div>

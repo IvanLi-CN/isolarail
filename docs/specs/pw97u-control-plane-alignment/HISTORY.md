@@ -67,3 +67,12 @@
 - 补齐 `Add device`、`Device Dashboard`、`Device Settings`、`Device Info` 的桌面/窄屏视觉证据，并写回 `pw97u` spec 的 `## Visual Evidence`。
 - 重写 `docs/hardware_connection_overview.md` 为当前 V3 current-truth，去除旧 V2 `SC8815 + SW2303` / `PSTOP*` 口径，改以 `ESP32-S3 + CH335F + M24C64@0x50 + EN1..EN4 + PWREN#/OVCUR# + 160x50 LCD + front panel` 为基线。
 - 重新跑通当前 HEAD 的本地收口验证：`web-build`、`web-test-unit`、`web-test-companion-bridge`、`web-test-e2e`、`web-test-storybook`、`cargo +esp fmt --check`、`cargo +esp clippy -D warnings`、`cargo +esp build --release` 与 `cargo +esp build --examples --release` 已按本轮重新通过，`pw97u` 达到本地 `PR-ready`。
+
+## 2026-07-10
+
+- 按最新 UI 审查继续整改控制面：`Add device` 的 connection method 从伪 Tabs 语义改为真实 radio group，并保留桌面模态的分组选项布局。
+- 首次进入态改写为 calmer first-run dashboard：移除三张同构说明卡，改为主 CTA + 可直接进入的 `Local USB / Web Serial / Wi‑Fi / LAN` start paths 列表。
+- `Hardware Debug` 的 `Port controls` / `Output modules` 在窄屏下重构为 stacked mobile cards，同时保留桌面矩阵视图；JSON explorer 的选中同步 effect 也收口到按状态变化触发。
+- 复测通过：`bun run check`、`bun test ./src`、`bun run build`、`bun run build-storybook`、`cargo check`、`cargo build --release`，并更新了实际页面/裁剪预览的视觉证据。
+- 继续收口当前空态与全局 chrome：app shell 顶部从宣言式大标题面板改回较窄的 identity rail，Dashboard / Device / About 的 page hero 去掉了过量 kicker 与装饰 chip，首次进入态左列补入 setup facts，不再留下明显死区。
+- 修正 `Add device` 的键盘关闭缺陷：点击 backdrop 仍会关闭模态，但对聚焦的 dialog shell 发送 Enter / Space 不再触发误关闭；受控预览已验证 Space 后 `dialog.open === true`。

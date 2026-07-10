@@ -74,6 +74,7 @@ Development behavior:
 - `just web-dev` defaults `ISOLARAIL_DEVD_ORIGINS` to `http://isolarail-devd.local:51200,http://127.0.0.1:51200`.
 - Put the mDNS URL first and an IP or localhost URL second only when overriding the default.
 - The Web app never scans localhost ports; every fallback origin must be explicitly configured.
+- Loopback-only static preview stays localStorage/mock-first by default. If you need companion bootstrap on `127.0.0.1` or `localhost`, configure `ISOLARAIL_DEVD_ORIGINS` explicitly instead of relying on an implicit same-origin probe.
 - Disable the proxy only for deliberate diagnostics with `ISOLARAIL_DEV_PROXY=0`.
 - `just web-storybook` always disables the dev proxy and stays mock-only; it must not require a running `isolarail-devd web`.
 

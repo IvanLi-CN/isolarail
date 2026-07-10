@@ -150,3 +150,15 @@ BusyNotPending.play = async ({ canvasElement }) => {
   await expect(powerIcon).toBeTruthy();
   await expect(loaderIcon).toBeNull();
 };
+
+export const ConfirmingPowerOff: Story = {};
+
+ConfirmingPowerOff.play = async ({ canvasElement, userEvent }) => {
+  const canvas = within(canvasElement);
+  await userEvent.click(
+    canvas.getByRole("button", { name: /power on, turn off/i }),
+  );
+  await expect(canvas.getByText("Cut power to Port 1?")).toBeVisible();
+  await expect(canvas.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(canvas.getByRole("button", { name: "Cut power" })).toBeVisible();
+};

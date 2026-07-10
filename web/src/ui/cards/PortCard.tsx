@@ -38,73 +38,6 @@ function formatValue(value: number | null, unit: "V" | "A" | "W"): string {
   return `${(value / 1000).toFixed(2)}${unit}`;
 }
 
-function ConfirmPopover({
-  open,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current) {
-        return;
-      }
-      if (ref.current.contains(e.target as Node)) {
-        return;
-      }
-      onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [onClose, open]);
-
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div className="iso-popover absolute left-0 top-full z-50 mt-2" ref={ref}>
-      <div className="relative">
-        <div
-          className="absolute left-[56px] top-[-6px] h-3 w-3 rotate-45 border border-[var(--border)] bg-[var(--panel)]"
-          aria-hidden
-        />
-        <div className="iso-panel flex h-[52px] w-[272px] items-center gap-2 px-4">
-          <div className="text-[12px] font-semibold text-[var(--muted)]">
-            Power off?
-          </div>
-          <div className="flex-1" />
-          <button
-            className="iso-button h-7 w-12 px-0 text-[11px]"
-            type="button"
-            onClick={onClose}
-          >
-            No
-          </button>
-          <button
-            className="iso-button iso-button--primary h-7 w-12 px-0 text-[11px]"
-            type="button"
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-          >
-            Yes
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function PortCard({
   portId,
   label,
@@ -118,11 +51,18 @@ export function PortCard({
   const [confirmOffOpen, setConfirmOffOpen] = useState(false);
   const [powerPulse, setPowerPulse] = useState(false);
   const [replugPulse, setReplugPulse] = useState(false);
+  const powerButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmCancelRef = useRef<HTMLButtonElement>(null);
   const busy = state.busy;
   const actionDisabled = !!disabled || busy;
   const badge = statusBadgeStyles(telemetry.status);
   const powerEnabled = state.power_enabled;
   const powerAnimating = powerPulse || powerPending;
+
+  const closeConfirm = () => {
+    setConfirmOffOpen(false);
+    window.requestAnimationFrame(() => powerButtonRef.current?.focus());
+  };
 
   const triggerPowerToggle = () => {
     setPowerPulse(false);
@@ -145,6 +85,13 @@ export function PortCard({
     const id = window.setTimeout(() => setPowerPulse(false), 280);
     return () => window.clearTimeout(id);
   }, [powerPulse]);
+
+  useEffect(() => {
+    if (!confirmOffOpen) {
+      return;
+    }
+    confirmCancelRef.current?.focus();
+  }, [confirmOffOpen]);
 
   return (
     <div
@@ -196,6 +143,7 @@ export function PortCard({
       <div className="mt-7 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-[252px]">
           <button
+            ref={powerButtonRef}
             className={[
               "group flex h-12 w-full items-center gap-3 rounded-[12px] border px-3 text-left transition-colors duration-150",
               actionDisabled
@@ -274,11 +222,6 @@ export function PortCard({
               {powerEnabled ? "Cut" : "Restore"}
             </span>
           </button>
-          <ConfirmPopover
-            open={confirmOffOpen}
-            onClose={() => setConfirmOffOpen(false)}
-            onConfirm={triggerPowerToggle}
-          />
         </div>
         <button
           className={[
@@ -324,6 +267,51 @@ export function PortCard({
           </div>
         ) : null}
       </div>
+      {confirmOffOpen ? (
+        <fieldset
+          aria-describedby={`${portId}-power-confirm-description`}
+          className="mt-3 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-4"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeConfirm();
+            }
+          }}
+        >
+          <legend
+            className="text-[12px] font-extrabold uppercase tracking-[0.08em] text-[var(--text)]"
+            id={`${portId}-power-confirm-title`}
+          >
+            Cut power to {label}?
+          </legend>
+          <div
+            className="mt-2 text-[12px] font-semibold leading-[1.6] text-[var(--muted)]"
+            id={`${portId}-power-confirm-description`}
+          >
+            This disables the selected rail until you restore power.
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              ref={confirmCancelRef}
+              className="iso-button iso-button--ghost min-h-[44px]"
+              type="button"
+              onClick={closeConfirm}
+            >
+              Cancel
+            </button>
+            <button
+              className="iso-button iso-button--primary min-h-[44px]"
+              type="button"
+              onClick={() => {
+                triggerPowerToggle();
+                closeConfirm();
+              }}
+            >
+              Cut power
+            </button>
+          </div>
+        </fieldset>
+      ) : null}
     </div>
   );
 }

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IsolaRail Web Light Spec</title>
+    <link rel="stylesheet" href="./logo-type-spec.css" />
+  </head>
+  <body class="web light">
+    <main class="stage">
+      <section class="sheet">
+        <header class="sheet__header">
+          <img class="lockup" src="./logo-lockup-light.svg" alt="IsolaRail logo" />
+          <div class="sheet__header-meta">
+            <div class="mode-badge">Web Light</div>
+            <a class="mode-link" href="./logo-variants-board.html">All four variants</a>
+          </div>
+        </header>
+
+        <section class="hero">
+          <article class="panel intro-panel">
+            <div class="intro-top">
+              <div class="kicker">Logo-driven product surface</div>
+              <h1 class="hero-title">
+                <span>Control</span>
+                <span>Deck</span>
+              </h1>
+              <p class="hero-copy">
+                The logo influence is now structural rather than typographic: denser modules,
+                clearer state vocabulary, measured mono readouts, and magenta used as intent
+                rather than blanket branding.
+              </p>
+              <div class="glyph-row">
+                <span class="glyph-pill soft">intent accent</span>
+                <span class="glyph-pill">dense modules</span>
+                <span class="glyph-pill">telemetry mono</span>
+                <span class="glyph-pill">same cut, tighter use</span>
+              </div>
+            </div>
+            <div class="intro-footer">
+              <div class="metric">
+                <strong>Display</strong>
+                <span>neutral sans for core hierarchy; stylized cuts held back to accents</span>
+              </div>
+              <div class="metric">
+                <strong>Shape</strong>
+                <span>paired headers, narrow radius, machine-flat card geometry</span>
+              </div>
+              <div class="metric">
+                <strong>Role</strong>
+                <span>operator console for selection, power actions, and telemetry review</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel mock-panel">
+            <div class="mock-frame web-mock">
+              <aside class="web-sidebar">
+                <div class="side-block">
+                  <strong>Bench</strong>
+                  <span>claimed session / local usb</span>
+                </div>
+                <div class="side-block">
+                  <strong>Views</strong>
+                  <span>devices / rails / debug</span>
+                </div>
+                <div class="side-block">
+                  <strong>Theme</strong>
+                  <span>same project family, task-first behavior</span>
+                </div>
+              </aside>
+
+              <section class="web-main">
+                <div class="web-top">
+                  <div class="console-strip">
+                    <strong>Route framing</strong>
+                    <div class="strip-bars">
+                      <div class="bar"></div>
+                      <div class="bar trace"></div>
+                    </div>
+                    <span>Magenta marks active isolation intent. Cyan marks measured path.</span>
+                  </div>
+                  <div class="console-actions">
+                    <strong>Operator controls</strong>
+                    <div class="chip-row">
+                      <span class="mini-chip signal">Power on</span>
+                      <span class="mini-chip">Replug</span>
+                      <span class="mini-chip state">Healthy</span>
+                    </div>
+                    <span>Primary actions stay crisp; semantic state stays independent.</span>
+                  </div>
+                </div>
+
+                <div class="device-row">
+                  <div class="console-card">
+                    <strong>Bench A</strong>
+                    <span>isolated / usb-c / active route</span>
+                    <div class="chip-row">
+                      <span class="mini-chip signal">Selected</span>
+                      <span class="mini-chip trace">Verified</span>
+                    </div>
+                  </div>
+                  <div class="console-card">
+                    <strong>Bench B</strong>
+                    <span>idle / offline path</span>
+                    <div class="chip-row">
+                      <span class="mini-chip warn">Review</span>
+                      <span class="mini-chip">Inspect</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="port-grid">
+                  <div class="port-card">
+                    <strong>Port 1</strong>
+                    <span>host rail a</span>
+                    <div class="telemetry">
+                      <div>
+                        <strong>Voltage</strong>
+                        <code>5.08V</code>
+                      </div>
+                      <div>
+                        <strong>Current</strong>
+                        <code>0.42A</code>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="port-card">
+                    <strong>Port 2</strong>
+                    <span>host rail b</span>
+                    <div class="telemetry">
+                      <div>
+                        <strong>Voltage</strong>
+                        <code>5.02V</code>
+                      </div>
+                      <div>
+                        <strong>Current</strong>
+                        <code>0.18A</code>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="port-card">
+                    <strong>Port 3</strong>
+                    <span>device route</span>
+                    <div class="telemetry">
+                      <div>
+                        <strong>State</strong>
+                        <code>ready</code>
+                      </div>
+                      <div>
+                        <strong>Path</strong>
+                        <code>iso-a</code>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="port-card">
+                    <strong>Port 4</strong>
+                    <span>recovery lane</span>
+                    <div class="telemetry">
+                      <div>
+                        <strong>State</strong>
+                        <code>idle</code>
+                      </div>
+                      <div>
+                        <strong>Path</strong>
+                        <code>open</code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="console-note">
+                  <strong>Inline confirmation</strong>
+                  <span>
+                    This surface prefers anchored and inline confirmation before escalating
+                    to modal dialogs.
+                  </span>
+                </div>
+              </section>
+            </div>
+          </article>
+        </section>
+
+        <section class="spec-grid">
+          <article class="panel spec-panel">
+            <div class="spec-head">
+              <h2>Typography</h2>
+              <span>same family, tighter roles</span>
+            </div>
+            <div class="type-preview">
+              <div class="type-display">IsolaRail Aa Rr 5.08V</div>
+              <div class="type-body">
+                Core hierarchy stays practical and neutral for long sessions. Logo character
+                is carried by framing bars, badges, and module proportions instead.
+              </div>
+              <div class="type-mono">5.08V / 0.42A / online / local-usb / iso-a</div>
+            </div>
+            <div class="type-meta">
+              <div class="type-line">
+                <strong>Display</strong>
+                <span>main UI hierarchy stays neutral; any stylized cut is now decorative only</span>
+              </div>
+              <div class="type-line">
+                <strong>Body</strong>
+                <span>neutral UI sans for labels, tables, and supporting instructions</span>
+              </div>
+              <div class="type-line">
+                <strong>Mono</strong>
+                <span>telemetry, identifiers, and route strings that must align fast</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel spec-panel">
+            <div class="spec-head">
+              <h2>Color Roles</h2>
+              <span>intent plus state</span>
+            </div>
+            <div class="swatch-grid">
+              <div class="swatch">
+                <div class="swatch-tone" style="--tone: #e8edf4"></div>
+                <div class="swatch-meta">
+                  <strong>Shell</strong>
+                  <span>overall console field</span>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-tone" style="--tone: #101721"></div>
+                <div class="swatch-meta">
+                  <strong>Rail</strong>
+                  <span>headers and route framing</span>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-tone" style="--tone: #ff0050"></div>
+                <div class="swatch-meta">
+                  <strong>Intent</strong>
+                  <span>selected route and operator action</span>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-tone" style="--tone: #18a46c"></div>
+                <div class="swatch-meta">
+                  <strong>State</strong>
+                  <span>healthy or active runtime condition</span>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-tone" style="--tone: #4fc3d0"></div>
+                <div class="swatch-meta">
+                  <strong>Trace</strong>
+                  <span>measurement and verification path</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel spec-panel">
+            <div class="spec-head">
+              <h2>Controls</h2>
+              <span>machine-flat vocabulary</span>
+            </div>
+            <div class="component-grid">
+              <div class="component-card">
+                <strong>Action Pair</strong>
+                <div class="component-demo">
+                  <span class="demo-button primary">Power on</span>
+                  <span class="demo-button">Inspect</span>
+                </div>
+                <span>Primary action gets intent magenta. Secondary remains neutral.</span>
+              </div>
+              <div class="component-card">
+                <strong>Status Group</strong>
+                <div class="component-demo">
+                  <span class="demo-button state">Healthy</span>
+                  <span class="demo-button warn">Busy</span>
+                </div>
+                <span>Semantic chips must never borrow identity color.</span>
+              </div>
+              <div class="component-card">
+                <strong>Selected Route</strong>
+                <div class="component-demo">
+                  <span class="mini-chip signal">Iso-A active</span>
+                  <span class="mini-chip trace">Verified</span>
+                </div>
+                <span>Intent and proof remain different roles even in small chips.</span>
+              </div>
+              <div class="component-card">
+                <strong>Telemetry Cell</strong>
+                <span>
+                  Dense module blocks use mono values and compact labels, not decorative
+                  gauge widgets.
+                </span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel spec-panel">
+            <div class="spec-head">
+              <h2>Usage Rules</h2>
+              <span>same family, product discipline</span>
+            </div>
+            <div class="usage-grid">
+              <div class="usage-card">
+                <strong>Display is scarce</strong>
+                <span>Use it for page identity and big module framing, not every label.</span>
+              </div>
+              <div class="usage-card">
+                <strong>State is separate</strong>
+                <span>Health green, warning amber, and fault red remain semantic only.</span>
+              </div>
+              <div class="usage-card">
+                <strong>Density is allowed</strong>
+                <span>The console can get denser than docs as long as hierarchy stays crisp.</span>
+              </div>
+              <div class="usage-card">
+                <strong>Same project DNA</strong>
+                <span>Shared type width and rail framing replace the old indigo-SaaS feeling.</span>
+              </div>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

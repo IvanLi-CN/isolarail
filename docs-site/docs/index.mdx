@@ -4,85 +4,41 @@ description: Choose Chinese or English documentation.
 pageType: custom
 ---
 
-<section className="isolarail-hero">
-  <div className="isolarail-hero-copy">
-    <div className="isolarail-kicker">IsolaRail documentation</div>
-    <h1>Choose the bench manual.</h1>
-    <div className="isolarail-hero-lede">
-      The documentation site is available in Chinese and English. Both routes
-      cover product entry, bring-up, hardware topology, firmware runtime,
-      control-plane surfaces, dashboard behavior, and the specs index.
+<section className="docs-switchboard">
+  <figure className="docs-switchboard-figure">
+    <img
+      src="/isolarail-docs-hero.jpg"
+      alt="IsolaRail product scene shared by both documentation languages."
+    />
+  </figure>
+  <div className="docs-switchboard-intro">
+    <div className="docs-brandline">
+      <span className="docs-brand-mark" aria-hidden="true"></span>
+      <span className="docs-register-note">Documentation switchboard</span>
     </div>
-    <div className="isolarail-chip-row">
-      <span className="isolarail-chip isolarail-chip--signal">bench first</span>
-      <span className="isolarail-chip">zh + en</span>
-      <span className="isolarail-chip">shared topology</span>
-      <span className="isolarail-chip">spec-linked</span>
-    </div>
-    <div className="isolarail-actions">
-      <a className="isolarail-button primary" href="zh/">进入中文文档</a>
-      <a className="isolarail-button secondary" href="en/">Read English docs</a>
-    </div>
-    <div className="isolarail-hero-metrics">
-      <div className="isolarail-metric">
-        <strong>Routes</strong>
-        <span>same product truth, two reading languages</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>Tone</strong>
-        <span>public manual, not marketing shell</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>Scope</strong>
-        <span>hardware boundary before repo boundary</span>
-      </div>
+    <h1>Choose a docs language.</h1>
+    <p>Chinese and English cover the same device boundary, bring-up route, dashboard behavior, and specs index. Pick a reading language, then stay inside one full manual.</p>
+    <div className="docs-switchboard-shared">
+      <span>quick start</span>
+      <span>hardware topology</span>
+      <span>firmware runtime</span>
+      <span>dashboard and specs</span>
     </div>
   </div>
-  <div className="isolarail-visual" aria-label="IsolaRail system boundary diagram">
-    <div className="isolarail-map">
-      <div className="isolarail-node isolarail-node-core">
-        <span>Control</span>
-        <strong>ESP32-S3</strong>
-        <em>boot, self-check, front panel</em>
-      </div>
-      <div className="isolarail-node isolarail-node-hub">
-        <span>USB hub</span>
-        <strong>CH335F</strong>
-        <em>sideband power control</em>
-      </div>
-      <div className="isolarail-map-bus">
-        <span>I2C buses and monitors</span>
-        <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
-      </div>
-      <div className="isolarail-port-strip" aria-label="Four controlled USB power ports">
-        <span>port1</span>
-        <span>port2</span>
-        <span>port3</span>
-        <span>port4</span>
-      </div>
-      <div className="isolarail-panel-link">
-        <span>160x50 display</span>
-        <strong>dashboard state surface</strong>
-      </div>
-      <div className="isolarail-photo-reserve">
-        <strong>Shared entry</strong>
-        <span>Use this root page to choose language, then stay inside one complete documentation route.</span>
-      </div>
-    </div>
+  <div className="docs-switchboard-routes">
+    <a className="docs-switchboard-route" href="zh/">
+      <span>中文文档</span>
+      <strong>进入中文文档，按产品入口、快速开始、硬件拓扑和控制面继续阅读。</strong>
+      <em>适合把 bench bring-up、维护说明和规范索引放进同一条中文阅读路径。</em>
+    </a>
+    <a className="docs-switchboard-route" href="en/">
+      <span>English docs</span>
+      <strong>Read the English manual for bring-up, hardware, firmware, dashboard, and specs.</strong>
+      <em>Use this route when commands, team discussion, or maintenance notes stay English-first.</em>
+    </a>
   </div>
 </section>
 
-<div className="isolarail-evidence">
-  <a className="isolarail-evidence-item" href="zh/">
-    <strong>中文文档</strong>
-    <span>产品入口、快速开始、硬件拓扑、控制面和规格索引。</span>
-  </a>
-  <a className="isolarail-evidence-item" href="en/">
-    <strong>English Docs</strong>
-    <span>Product entry, bring-up, hardware topology, firmware, and specs.</span>
-  </a>
-  <div className="isolarail-evidence-item">
-    <strong>Canonical truth</strong>
-    <span>Both language routes point back to the same repository docs and specs.</span>
-  </div>
+<div className="docs-switchboard-footer">
+  Both language routes point back to the same repository-backed hardware docs and long-lived specs.
 </div>

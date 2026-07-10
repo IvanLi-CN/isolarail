@@ -95,9 +95,13 @@ This is the public front door for IsolaRail. It should feel like hardware docume
 
 This surface shares project DNA with the control app, but it is intentionally lighter, flatter, and more public. The relationship should be visible through rail-like framing, restrained magenta markers, cyan proof traces, and tight corner vocabulary. It should not rely on loud typography to prove family resemblance.
 
+The unprefixed docs root is a compact language switchboard, not a second landing page. The real homepage lives at the locale routes, where the product image leads, the route band follows, and dashboard proof stays narrow and factual.
+
 **Logo Translation Rule.** The logo informs structure, contrast, bilateral framing, split-bar markers, and proportion. It does **not** license a stylized display face for the main reading hierarchy. Strong logo-like letterforms are accent material only: lockups, micro marks, or occasional route chips.
 
 **Shape Discipline Rule.** Compact UI pieces may not collapse into soft pills. Buttons, evidence tags, and route chips should stay as clipped or hard-edged modules with restrained corners.
+
+**Imagery Rule.** When approved project visuals already exist, the homepage should lead with them. Empty photo reserves are only a temporary fallback; preferred docs-site hero evidence is the approved IsolaRail product scene plus the 160x50 dashboard preview.
 
 ## Colors
 
@@ -171,6 +175,12 @@ The docs site is flat by default. Separation should come from white space, full 
 - Flat, bordered, concise.
 - Used for proof links, subsystem entry points, and canonical routes.
 - Copy should stay grounded and factual.
+
+### Route Bands
+
+- Ordered route bands are allowed because the reading order is real information.
+- Use one structural marker plus one short title and one short line of guidance.
+- The band should feel like a hard-edged manual index, not a feature-card grid.
 
 ### Documentation Cards
 

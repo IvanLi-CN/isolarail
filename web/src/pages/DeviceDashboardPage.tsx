@@ -33,17 +33,19 @@ export function DeviceDashboardPage() {
   return (
     <div className="flex flex-col gap-5" data-testid="device-dashboard-page">
       <div className="iso-panel px-5 py-5 sm:px-6">
-        <div className="iso-kicker">claimed route</div>
-        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+        <div className="text-[12px] font-semibold text-[var(--muted)]">
+          Claimed bench
+        </div>
+        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.03em]">
           {device.name}
         </div>
-        <div className="mt-3 truncate font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+        <div className="mt-3 truncate font-mono text-[12px] font-semibold text-[var(--muted)]">
           dashboard · id: {shortId} · {device.baseUrl}
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="iso-chip iso-chip--signal">device dashboard</span>
-          <span className="iso-chip">per-port rail control</span>
-          <span className="iso-chip iso-chip--trace">measured telemetry</span>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[12px] font-semibold text-[var(--muted)]">
+          <span>Device dashboard</span>
+          <span>Per-port rail control</span>
+          <span>Measured telemetry</span>
         </div>
       </div>
 

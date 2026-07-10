@@ -34,7 +34,7 @@ export function resolveAgentBaseUrl(
 }
 
 export async function tryBootstrapCompanionBridge(): Promise<CompanionBridge | null> {
-  for (const url of companionBootstrapUrls()) {
+  for (const url of companionBootstrapUrls(currentBrowserHref())) {
     const agent = await fetchCompanionBridgeBootstrap(url);
     if (agent) {
       return agent;
@@ -64,7 +64,9 @@ export async function agentFetch(
   });
 }
 
-export function companionBootstrapUrls(): string[] {
+export function companionBootstrapUrls(
+  currentLocationHref = currentBrowserHref(),
+): string[] {
   const explicitOrigins =
     (import.meta.env.VITE_ISOLARAIL_DEVD_ORIGINS as string | undefined) ?? "";
   const origins = explicitOrigins
@@ -72,6 +74,9 @@ export function companionBootstrapUrls(): string[] {
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
   if (origins.length === 0) {
+    if (currentLocationHref && isLoopbackLocation(currentLocationHref)) {
+      return [];
+    }
     return ["/api/v1/bootstrap"];
   }
   return origins.map((origin) =>
@@ -117,4 +122,15 @@ function currentBrowserHref(): string | undefined {
   }
   const location = window.location;
   return typeof location?.href === "string" ? location.href : undefined;
+}
+
+function isLoopbackLocation(currentLocationHref: string): boolean {
+  try {
+    const { hostname } = new URL(currentLocationHref);
+    return (
+      hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
 }

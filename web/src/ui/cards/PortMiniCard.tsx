@@ -9,73 +9,6 @@ function formatValue(value: number | null, unit: "V" | "A" | "W"): string {
   return `${(value / 1000).toFixed(2)}${unit}`;
 }
 
-function ConfirmPopover({
-  open,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current) {
-        return;
-      }
-      if (ref.current.contains(e.target as Node)) {
-        return;
-      }
-      onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [onClose, open]);
-
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div className="iso-popover absolute left-0 top-full z-50 mt-2">
-      <div className="relative">
-        <div
-          className="absolute left-[40px] top-[-6px] h-3 w-3 rotate-45 border border-[var(--border)] bg-[var(--panel)]"
-          aria-hidden
-        />
-        <div className="iso-panel flex h-[52px] w-[272px] items-center gap-2 px-4">
-          <div className="text-[12px] font-semibold text-[var(--muted)]">
-            Power off?
-          </div>
-          <div className="flex-1" />
-          <button
-            className="iso-button h-7 w-12 px-0 text-[11px]"
-            type="button"
-            onClick={onClose}
-          >
-            No
-          </button>
-          <button
-            className="iso-button iso-button--primary h-7 w-12 px-0 text-[11px]"
-            type="button"
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-          >
-            Yes
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export type PortMiniCardProps = {
   portId: PortId;
   label: string;
@@ -100,10 +33,24 @@ export function PortMiniCard({
   onReplug,
 }: PortMiniCardProps) {
   const [confirmOffOpen, setConfirmOffOpen] = useState(false);
+  const powerButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmCancelRef = useRef<HTMLButtonElement>(null);
 
   const busy = state.busy;
   const powerEnabled = state.power_enabled;
   const actionDisabled = disabled || busy;
+
+  const closeConfirm = () => {
+    setConfirmOffOpen(false);
+    window.requestAnimationFrame(() => powerButtonRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (!confirmOffOpen) {
+      return;
+    }
+    confirmCancelRef.current?.focus();
+  }, [confirmOffOpen]);
 
   const powerWidth = compact ? "w-[84px]" : "w-[100px]";
   const replugWidth = compact
@@ -163,10 +110,11 @@ export function PortMiniCard({
       >
         <div className="relative">
           <button
+            ref={powerButtonRef}
             className={[
               compact
-                ? "iso-button h-[32px] text-[11px]"
-                : "iso-button h-[34px] text-[12px]",
+                ? "iso-button h-11 text-[11px]"
+                : "iso-button h-11 text-[12px]",
               powerWidth,
               actionDisabled
                 ? "[--iso-button-bg:var(--btn-disabled-fill)] [--iso-button-border:var(--border)] [--iso-button-text:var(--btn-disabled-text)]"
@@ -187,17 +135,12 @@ export function PortMiniCard({
           >
             Power
           </button>
-          <ConfirmPopover
-            open={confirmOffOpen}
-            onClose={() => setConfirmOffOpen(false)}
-            onConfirm={() => onSetPower(false)}
-          />
         </div>
         <button
           className={[
             compact
-              ? "iso-button h-[32px] text-[11px]"
-              : "iso-button h-[34px] text-[12px]",
+              ? "iso-button h-11 text-[11px]"
+              : "iso-button h-11 text-[12px]",
             replugWidth,
             actionDisabled
               ? "[--iso-button-bg:var(--btn-disabled-fill-soft)] [--iso-button-border:var(--border)] [--iso-button-text:var(--btn-disabled-text)]"
@@ -210,6 +153,51 @@ export function PortMiniCard({
           Replug
         </button>
       </div>
+      {confirmOffOpen ? (
+        <fieldset
+          aria-describedby={`${portId}-mini-power-confirm-description`}
+          className="mt-3 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-3"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeConfirm();
+            }
+          }}
+        >
+          <legend
+            className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--text)]"
+            id={`${portId}-mini-power-confirm-title`}
+          >
+            Cut power to {label}?
+          </legend>
+          <div
+            className="mt-1 text-[12px] font-semibold leading-[1.55] text-[var(--muted)]"
+            id={`${portId}-mini-power-confirm-description`}
+          >
+            The rail stays off until you restore it.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              ref={confirmCancelRef}
+              className="iso-button iso-button--ghost min-h-[44px]"
+              type="button"
+              onClick={closeConfirm}
+            >
+              Cancel
+            </button>
+            <button
+              className="iso-button iso-button--primary min-h-[44px]"
+              type="button"
+              onClick={() => {
+                onSetPower(false);
+                closeConfirm();
+              }}
+            >
+              Cut power
+            </button>
+          </div>
+        </fieldset>
+      ) : null}
     </div>
   );
 }

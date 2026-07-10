@@ -26,16 +26,16 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-function alertClass(variant: ToastVariant): string {
+function toastClass(variant: ToastVariant): string {
   switch (variant) {
     case "success":
-      return "alert-success";
+      return "iso-toast iso-toast--success";
     case "warning":
-      return "alert-warning";
+      return "iso-toast iso-toast--warning";
     case "error":
-      return "alert-error";
+      return "iso-toast iso-toast--error";
     case "info":
-      return "alert-info";
+      return "iso-toast iso-toast--info";
   }
 }
 
@@ -58,13 +58,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast toast-end z-50">
+      <section className="iso-toast-stack" aria-label="Notifications">
         {toasts.map((t) => (
-          <div key={t.id} className={`alert ${alertClass(t.variant)}`}>
+          <div
+            key={t.id}
+            className={toastClass(t.variant)}
+            role={
+              t.variant === "error" || t.variant === "warning"
+                ? "alert"
+                : "status"
+            }
+            aria-atomic="true"
+          >
             <span>{t.message}</span>
           </div>
         ))}
-      </div>
+      </section>
     </ToastContext.Provider>
   );
 }

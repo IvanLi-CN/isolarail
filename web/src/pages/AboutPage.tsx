@@ -60,18 +60,20 @@ export function AboutPage() {
   return (
     <div className="flex flex-col gap-5" data-testid="about">
       <div className="iso-panel px-5 py-5 sm:px-6">
-        <div className="iso-kicker">surface notes</div>
-        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+        <div className="text-[12px] font-semibold text-[var(--muted)]">
+          Surface notes
+        </div>
+        <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.03em]">
           About the control surface
         </div>
         <div className="mt-3 max-w-[72ch] text-[14px] font-medium leading-[1.6] text-[var(--muted)]">
           Build identity, repository routes, defaults, and local storage
           behavior for the operator shell.
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="iso-chip iso-chip--signal">build identity</span>
-          <span className="iso-chip">repo + docs links</span>
-          <span className="iso-chip">local companion state</span>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[12px] font-semibold text-[var(--muted)]">
+          <span>Build identity</span>
+          <span>Repo + docs links</span>
+          <span>Local companion state</span>
         </div>
       </div>
 

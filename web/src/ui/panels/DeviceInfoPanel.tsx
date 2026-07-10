@@ -162,6 +162,10 @@ export function DeviceInfoPanel({
   const wifiFormDirtyRef = useRef(false);
   const hasInfoRef = useRef(false);
   const hasWifiConfigRef = useRef(false);
+  const wifiClearButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const wifiClearCancelRef = useRef<HTMLButtonElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     loadInfoRef.current = loadInfo;
@@ -170,6 +174,20 @@ export function DeviceInfoPanel({
   useEffect(() => {
     loadWifiConfigRef.current = loadWifiConfig;
   }, [loadWifiConfig]);
+
+  useEffect(() => {
+    if (!wifiClearConfirmOpen) {
+      return;
+    }
+    wifiClearCancelRef.current?.focus();
+  }, [wifiClearConfirmOpen]);
+
+  useEffect(() => {
+    if (!deleteConfirmOpen) {
+      return;
+    }
+    deleteCancelRef.current?.focus();
+  }, [deleteConfirmOpen]);
 
   useEffect(() => {
     if (device.id.length === 0) {
@@ -194,6 +212,16 @@ export function DeviceInfoPanel({
     setSerialActivity([]);
     wifiFormDirtyRef.current = false;
   }, [device.id]);
+
+  const closeWifiClearConfirm = () => {
+    setWifiClearConfirmOpen(false);
+    window.requestAnimationFrame(() => wifiClearButtonRef.current?.focus());
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmOpen(false);
+    window.requestAnimationFrame(() => deleteButtonRef.current?.focus());
+  };
 
   useEffect(() => {
     if (serialActivityPreview) {
@@ -849,14 +877,10 @@ export function DeviceInfoPanel({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <label className="form-control min-w-0">
-            <div className="label px-0 pb-1 pt-0">
-              <span className="label-text text-[12px] font-bold text-[var(--muted)]">
-                SSID
-              </span>
-            </div>
+          <label className="min-w-0">
+            <span className="iso-field-label">SSID</span>
             <input
-              className="input input-sm w-full font-mono"
+              className="iso-input font-mono"
               autoComplete="off"
               value={wifiSsid}
               disabled={!wifiCanManage || wifiBusy}
@@ -868,14 +892,10 @@ export function DeviceInfoPanel({
             />
           </label>
           <div className="min-w-0">
-            <label className="form-control min-w-0">
-              <div className="label px-0 pb-1 pt-0">
-                <span className="label-text text-[12px] font-bold text-[var(--muted)]">
-                  PSK
-                </span>
-              </div>
+            <label className="min-w-0">
+              <span className="iso-field-label">PSK</span>
               <input
-                className="input input-sm w-full font-mono"
+                className="iso-input font-mono"
                 type="password"
                 autoComplete="new-password"
                 value={wifiPsk}
@@ -890,9 +910,9 @@ export function DeviceInfoPanel({
                 placeholder="Blank means open network"
               />
             </label>
-            <label className="mt-2 flex min-h-6 items-center gap-2 text-[12px] font-semibold text-[var(--muted)]">
+            <label className="mt-3 flex min-h-[44px] items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-semibold text-[var(--muted)]">
               <input
-                className="checkbox checkbox-xs"
+                className="iso-checkbox"
                 type="checkbox"
                 checked={wifiOpenNetwork}
                 disabled={!wifiCanManage || wifiBusy}
@@ -918,7 +938,7 @@ export function DeviceInfoPanel({
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:min-w-[260px]">
             <button
-              className="btn btn-primary btn-sm min-h-10"
+              className="iso-button iso-button--primary"
               type="button"
               disabled={!wifiCanSubmit}
               onClick={() => void saveWifi()}
@@ -926,7 +946,8 @@ export function DeviceInfoPanel({
               {wifiBusy ? "Saving..." : "Save Wi-Fi"}
             </button>
             <button
-              className="btn btn-outline btn-sm min-h-10"
+              ref={wifiClearButtonRef}
+              className="iso-button iso-button--ghost"
               type="button"
               disabled={!wifiCanSubmit}
               onClick={() => setWifiClearConfirmOpen(true)}
@@ -935,7 +956,7 @@ export function DeviceInfoPanel({
             </button>
             {wifiRebootRequired ? (
               <button
-                className="btn btn-outline btn-sm min-h-10"
+                className="iso-button iso-button--soft"
                 type="button"
                 disabled={!wifiCanSubmit}
                 onClick={() => void rebootForWifi()}
@@ -985,7 +1006,7 @@ export function DeviceInfoPanel({
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_132px]">
           <input
-            className="file-input file-input-sm w-full"
+            className="iso-file-input"
             type="file"
             accept=".bin,application/octet-stream"
             onChange={(event) =>
@@ -993,7 +1014,7 @@ export function DeviceInfoPanel({
             }
           />
           <input
-            className="input input-sm w-full font-mono"
+            className="iso-input font-mono"
             aria-label="Flash address"
             value={flashAddress}
             onChange={(event) => setFlashAddress(event.target.value)}
@@ -1032,7 +1053,7 @@ export function DeviceInfoPanel({
         ) : null}
 
         <button
-          className="btn btn-primary mt-5 h-11 w-full justify-center"
+          className="iso-button iso-button--primary mt-5 w-full justify-center"
           type="button"
           disabled={
             flashBusy ||
@@ -1100,6 +1121,12 @@ export function DeviceInfoPanel({
             aria-modal="true"
             aria-labelledby="wifi-clear-title"
             aria-describedby="wifi-clear-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeWifiClearConfirm();
+              }
+            }}
           >
             <div
               id="wifi-clear-title"
@@ -1116,15 +1143,16 @@ export function DeviceInfoPanel({
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
-                className="btn btn-outline btn-sm min-h-10 justify-center"
+                ref={wifiClearCancelRef}
+                className="iso-button iso-button--ghost justify-center"
                 type="button"
                 disabled={wifiBusy}
-                onClick={() => setWifiClearConfirmOpen(false)}
+                onClick={closeWifiClearConfirm}
               >
                 Cancel
               </button>
               <button
-                className="btn btn-primary btn-sm min-h-10 justify-center"
+                className="iso-button iso-button--danger justify-center"
                 type="button"
                 disabled={wifiBusy}
                 onClick={() => void clearWifiNow()}
@@ -1147,7 +1175,8 @@ export function DeviceInfoPanel({
             </div>
           </div>
           <button
-            className="btn btn-outline btn-sm min-h-10 justify-center border-[var(--error)] text-[var(--error)]"
+            ref={deleteButtonRef}
+            className="iso-button iso-button--danger-ghost justify-center"
             type="button"
             onClick={() => {
               setDeleteError(null);
@@ -1178,6 +1207,12 @@ export function DeviceInfoPanel({
             aria-modal="true"
             aria-labelledby="device-delete-title"
             aria-describedby="device-delete-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeDeleteConfirm();
+              }
+            }}
           >
             <div
               id="device-delete-title"
@@ -1194,15 +1229,16 @@ export function DeviceInfoPanel({
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
-                className="btn btn-outline btn-sm min-h-10 justify-center"
+                ref={deleteCancelRef}
+                className="iso-button iso-button--ghost justify-center"
                 type="button"
                 disabled={deleteBusy}
-                onClick={() => setDeleteConfirmOpen(false)}
+                onClick={closeDeleteConfirm}
               >
                 Cancel
               </button>
               <button
-                className="btn btn-primary btn-sm min-h-10 justify-center"
+                className="iso-button iso-button--danger justify-center"
                 type="button"
                 disabled={deleteBusy}
                 onClick={() => void confirmDeleteDevice()}

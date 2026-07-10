@@ -118,7 +118,7 @@ export function DeviceDiscoveryPanel({
           </div>
         </div>
         <button
-          className="btn btn-sm"
+          className="iso-button iso-button--ghost"
           type="button"
           onClick={onRefresh}
           disabled={scanning}
@@ -129,15 +129,13 @@ export function DeviceDiscoveryPanel({
 
       {snapshot.status === "unavailable" ? (
         <div className="mt-4">
-          <div className="alert alert-info">
-            <div className="flex flex-col">
-              <div className="font-bold">
-                Service discovery: Local companion only
-              </div>
-              <div className="text-sm">
-                The Web app can’t do mDNS/DNS-SD. Use IP scan (advanced) or
-                connect by USB first.
-              </div>
+          <div className="iso-notice iso-notice--info px-4 py-3">
+            <div className="text-[12px] font-extrabold uppercase tracking-[0.08em]">
+              Service discovery
+            </div>
+            <div className="mt-2 text-[12px] font-semibold leading-[1.6]">
+              The Web app can’t do mDNS/DNS-SD. Use IP scan, or connect by USB
+              first.
             </div>
           </div>
         </div>
@@ -145,21 +143,27 @@ export function DeviceDiscoveryPanel({
 
       {snapshot.error ? (
         <div className="mt-4">
-          <div className="alert alert-warning">
-            <div className="flex flex-col">
-              <div className="font-bold">Discovery hint</div>
-              <div className="text-sm">{snapshot.error}</div>
+          <div className="iso-notice iso-notice--warning px-4 py-3">
+            <div className="text-[12px] font-extrabold uppercase tracking-[0.08em]">
+              Discovery hint
+            </div>
+            <div className="mt-2 text-[12px] font-semibold leading-[1.6]">
+              {snapshot.error}
             </div>
           </div>
         </div>
       ) : null}
 
       <div className="mt-4">
+        <label className="iso-field-label" htmlFor="device-discovery-filter">
+          Filter results
+        </label>
         <input
-          className="h-[40px] w-full rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 text-[13px] font-medium text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+          className="iso-input"
+          id="device-discovery-filter"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter by hostname / device_id"
+          placeholder="Hostname, device_id, or IP"
           autoComplete="off"
         />
       </div>
@@ -188,9 +192,7 @@ export function DeviceDiscoveryPanel({
                         {unknown(d.fqdn ?? d.hostname)}
                       </div>
                       {added ? (
-                        <div className="badge bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]">
-                          Added
-                        </div>
+                        <div className="iso-chip iso-chip--success">Added</div>
                       ) : null}
                     </div>
                     <div className="mt-1 text-[12px] font-semibold text-[var(--muted)]">
@@ -206,7 +208,7 @@ export function DeviceDiscoveryPanel({
                   </div>
 
                   <button
-                    className="btn btn-sm"
+                    className="iso-button iso-button--ghost"
                     type="button"
                     onClick={() => onSelect(d)}
                     disabled={added}
@@ -225,7 +227,7 @@ export function DeviceDiscoveryPanel({
           <div className="flex items-center justify-between">
             <div className="text-[13px] font-bold">IP scan (advanced)</div>
             <button
-              className="link link-hover flex items-center gap-2 text-[12px] font-bold"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] px-3 text-[12px] font-bold text-[var(--muted)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
               type="button"
               onClick={() => onToggleIpScan(true)}
             >
@@ -238,7 +240,7 @@ export function DeviceDiscoveryPanel({
             <div className="flex items-center justify-between">
               <div className="text-[13px] font-bold">IP scan (advanced)</div>
               <button
-                className="link link-hover flex items-center gap-2 text-[12px] font-bold"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] px-3 text-[12px] font-bold text-[var(--muted)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
                 type="button"
                 onClick={() => onToggleIpScan(false)}
                 disabled={scanning}
@@ -248,9 +250,16 @@ export function DeviceDiscoveryPanel({
               </button>
             </div>
 
-            <div className="mt-3 flex items-center gap-2">
+            <label
+              className="iso-field-label mt-3"
+              htmlFor="device-discovery-cidr"
+            >
+              CIDR range
+            </label>
+            <div className="flex items-center gap-2">
               <input
-                className="h-[40px] flex-1 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-4 text-[13px] font-medium text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+                className="iso-input flex-1 font-mono"
+                id="device-discovery-cidr"
                 value={cidr}
                 onChange={(e) => {
                   setCidrTouched(true);
@@ -266,7 +275,7 @@ export function DeviceDiscoveryPanel({
                   }
                   startScan();
                 }}
-                placeholder="CIDR, e.g. 192.168.1.0/24"
+                placeholder="192.168.1.0/24"
                 autoComplete="off"
                 list={
                   ipScanCandidatesList.length > 1
@@ -296,7 +305,7 @@ export function DeviceDiscoveryPanel({
                 </datalist>
               ) : null}
               <button
-                className="btn btn-sm h-[40px]"
+                className="iso-button iso-button--primary"
                 type="button"
                 onClick={startScan}
                 disabled={scanning}
@@ -325,7 +334,7 @@ export function DeviceDiscoveryPanel({
                   {snapshot.scan.done}/{snapshot.scan.total} probed
                 </div>
                 <button
-                  className="link link-hover text-[12px] font-bold"
+                  className="inline-flex min-h-[44px] items-center rounded-[10px] px-3 text-[12px] font-bold text-[var(--muted)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
                   type="button"
                   onClick={onCancelScan}
                 >

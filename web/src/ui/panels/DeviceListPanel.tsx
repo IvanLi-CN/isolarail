@@ -53,8 +53,10 @@ export function DeviceListPanel({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="iso-kicker">claimed benches</div>
-          <h2 className="mt-2 text-[24px] font-black leading-[0.96] tracking-[-0.05em]">
+          <div className="text-[12px] font-semibold tracking-[0.04em] text-[var(--primary)]">
+            Claimed benches
+          </div>
+          <h2 className="mt-2 text-[24px] font-black leading-[0.96] tracking-[-0.025em]">
             Devices
           </h2>
           <div className="mt-2 text-[13px] font-medium leading-[1.55] text-[var(--muted)]">
@@ -64,22 +66,22 @@ export function DeviceListPanel({
         <button
           className="iso-button iso-button--primary shrink-0"
           type="button"
-          onClick={openAddDevice}
+          onClick={() => openAddDevice()}
         >
           Add Device
         </button>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="iso-chip iso-chip--signal">route list</span>
-        <span className="iso-chip">usb / serial / wi-fi</span>
-        <span className="iso-chip">{devices.length} saved</span>
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[12px] font-semibold text-[var(--muted)]">
+        <span>Route list</span>
+        <span>USB / serial / Wi-Fi</span>
+        <span>{devices.length} saved</span>
       </div>
 
       {devices.length === 0 ? (
         <div className="iso-panel mt-4 px-4 py-4">
-          <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-            empty bench
+          <div className="text-[12px] font-semibold text-[var(--muted)]">
+            Empty bench
           </div>
           <div className="mt-2 text-[14px] font-semibold text-[var(--text)]">
             No devices claimed yet.

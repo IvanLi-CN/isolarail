@@ -4,109 +4,66 @@ description: Product entry, hardware topology, firmware runtime, and control-pla
 pageType: custom
 ---
 
-<section className="isolarail-hero">
-  <div className="isolarail-hero-copy">
-    <div className="isolarail-kicker">Hardware and firmware docs for an isolated USB hub</div>
-    <h1>One clear route from product boundary to bring-up proof.</h1>
-    <div className="isolarail-hero-lede">
-      IsolaRail is a four-port isolated USB hub project built around ESP32-S3, CH335F, TCA6408A, INA226/TPS2490, M24C64, and a 160x50 front-panel display path. This site is organized by hardware, firmware, control plane, and specification index so the product boundary and current engineering truth stay connected.
+<section className="docs-manual">
+  <div className="docs-manual-copy">
+    <div className="docs-brandline">
+      <span className="docs-brand-mark" aria-hidden="true"></span>
+      <span className="docs-register-note">Bench manual / public docs</span>
     </div>
-    <div className="isolarail-chip-row">
-      <span className="isolarail-chip isolarail-chip--signal">public manual</span>
-      <span className="isolarail-chip">diagram first</span>
-      <span className="isolarail-chip">bring-up route</span>
-      <span className="isolarail-chip">spec-owned</span>
+    <h1>IsolaRail bench manual</h1>
+    <p className="docs-manual-lede">This is the public entry to the IsolaRail hardware manual. Start with bring-up, or jump straight to topology, firmware runtime, control-plane interfaces, and long-lived specs.</p>
+    <div className="docs-manual-actions">
+      <a className="docs-button" href="start/quick-start">Start bring-up</a>
+      <div className="docs-manual-links">
+        <a href="hardware/topology">Hardware topology</a>
+        <a href="reference/specs">Specs index</a>
+        <a href="dashboard/front-panel">Front-panel dashboard</a>
+      </div>
     </div>
-    <div className="isolarail-actions">
-      <a className="isolarail-button primary" href="start/quick-start">Start bring-up</a>
-      <a className="isolarail-button secondary" href="hardware/topology">Read hardware topology</a>
-      <a className="isolarail-button secondary" href="reference/specs">Specs index</a>
-    </div>
-    <div className="isolarail-hero-metrics">
-      <div className="isolarail-metric">
-        <strong>Core</strong>
-        <span>product boundary before implementation trivia</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>Behavior</strong>
-        <span>flat reading surfaces, explicit route markers</span>
-      </div>
-      <div className="isolarail-metric">
-        <strong>Evidence</strong>
-        <span>dashboard, bring-up, and specs stay linked</span>
-      </div>
+    <div className="docs-manual-meta">
+      <span>4 isolated rails</span>
+      <span>ESP32-S3 control plane</span>
+      <span>160x50 front panel</span>
+      <span>public maintenance docs</span>
     </div>
   </div>
-  <div className="isolarail-visual" aria-label="IsolaRail system boundary diagram">
-    <div className="isolarail-map">
-      <div className="isolarail-node isolarail-node-core">
-        <span>Control</span>
-        <strong>ESP32-S3</strong>
-        <em>boot, self-check, front panel</em>
-      </div>
-      <div className="isolarail-node isolarail-node-hub">
-        <span>USB hub</span>
-        <strong>CH335F</strong>
-        <em>sideband power control</em>
-      </div>
-      <div className="isolarail-map-bus">
-        <span>I2C buses and monitors</span>
-        <strong>TCA6408A · INA226 · TPS2490 · M24C64</strong>
-      </div>
-      <div className="isolarail-port-strip" aria-label="Four controlled USB power ports">
-        <span>port1</span>
-        <span>port2</span>
-        <span>port3</span>
-        <span>port4</span>
-      </div>
-      <div className="isolarail-panel-link">
-        <span>160x50 display</span>
-        <strong>dashboard state surface</strong>
-      </div>
-      <div className="isolarail-photo-reserve">
-        <strong>Real photo reserved</strong>
-        <span>Board, front-panel, or bench bring-up photography goes here when hardware evidence is available.</span>
-      </div>
-    </div>
-  </div>
+  <figure className="docs-manual-figure">
+    <img
+      src="/isolarail-docs-hero.jpg"
+      alt="IsolaRail product scene showing the front panel, the control knob, and four controlled USB-C rails."
+    />
+  </figure>
 </section>
 
-<div className="isolarail-evidence">
-  <a className="isolarail-evidence-item" href="hardware/topology">
-    <strong>Hardware topology</strong>
-    <span>VIN, four USB power modules, I2C topology, and front-panel input.</span>
+<nav className="docs-manual-route" aria-label="Bench route">
+  <a className="docs-manual-stop" href="start/quick-start">
+    <strong>Quick Start</strong>
+    <small>Install the toolchain and confirm the companion path</small>
   </a>
-  <a className="isolarail-evidence-item" href="firmware/boot-runtime">
-    <strong>Firmware startup</strong>
-    <span>Boot init, self-checks, output gating, front panel, and fan path.</span>
+  <a className="docs-manual-stop" href="hardware/topology">
+    <strong>Hardware Topology</strong>
+    <small>Lock the VIN, sideband, telemetry, and panel model first</small>
   </a>
-  <a className="isolarail-evidence-item" href="dashboard/front-panel">
-    <strong>160x50 Dashboard</strong>
-    <span>Four-column status, power bars, fault states, and display assets.</span>
+  <a className="docs-manual-stop" href="firmware/boot-runtime">
+    <strong>Firmware Runtime</strong>
+    <small>Then read boot, self-check, gating, and alerts</small>
   </a>
-</div>
+  <a className="docs-manual-stop" href="control-plane/interfaces">
+    <strong>Control Plane and Specs</strong>
+    <small>Finish with interface boundaries and long-lived specs</small>
+  </a>
+</nav>
 
-<h2 className="isolarail-section-heading">Read by topic</h2>
+<a className="docs-manual-proof" href="dashboard/front-panel">
+  <div className="docs-manual-proof-copy">
+    <h2>Four dashboard columns must map to four physical ports.</h2>
+    <p>Use the dashboard page for V/I/W layout, state priority, string budget, and refresh rules.</p>
+  </div>
+  <figure className="docs-manual-proof-figure">
+    <img decoding="async" loading="lazy" src="../assets/dashboard_wireframe_160x50_color_bold.svg" alt="Preview of the IsolaRail 160x50 front-panel dashboard." />
+  </figure>
+</a>
 
-<div className="isolarail-doc-grid">
-  <a className="isolarail-doc-card" href="start/quick-start">
-    <h3>Quick Start</h3>
-    <span>Install the toolchain, build firmware and docs, and verify the local companion path.</span>
-  </a>
-  <a className="isolarail-doc-card" href="hardware/topology">
-    <h3>Hardware Topology</h3>
-    <span>Start from VIN, CH335F sideband, EN gating, the two I²C buses, and the front panel.</span>
-  </a>
-  <a className="isolarail-doc-card" href="control-plane/interfaces">
-    <h3>Control Plane</h3>
-    <span>Understand `isolarail`, `isolarail-devd`, USB JSONL, Web companion, and device operation boundaries.</span>
-  </a>
-  <a className="isolarail-doc-card" href="reference/specs">
-    <h3>Specs Index</h3>
-    <span>Track long-lived specs, implementation history, and the current contract surface.</span>
-  </a>
-</div>
-
-<div className="isolarail-note">
-  <strong>Current truth:</strong> the site curates and publishes; canonical engineering truth remains in <code>docs/</code> and <code>docs/specs/</code>.
+<div className="docs-manual-source">
+  <p>The site is the public explanation and navigation surface; the repository’s <code>docs/</code> and <code>docs/specs/</code> remain the engineering source of truth.</p>
 </div>

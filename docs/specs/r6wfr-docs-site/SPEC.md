@@ -64,7 +64,7 @@
 
 ## 功能与行为规格
 
-- 首页解释 IsolaRail 的产品定位，并提供快速开始、硬件拓扑和规格索引入口。
+- 首页解释 IsolaRail 的产品定位，直接复用已批准的项目配图与 dashboard 证据，并提供快速开始、硬件拓扑和规格索引入口。
 - 快速开始页给出 ESP Rust 工具链、固件构建、文档站构建和本机控制面基础命令。
 - 硬件拓扑页总结当前 V3 canonical 命名、电源输入、CH335F sideband、两条 I²C 总线、四路遥测与前面板连接。
 - 固件运行页总结 boot init、自检、降级策略、输出门控、前面板输入、蜂鸣器告警和日志风格。
@@ -84,6 +84,8 @@
 - 组合发布目录组装成功，且根路径与 `/docs/` 子路径都存在可用入口文件。
 - 预览中 `/zh/`、`/en/`、quick-start、hardware、firmware、control-plane、dashboard、reference 页面可访问。
 - 桌面和移动端截图证明首页与至少一个内容页无明显布局溢出。
+- 首页 generated HTML 不得出现无效嵌套段落。
+- 首页导航不得为 light / dark 同时请求两份 Logo 图片资源。
 - `cargo +esp check --target xtensa-esp32s3-none-elf` 成功。
 - `cargo +esp build --release --target xtensa-esp32s3-none-elf` 成功。
 
@@ -97,7 +99,7 @@
 
 ### UI / Visual Evidence
 
-预览服务：`http://127.0.0.1:57850/`，端口租约 `isolarail--0dd2c3c0--docs-site / docs-site`。
+最新视觉复测使用租约端口 `51340`（`docs-proof`，scope `isolarail--f3871749`）和同一工作区内的受控静态构建产物。
 
 验证覆盖：
 
@@ -110,7 +112,7 @@
 - `/zh/dashboard/front-panel`、`/en/dashboard/front-panel`
 - `/zh/reference/specs`、`/en/reference/specs`
 
-结果：全部返回 200；无 failed request；无 console warning/error；检查视口无横向溢出；旧的按用户分流标题未出现在页面正文中。
+结果：全部返回 200；无 failed request；无 console warning/error；根路径保持语言 switchboard，`/zh/` 首页保持产品图主导的 manual front door，且移动端 first fold 已先进入批准过的产品图，再落到标题与入口动作；中文移动端首屏标题不再被 `ch` 宽度切碎，正文无横向溢出；首页 HTML 无嵌套 `<p>`；导航不再预加载或请求 light / dark 双份 Logo 图片；首页与 route/meta 微标签已从过量 uppercase 收口回更平静的阅读层；蜂鸣器音效预览页的 CTA、筛选控件与状态条目已统一为 44px 触控基线和硬边模块语法。
 
 桌面首页：
 
@@ -124,9 +126,9 @@
 
 ![Docs site control plane desktop](assets/docs-site-control-plane-desktop.png)
 
-中文页语言稳定导航：
+语言入口页：
 
-![Docs site locale-stable Chinese nav](assets/docs-site-locale-nav-zh.png)
+![Docs site language switchboard](assets/docs-site-locale-nav-zh.png)
 
 蜂鸣器音效预览页：
 
@@ -148,5 +150,6 @@
 ## 风险 / 开放问题 / 假设
 
 - `docs-site/docs/public/CNAME` 仅作为 GitHub Pages 热备的 artifact-root 映射来源；正式入口域名绑定与切流由 EdgeOne 控制台负责。
-- 没有真实设备照片，首页只保留照片位，不生成替代渲染图。
+- 首页可以复用已批准的项目配图和 dashboard 预览，但不得伪造不存在的硬件实拍照片或捏造新的产品形体。
 - Rspress i18n 和 route behavior 以本地 build/preview 验证为准。
+- 亮色验收使用基于同一份构建产物的临时静态副本回放，以验证导航内联 lockup 在 light theme 下仍保持正确的墨色与信号色角色。

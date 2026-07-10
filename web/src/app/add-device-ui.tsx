@@ -3,10 +3,13 @@ import type {
   AddDeviceInput,
   AddDeviceValidationResult,
 } from "../domain/devices";
-import { AddDeviceDialog } from "../ui/dialogs/AddDeviceDialog";
+import {
+  AddDeviceDialog,
+  type AddDeviceMethod,
+} from "../ui/dialogs/AddDeviceDialog";
 
 type AddDeviceUiContextValue = {
-  openAddDevice: () => void;
+  openAddDevice: (initialMethod?: AddDeviceMethod) => void;
 };
 
 const AddDeviceUiContext = createContext<AddDeviceUiContextValue | null>(null);
@@ -27,10 +30,16 @@ export function AddDeviceUiProvider({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [initialMethod, setInitialMethod] = useState<
+    AddDeviceMethod | undefined
+  >(undefined);
 
   const value = useMemo<AddDeviceUiContextValue>(
     () => ({
-      openAddDevice: () => setOpen(true),
+      openAddDevice: (nextInitialMethod) => {
+        setInitialMethod(nextInitialMethod);
+        setOpen(true);
+      },
     }),
     [],
   );
@@ -40,6 +49,7 @@ export function AddDeviceUiProvider({
       {children}
       <AddDeviceDialog
         open={open}
+        initialMethod={initialMethod}
         existingDeviceIds={existingDeviceIds}
         existingDeviceBaseUrls={existingDeviceBaseUrls}
         existingDeviceNamesById={existingDeviceNamesById}

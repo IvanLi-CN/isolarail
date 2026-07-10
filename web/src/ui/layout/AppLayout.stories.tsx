@@ -68,7 +68,7 @@ export const Default: Story = {
       <div className="flex flex-col gap-5">
         <div className="iso-panel px-5 py-5 sm:px-6">
           <div className="iso-kicker">story surface</div>
-          <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.05em]">
+          <div className="mt-2 text-[30px] font-black leading-[0.94] tracking-[-0.03em]">
             App layout shell
           </div>
           <div className="mt-3 text-[14px] font-medium leading-[1.6] text-[var(--muted)]">

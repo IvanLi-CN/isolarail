@@ -4,7 +4,7 @@
 
 - Status: 部分完成（3/4）
 - Created: 2026-06-09
-- Last: 2026-06-29
+- Last: 2026-07-10
 
 ## 背景 / 问题陈述
 
@@ -292,13 +292,21 @@
 
 ## Visual Evidence
 
-- source_type: `storybook_canvas`
-  story_id_or_title: `Dialogs/AddDeviceDialog/LongList`
+- source_type: `live_preview`
+  route: `/`
   scenario: `add device desktop discovery`
-  evidence_note: 验证 `Add device` 桌面态同时展示三通道入口、auto discovery、advanced IP scan 与当前 companion 限制说明。
+  evidence_note: 验证最新实际页面中的 `Add device` 桌面态同时展示 connection method 分组、auto discovery、advanced IP scan 与当前 companion 限制说明；connection method 已回到真实 radio group，且对聚焦中的 dialog shell 发送 Space 不会再误关闭模态。
   submission_gate: `approved`
   PR: include
-  ![Add device desktop discovery](./assets/add-device-desktop-storybook.png)
+  ![Add device desktop discovery](./assets/add-device-desktop-proof.png)
+
+- source_type: `live_preview`
+  route: `/`
+  scenario: `first-run dashboard empty desktop`
+  evidence_note: 验证实际首进页已从三张同构说明卡重构为主 CTA + 可直接进入的 start paths 列表；shell 顶部已收成较窄的 identity rail，左侧空白区被可读的 setup facts 填回，不再像双 hero 叠层。
+  submission_gate: `approved`
+  PR: include
+  ![First-run dashboard empty desktop](./assets/dashboard-empty-desktop-proof.png)
 
 - source_type: `storybook_canvas`
   story_id_or_title: `Dialogs/AddDeviceDialog/WebSerialConnectionLog`
@@ -363,3 +371,11 @@
   submission_gate: `approved`
   PR: include
   ![Device Info monitor narrow](./assets/device-info-monitor-narrow.png)
+
+- source_type: `storybook_preview_iframe_crop`
+  story_id_or_title: `Pages/HardwareDebugPage/Mobile`
+  scenario: `hardware debug mobile stacked controls`
+  evidence_note: 验证窄屏下 `Port controls` 与 `Output modules` 已改为纵向卡片结构，不再依赖横向滚动才能检查四路状态。
+  submission_gate: `approved`
+  PR: include
+  ![Hardware debug mobile proof](./assets/hardware-debug-mobile-proof.png)

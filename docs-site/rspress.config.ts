@@ -130,10 +130,6 @@ export default defineConfig({
   title: 'IsolaRail',
   description: 'Bilingual product and engineering documentation for IsolaRail.',
   icon: '/favicon.ico',
-  logo: {
-    light: withBase('isolarail-logo-lockup-light.svg'),
-    dark: withBase('isolarail-logo-lockup-dark.svg'),
-  },
   logoText: 'IsolaRail',
   outDir: 'doc_build',
   globalStyles: path.join(__dirname, 'styles/global.css'),

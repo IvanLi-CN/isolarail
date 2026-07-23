@@ -285,9 +285,16 @@ test("shrinks the current dark layer back into the switch center", async () => {
 });
 
 test("keeps transition overrides until the browser view transition fully finishes", async () => {
+  let cancelCalls = 0;
   let removeCalls = 0;
   const rootAnimation = deferredPromise();
   const viewTransition = deferredPromise();
+  const animationHandle = {
+    cancel: () => {
+      cancelCalls += 1;
+    },
+    finished: rootAnimation.promise,
+  };
 
   const result = toggleAppearanceTheme({
     currentTheme: "light",
@@ -310,9 +317,7 @@ test("keeps transition overrides until the browser view transition fully finishe
           finished: viewTransition.promise,
         };
       },
-      animateRoot: () => ({
-        finished: rootAnimation.promise,
-      }),
+      animateRoot: () => animationHandle,
       appendStyle: () => ({
         remove: () => {
           removeCalls += 1;
@@ -323,9 +328,11 @@ test("keeps transition overrides until the browser view transition fully finishe
 
   rootAnimation.resolve();
   await Promise.resolve();
+  expect(cancelCalls).toBe(0);
   expect(removeCalls).toBe(0);
 
   viewTransition.resolve();
   await result.animationFinished;
+  expect(cancelCalls).toBe(1);
   expect(removeCalls).toBe(1);
 });

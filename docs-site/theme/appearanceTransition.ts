@@ -50,6 +50,7 @@ type AnimationOptions = {
 };
 
 type AnimationHandle = {
+  cancel?: () => void;
   finished: Promise<unknown>;
 };
 
@@ -194,8 +195,9 @@ export function toggleAppearanceTheme(
     ? "::view-transition-new(root)"
     : "::view-transition-old(root)";
 
-  const rootAnimationFinished = transition.ready.then(() =>
-    environment.animateRoot(
+  let rootAnimation: AnimationHandle | undefined;
+  const rootAnimationFinished = transition.ready.then(() => {
+    rootAnimation = environment.animateRoot(
       {
         clipPath: animationClipPath,
       },
@@ -206,8 +208,9 @@ export function toggleAppearanceTheme(
         pseudoElement,
         id: "",
       },
-    ).finished,
-  );
+    );
+    return rootAnimation.finished;
+  });
   const transitionFinished = transition.finished ?? rootAnimationFinished;
   const animationFinished = Promise.allSettled([
     rootAnimationFinished,
@@ -217,6 +220,7 @@ export function toggleAppearanceTheme(
       undefined,
     )
     .finally(() => {
+      rootAnimation?.cancel?.();
       cleanup.remove();
     });
 

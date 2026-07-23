@@ -756,11 +756,36 @@ html.rp-dark .isolarail-audio-console {
 }
 
 .docs-switch-appearance {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
+  color: var(--rp-c-text-2);
   appearance: none;
+}
+
+.docs-switch-appearance:hover {
+  color: var(--rp-c-text-1);
+}
+
+.rp-switch-appearance__icon--sun {
+  display: block;
+}
+
+.rp-switch-appearance__icon--moon,
+html.rp-dark .rp-switch-appearance__icon--sun {
+  display: none;
+}
+
+html.rp-dark .rp-switch-appearance__icon--moon {
+  display: block;
 }
 
 .docs-switch-appearance:focus-visible {

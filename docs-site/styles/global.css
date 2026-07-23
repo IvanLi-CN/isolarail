@@ -754,6 +754,18 @@ html.rp-dark .isolarail-audio-console {
   object-position: center;
 }
 
+.docs-theme-figure-image--dark {
+  display: none;
+}
+
+html.rp-dark .docs-theme-figure-image--light {
+  display: none;
+}
+
+html.rp-dark .docs-theme-figure-image--dark {
+  display: block;
+}
+
 .docs-switchboard-intro {
   grid-area: intro;
 }

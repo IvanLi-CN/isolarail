@@ -1,0 +1,34 @@
+Use case: product-mockup
+Asset type: dark-mode documentation homepage product render refinement
+
+Primary request:
+Refine the current dark IsolaRail render so the black mirror acrylic front panel has NO obvious bright rim, NO white edge, NO silver outline, and NO severe perimeter highlight. The front panel must read as a continuous glossy black mirror-acrylic sheet, but its outer boundary should be defined by subtle black-on-black material depth, not by a bright line.
+
+Scene/backdrop:
+Keep the same dark technical bench, restrained IsolaRail rail traces, and right-side product composition. Keep the product suitable for a documentation homepage hero.
+
+Subject:
+Preserve the same IsolaRail device family, rectangular proportions, front-left round knob, exactly four USB-C ports, screw positions, screen location, and overall camera perspective.
+
+Material direction:
+The enclosure is black anodized or black electroplated aluminum with a quiet satin micro-texture.
+The front panel is mirror-black acrylic: glossy, dark, reflective, and glass-like, but NOT chrome-edged and NOT outlined with white. Reflections may appear as broad soft dark gradients across the panel surface, not as thin bright border strokes.
+
+Lighting:
+Use controlled low-key studio lighting. Avoid grazing white highlights around the front panel perimeter. The acrylic may catch very soft, dim reflections, but the top edge, left edge, right edge, bottom edge, screw holes, screen frame, USB-C cutouts, and ventilation slots must not have strong white/silver edge highlights.
+
+Screen:
+Keep the screen UI in dark theme with four columns visible behind the glossy acrylic window. The screen can be readable, but the surrounding screen frame must be dark and subdued, not outlined in silver.
+
+Hard constraints:
+- No bright white line along any edge of the front panel.
+- No chrome/silver trim around the front panel.
+- No severe specular rim light on the panel perimeter.
+- No bright white rings around USB-C ports, screws, knob, screen, or vent slots.
+- Keep exactly four USB-C ports.
+- Keep one front-left knob.
+- Keep four corner screws.
+- Keep the device believable and premium, not sci-fi.
+
+Avoid:
+white border, silver border, chrome edge, high-gloss white rim, bright outline, glowing perimeter, excessive specular highlights, toy plastic, extra ports, extra knobs, added labels, floating callouts, extra text outside the screen, unrelated branding, impossible geometry.

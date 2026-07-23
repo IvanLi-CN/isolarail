@@ -755,6 +755,19 @@ html.rp-dark .isolarail-audio-console {
   display: none;
 }
 
+.docs-switch-appearance {
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  appearance: none;
+}
+
+.docs-switch-appearance:focus-visible {
+  outline: 2px solid var(--iso-accent);
+  outline-offset: 3px;
+}
+
 html.rp-dark .docs-theme-figure-image--light {
   display: none;
 }

@@ -1,10 +1,40 @@
 export type ThemeMode = "dark" | "light";
 
+const TRANSITION_FREEZE_SELECTORS = [
+  ".rp-nav",
+  ".rp-nav *",
+  ".rp-nav *::before",
+  ".rp-nav *::after",
+  ".docs-button",
+  ".docs-button *",
+  ".docs-button *::before",
+  ".docs-button *::after",
+  ".docs-inline-links a",
+  ".docs-inline-links a::before",
+  ".docs-inline-links a::after",
+  ".docs-switchboard-route",
+  ".docs-switchboard-route *",
+  ".docs-switchboard-route *::before",
+  ".docs-switchboard-route *::after",
+  ".docs-manual-stop",
+  ".docs-manual-stop *",
+  ".docs-manual-stop *::before",
+  ".docs-manual-stop *::after",
+  ".docs-manual-links a",
+  ".docs-manual-links a::before",
+  ".docs-manual-links a::after",
+].join(",\n    ");
+
 export type TriggerBounds = {
   left: number;
   top: number;
   width: number;
   height: number;
+};
+
+export type TriggerPoint = {
+  x: number;
+  y: number;
 };
 
 type AnimationKeyframes = {
@@ -14,6 +44,7 @@ type AnimationKeyframes = {
 type AnimationOptions = {
   duration: number;
   easing: string;
+  fill: "forwards";
   pseudoElement: string;
   id: string;
 };
@@ -23,10 +54,12 @@ type AnimationHandle = {
 };
 
 type ViewTransition = {
+  finished?: Promise<unknown>;
   ready: Promise<unknown>;
 };
 
 export type AppearanceTransitionEnvironment = {
+  devicePixelRatio?: number;
   innerWidth: number;
   innerHeight: number;
   prefersReducedMotion: boolean;
@@ -46,6 +79,7 @@ type ToggleAppearanceThemeOptions = {
   currentTheme: ThemeMode;
   animationEnabled: boolean;
   triggerBounds: TriggerBounds;
+  triggerPoint?: TriggerPoint;
   setTheme: (theme: ThemeMode) => void;
   onToggle?: () => void;
   environment: AppearanceTransitionEnvironment;
@@ -57,11 +91,40 @@ type ToggleAppearanceThemeResult = {
   animationFinished: Promise<void>;
 };
 
-const VIEW_TRANSITION_BLOCK_CSS = `
-  .rspress-doc {
-    view-transition-name: none !important;
-  }
-`;
+export function getViewTransitionBlockCss(revealNewTheme: boolean) {
+  const foregroundLayer = revealNewTheme ? "new" : "old";
+  const backgroundLayer = revealNewTheme ? "old" : "new";
+
+  return `
+    .rspress-doc {
+      view-transition-name: none !important;
+    }
+
+    ${TRANSITION_FREEZE_SELECTORS} {
+      transition: none !important;
+    }
+
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      animation: none !important;
+      mix-blend-mode: normal !important;
+    }
+
+    ::view-transition-group(root) {
+      isolation: auto;
+    }
+
+    ::view-transition-${foregroundLayer}(root) {
+      z-index: 9999 !important;
+    }
+
+    ::view-transition-${backgroundLayer}(root) {
+      z-index: 1 !important;
+    }
+  `;
+}
 
 export function getAppearanceAnimationOrigin(triggerBounds: TriggerBounds) {
   return {
@@ -81,6 +144,7 @@ export function toggleAppearanceTheme(
     onToggle,
     setTheme,
     triggerBounds,
+    triggerPoint,
   } = options;
   const nextTheme: ThemeMode = currentTheme === "dark" ? "light" : "dark";
   const canAnimate =
@@ -97,12 +161,21 @@ export function toggleAppearanceTheme(
     };
   }
 
-  const { x, y } = getAppearanceAnimationOrigin(triggerBounds);
+  const { x, y } =
+    triggerPoint ?? getAppearanceAnimationOrigin(triggerBounds);
+  const pixelRatio = environment.devicePixelRatio ?? 1;
+  const animationX = x * pixelRatio;
+  const animationY = y * pixelRatio;
+  const animationWidth = environment.innerWidth * pixelRatio;
+  const animationHeight = environment.innerHeight * pixelRatio;
+  const revealNewTheme = nextTheme === "dark";
   const endRadius = Math.hypot(
-    Math.max(x, environment.innerWidth - x + 200),
-    Math.max(y, environment.innerHeight - y + 200),
+    Math.max(animationX, animationWidth - animationX + 200 * pixelRatio),
+    Math.max(animationY, animationHeight - animationY + 200 * pixelRatio),
   );
-  const cleanup = environment.appendStyle(VIEW_TRANSITION_BLOCK_CSS);
+  const cleanup = environment.appendStyle(
+    getViewTransitionBlockCss(revealNewTheme),
+  );
   const applyTheme = flushSync ?? ((callback: () => void) => callback());
   const transition = environment.startViewTransition(() => {
     applyTheme(() => {
@@ -110,28 +183,42 @@ export function toggleAppearanceTheme(
       onToggle?.();
     });
   });
+  const revealClipPath = [
+    `circle(0px at ${animationX}px ${animationY}px)`,
+    `circle(${endRadius}px at ${animationX}px ${animationY}px)`,
+  ];
+  const animationClipPath = revealNewTheme
+    ? revealClipPath
+    : [...revealClipPath].reverse();
+  const pseudoElement = revealNewTheme
+    ? "::view-transition-new(root)"
+    : "::view-transition-old(root)";
 
-  const animationFinished = transition.ready
+  const rootAnimationFinished = transition.ready.then(() =>
+    environment.animateRoot(
+      {
+        clipPath: animationClipPath,
+      },
+      {
+        duration: 400,
+        easing: "ease-in",
+        fill: "forwards",
+        pseudoElement,
+        id: "",
+      },
+    ).finished,
+  );
+  const transitionFinished = transition.finished ?? rootAnimationFinished;
+  const animationFinished = Promise.allSettled([
+    rootAnimationFinished,
+    transitionFinished,
+  ])
     .then(() =>
-      environment.animateRoot(
-        {
-          clipPath: [
-            `circle(0px at ${x}px ${y}px)`,
-            `circle(${endRadius}px at ${x}px ${y}px)`,
-          ],
-        },
-        {
-          duration: 400,
-          easing: "ease-in",
-          pseudoElement: "::view-transition-new(root)",
-          id: "",
-        },
-      ).finished,
+      undefined,
     )
     .finally(() => {
       cleanup.remove();
-    })
-    .then(() => undefined);
+    });
 
   return {
     nextTheme,

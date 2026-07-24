@@ -99,6 +99,20 @@
 
 ### UI / Visual Evidence
 
+主题切换验证使用当前 worktree 的受控 docs-site 预览。主题开关以实际点击点为动画原点；亮色与暗色产品图按主题互斥显示，动画完成后不保留临时样式或残余动画层。
+
+PR: include
+
+亮色首页：
+
+![Docs site theme light](assets/docs-site-theme-light.png)
+
+PR: include
+
+暗色首页：
+
+![Docs site theme dark](assets/docs-site-theme-dark.png)
+
 最新视觉复测使用租约端口 `51340`（`docs-proof`，scope `isolarail--f3871749`）和同一工作区内的受控静态构建产物。
 
 验证覆盖：

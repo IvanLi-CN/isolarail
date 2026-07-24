@@ -94,6 +94,13 @@ const enSidebar = [
 export default defineConfig({
   root: 'docs',
   base: normalizedBase,
+  builderConfig: {
+    resolve: {
+      alias: {
+        '@rspress/core/theme': path.join(__dirname, 'theme/index.tsx'),
+      },
+    },
+  },
   lang: 'x-default',
   locales: [
     {

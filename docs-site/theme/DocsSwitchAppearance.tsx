@@ -1,5 +1,6 @@
 import { ThemeContext, useLang, useSite } from "@rspress/core/runtime";
-import { IconMoon, IconSun, SvgWrapper } from "@rspress/core/theme";
+import { IconMoon, IconSun, SvgWrapper } from "@rspress/core/theme-original";
+import type { MouseEvent } from "react";
 import { useContext, useRef } from "react";
 import { flushSync } from "react-dom";
 
@@ -11,7 +12,7 @@ export function SwitchAppearance({ onClick }: { onClick?: () => void }) {
   const lang = useLang();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-  const handleClick = () => {
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     const trigger = buttonRef.current;
     const nextTheme = theme === "dark" ? "light" : "dark";
 
@@ -25,12 +26,20 @@ export function SwitchAppearance({ onClick }: { onClick?: () => void }) {
       currentTheme: theme === "dark" ? "dark" : "light",
       animationEnabled: Boolean(site?.themeConfig?.enableAppearanceAnimation),
       triggerBounds: trigger.getBoundingClientRect(),
+      triggerPoint:
+        event.detail === 0 && event.clientX === 0 && event.clientY === 0
+          ? undefined
+          : {
+              x: event.clientX,
+              y: event.clientY,
+            },
       setTheme,
       onToggle: onClick,
       flushSync,
       environment: {
         innerWidth: window.innerWidth,
         innerHeight: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio,
         prefersReducedMotion: window.matchMedia(
           "(prefers-reduced-motion: reduce)",
         ).matches,

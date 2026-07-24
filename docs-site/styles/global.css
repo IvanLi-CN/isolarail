@@ -793,6 +793,10 @@ html.rp-dark .rp-switch-appearance__icon--moon {
   outline-offset: 3px;
 }
 
+html:not(.rp-dark) .docs-theme-figure-image--dark {
+  display: none;
+}
+
 html.rp-dark .docs-theme-figure-image--light {
   display: none;
 }

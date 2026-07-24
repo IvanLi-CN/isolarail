@@ -19,3 +19,14 @@ test("docs theme switch keeps a single active icon and a 24px centered hit area"
   );
   expect(css).toContain("html.rp-dark .rp-switch-appearance__icon--moon");
 });
+
+test("docs homepage hero keeps only one theme image active per theme", () => {
+  const css = readFileSync(
+    new URL("../styles/global.css", import.meta.url),
+    "utf8",
+  );
+
+  expect(css).toContain("html:not(.rp-dark) .docs-theme-figure-image--dark");
+  expect(css).toContain("html.rp-dark .docs-theme-figure-image--light");
+  expect(css).toContain("html.rp-dark .docs-theme-figure-image--dark");
+});

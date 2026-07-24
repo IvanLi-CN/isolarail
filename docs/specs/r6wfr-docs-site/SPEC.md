@@ -105,13 +105,13 @@ PR: include
 
 亮色首页：
 
-![Docs site theme light](assets/docs-site-theme-light.png)
+![Docs site theme light](./assets/docs-site-theme-light.png)
 
 PR: include
 
 暗色首页：
 
-![Docs site theme dark](assets/docs-site-theme-dark.png)
+![Docs site theme dark](./assets/docs-site-theme-dark.png)
 
 最新视觉复测使用租约端口 `51340`（`docs-proof`，scope `isolarail--f3871749`）和同一工作区内的受控静态构建产物。
 
@@ -130,29 +130,29 @@ PR: include
 
 桌面首页：
 
-![Docs site home desktop](assets/docs-site-home-desktop.png)
+![Docs site home desktop](./assets/docs-site-home-desktop.png)
 
 移动首页：
 
-![Docs site home mobile](assets/docs-site-home-mobile.png)
+![Docs site home mobile](./assets/docs-site-home-mobile.png)
 
 控制面内容页：
 
-![Docs site control plane desktop](assets/docs-site-control-plane-desktop.png)
+![Docs site control plane desktop](./assets/docs-site-control-plane-desktop.png)
 
 语言入口页：
 
-![Docs site language switchboard](assets/docs-site-locale-nav-zh.png)
+![Docs site language switchboard](./assets/docs-site-locale-nav-zh.png)
 
 蜂鸣器音效预览页：
 
-![Docs site buzzer audio preview](assets/docs-site-buzzer-audio-preview-en.png)
+![Docs site buzzer audio preview](./assets/docs-site-buzzer-audio-preview-en.png)
 
 蜂鸣器音效预览响应式回归：
 
-![Docs site buzzer audio preview responsive 900px](assets/docs-site-buzzer-audio-preview-responsive-900.png)
+![Docs site buzzer audio preview responsive 900px](./assets/docs-site-buzzer-audio-preview-responsive-900.png)
 
-![Docs site buzzer audio preview responsive mobile](assets/docs-site-buzzer-audio-preview-responsive-mobile.png)
+![Docs site buzzer audio preview responsive mobile](./assets/docs-site-buzzer-audio-preview-responsive-mobile.png)
 
 ## 文档更新
 

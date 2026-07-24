@@ -32,6 +32,7 @@ Thumbs.db
 node_modules/
 **/node_modules/
 .impeccable/
+.codex-artifacts/
 docs/assets/*.ppm
 /tools/buzzer_audio_preview/out/
 docs-site/doc_build/

@@ -97,7 +97,7 @@
 - ESP32-S3 firmware check and release build.
 - GitHub Pages 与 EdgeOne 使用同一份组合静态产物。
 
-### UI / Visual Evidence
+## Visual Evidence
 
 主题切换验证使用当前 worktree 的受控 docs-site 预览。主题开关以实际点击点的 CSS 像素坐标为动画原点；亮色与暗色产品图按主题互斥显示，动画完成后不保留临时样式或残余动画层。
 

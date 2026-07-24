@@ -115,7 +115,7 @@ test("uses the click position as the appearance animation origin when provided",
   expect(animatedKeyframes?.clipPath).not.toContain("circle(0px at 112px 52px)");
 });
 
-test("scales the appearance animation origin for high-density displays", async () => {
+test("keeps appearance animation coordinates in CSS pixels on high-density displays", async () => {
   let animatedKeyframes:
     | {
         clipPath?: string[];
@@ -154,11 +154,12 @@ test("scales the appearance animation origin for high-density displays", async (
   await result.animationFinished;
 
   expect(animatedKeyframes?.clipPath?.[0]).toEqual(
-    expect.stringContaining(" at 224px 104px)"),
+    expect.stringContaining(" at 112px 52px)"),
   );
   expect(animatedKeyframes?.clipPath?.[1]).toEqual(
-    expect.stringContaining(" at 224px 104px)"),
+    expect.stringContaining(" at 112px 52px)"),
   );
+  expect(animatedKeyframes?.clipPath?.[0]).not.toContain("224px 104px");
 });
 
 test("raises the revealed layer above the background layer", () => {

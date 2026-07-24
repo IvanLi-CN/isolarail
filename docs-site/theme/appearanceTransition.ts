@@ -164,15 +164,14 @@ export function toggleAppearanceTheme(
 
   const { x, y } =
     triggerPoint ?? getAppearanceAnimationOrigin(triggerBounds);
-  const pixelRatio = environment.devicePixelRatio ?? 1;
-  const animationX = x * pixelRatio;
-  const animationY = y * pixelRatio;
-  const animationWidth = environment.innerWidth * pixelRatio;
-  const animationHeight = environment.innerHeight * pixelRatio;
+  const animationX = x;
+  const animationY = y;
+  const animationWidth = environment.innerWidth;
+  const animationHeight = environment.innerHeight;
   const revealNewTheme = nextTheme === "dark";
   const endRadius = Math.hypot(
-    Math.max(animationX, animationWidth - animationX + 200 * pixelRatio),
-    Math.max(animationY, animationHeight - animationY + 200 * pixelRatio),
+    Math.max(animationX, animationWidth - animationX + 200),
+    Math.max(animationY, animationHeight - animationY + 200),
   );
   const cleanup = environment.appendStyle(
     getViewTransitionBlockCss(revealNewTheme),

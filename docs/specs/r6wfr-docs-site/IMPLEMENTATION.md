@@ -6,7 +6,7 @@
 
 本轮 docs-site 收口继续聚焦首屏可信度：中文首页 hero 标题的移动端断裂被修正，route/meta 微标签从过量 uppercase 收回到更稳的阅读语气；同时把移动端首屏顺序改回“先产品图、后标题和入口动作”，继续沿用已批准的产品配图与 dashboard proof 保持 same-project 家族感。
 
-主题切换通过本地 theme entry 接管，内部基础组件从 `@rspress/core/theme-original` 引用以避免 alias 递归。切换动画以真实点击点或开关中心为原点；结束后主动清理 root animation，防止后续轮次复用残留的 `forwards` 填充状态。首页亮色与暗色产品图由 CSS 按当前主题互斥显示。
+主题切换通过本地 theme entry 接管，内部基础组件从 `@rspress/core/theme-original` 引用以避免 alias 递归。切换动画以真实点击点或开关中心的 CSS 像素坐标为原点，不受设备像素比影响；结束后主动清理 root animation，防止后续轮次复用残留的 `forwards` 填充状态。首页亮色与暗色产品图由 CSS 按当前主题互斥显示。
 
 ## Coverage
 

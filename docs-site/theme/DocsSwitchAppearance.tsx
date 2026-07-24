@@ -39,7 +39,6 @@ export function SwitchAppearance({ onClick }: { onClick?: () => void }) {
       environment: {
         innerWidth: window.innerWidth,
         innerHeight: window.innerHeight,
-        devicePixelRatio: window.devicePixelRatio,
         prefersReducedMotion: window.matchMedia(
           "(prefers-reduced-motion: reduce)",
         ).matches,

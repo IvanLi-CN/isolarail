@@ -23,6 +23,7 @@
 - 移动端 `/zh/` / `/en/` 首页进一步把产品图提回 first fold，在首屏先交代硬件实体，再进入标题、CTA 和 route band，避免 manual front door 退化成纯文本前言。
 - 主题切换动画从“只完成一次视觉变化”收敛为完整生命周期管理：动画原点跟随真实开关点击，亮暗方向使用对应的揭示与收拢路径，结束后取消 root animation，避免下一次切换被残留 `forwards` 填充状态污染。
 - 文档首页产品图按主题互斥显示；本地 theme entry 通过 `theme-original` 使用 Rspress 基础组件，避免配置 alias 递归回到自定义主题模块。
+- 主题动画坐标统一使用 CSS 像素，确保 Retina 或缩放显示中动画原点仍与实际主题开关重合。
 
 ## References
 

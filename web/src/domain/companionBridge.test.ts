@@ -59,7 +59,7 @@ describe("resolveAgentBaseUrl", () => {
 });
 
 describe("companionBootstrapUrls", () => {
-  test("uses only same-origin bootstrap when no explicit origins are configured", () => {
+  test("uses same-origin bootstrap when no explicit origins are configured", () => {
     expect(companionBootstrapUrls()).toEqual(["/api/v1/bootstrap"]);
   });
 

@@ -53,11 +53,13 @@ function RootLayout() {
     >
       <AppLayout
         sidebar={
-          <DeviceListPanel
-            devices={devices}
-            selectedDeviceId={deviceId}
-            onSelect={(id) => navigate(`/devices/${id}`)}
-          />
+          devices.length > 0 ? (
+            <DeviceListPanel
+              devices={devices}
+              selectedDeviceId={deviceId}
+              onSelect={(id) => navigate(`/devices/${id}`)}
+            />
+          ) : undefined
         }
       >
         <Outlet />

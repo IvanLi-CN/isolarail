@@ -3,6 +3,7 @@
 ## 当前状态
 
 - 控制面对齐已在当前 `HEAD` 收口到本地 `PR-ready`：固件 Wi-Fi runtime、Local USB / LAN profile coalescing、Web canonical route、Dashboard / Settings / Info / Add device 视觉证据、Storybook 与 current-truth 文档已重新按同一轮验证与 spec 证据对齐。
+- 最新一轮 UI 审查整改继续收口了最明显的 owner-facing 缺陷：app shell 顶部已从大号双 hero 收回窄 identity rail，`Add device` 的 connection method 从伪 Tabs 语义改回真实 radio group，且对聚焦的 dialog shell 发送 Space 不再误关闭模态；首次进入态从三张同构说明卡改为主 CTA + start paths 列表并补入 setup facts，`Hardware Debug` 的 `Port controls` / `Output modules` 在窄屏下改为纵向堆叠卡片，并补回对应 visual evidence。
 - 新建规格并冻结 `isolarail` 命名空间、`port1..port4` 端口模型、当前 V3 硬件基线命名与 `replug=power-cycle` 语义。
 - 规格已补齐仓内一方软件包清单：root firmware `isolarail`、repo JS tooling `isolarail-dev-tools`、frontend package `web`、companion package/binaries、`gc9d01` 与 `tools/` 下的本地预览/资源转换 crate。
 - 规格已补上 manifest coverage audit：当前仓内全部 `Cargo.toml` / `package.json` 都已被 `Software Package Matrix` 明确覆盖，`tools/firmware-catalog/` 被记录为 script-only 目录而非独立 package。

@@ -46,7 +46,7 @@ import {
   usbInfoMatchesHttpInfo,
 } from "./AddDeviceDialog.helpers";
 
-type AddDeviceMethod = "wifi" | "web_serial" | "local_usb";
+export type AddDeviceMethod = "wifi" | "web_serial" | "local_usb";
 
 export type AddDeviceDialogProps = {
   open: boolean;
@@ -178,9 +178,20 @@ export function AddDeviceDialog({
     if (!open) {
       return;
     }
+    let cancelled = false;
+
+    const clearAgentPoll = () => {
+      if (agentPollRef.current) {
+        window.clearInterval(agentPollRef.current);
+        agentPollRef.current = null;
+      }
+    };
 
     void (async () => {
       const agent = await tryBootstrapCompanionBridge();
+      if (cancelled) {
+        return;
+      }
       agentRef.current = agent;
       if (!agent) {
         dispatch({ type: "reset", status: "unavailable" });
@@ -193,13 +204,13 @@ export function AddDeviceDialog({
         body: JSON.stringify({}),
       });
 
-      if (agentPollRef.current) {
-        window.clearInterval(agentPollRef.current);
-        agentPollRef.current = null;
-      }
+      clearAgentPoll();
 
       agentPollRef.current = window.setInterval(() => {
         void (async () => {
+          if (cancelled) {
+            return;
+          }
           const current = agentRef.current;
           if (!current) {
             return;
@@ -353,6 +364,11 @@ export function AddDeviceDialog({
         })();
       }, 1000);
     })();
+
+    return () => {
+      cancelled = true;
+      clearAgentPoll();
+    };
   }, [open]);
 
   useEffect(() => {
@@ -780,17 +796,6 @@ export function AddDeviceDialog({
     usbRunIdRef.current === runId &&
     methodRef.current === runMethod;
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
   const methodOptions: Array<{
     id: AddDeviceMethod;
     title: string;
@@ -816,65 +821,68 @@ export function AddDeviceDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="modal"
-      aria-label="Add device"
+      className="iso-dialog-shell"
+      aria-describedby="add-device-description"
+      aria-labelledby="add-device-title"
       data-testid="add-device-dialog"
       onCancel={(e) => {
         e.preventDefault();
         onClose();
       }}
-      onClick={(e) => {
+      onMouseDown={(e) => {
         if (e.target === dialogRef.current) {
           onClose();
         }
       }}
-      onKeyDown={(e) => {
-        if (e.target !== dialogRef.current) {
-          return;
-        }
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClose();
-        }
-      }}
     >
-      <div className="modal-box iso-modal flex max-h-[calc(100vh-32px)] w-[1040px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--panel)] px-8 pb-7 pt-6">
-        <div className="text-[24px] font-bold">Add device</div>
-        <div className="mt-2 text-[14px] font-medium text-[var(--muted)]">
+      <div className="iso-dialog-frame iso-modal flex max-h-[calc(100vh-32px)] w-[1040px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--panel)] px-8 pb-7 pt-6">
+        <div className="text-[24px] font-bold" id="add-device-title">
+          Add device
+        </div>
+        <div
+          className="mt-2 text-[14px] font-medium text-[var(--muted)]"
+          id="add-device-description"
+        >
           Store locally; used for Dashboard and device pages.
         </div>
 
-        <div
-          className="mt-6 grid grid-cols-1 gap-3 min-[760px]:grid-cols-3"
-          role="tablist"
-          aria-label="Connection method"
-        >
-          {methodOptions.map((option) => {
-            const selected = method === option.id;
-            return (
-              <button
-                key={option.id}
-                className={[
-                  "min-h-[86px] rounded-[14px] border px-4 py-3 text-left transition-colors",
-                  selected
-                    ? "border-[var(--primary)] bg-[var(--panel)] shadow-[inset_0_0_0_1px_var(--primary)]"
-                    : "border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--primary)]",
-                ].join(" ")}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => selectMethod(option.id)}
-              >
-                <div className="text-[14px] font-bold text-[var(--text)]">
-                  {option.title}
-                </div>
-                <div className="mt-2 text-[12px] font-semibold leading-5 text-[var(--muted)]">
-                  {option.description}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <fieldset className="mt-6">
+          <legend className="text-[13px] font-semibold text-[var(--muted)]">
+            Connection method
+          </legend>
+          <div className="mt-3 grid grid-cols-1 gap-3 min-[760px]:grid-cols-3">
+            {methodOptions.map((option) => {
+              const selected = method === option.id;
+              return (
+                <label className="block cursor-pointer" key={option.id}>
+                  <input
+                    checked={selected}
+                    className="peer sr-only"
+                    name="add-device-method"
+                    type="radio"
+                    onChange={() => selectMethod(option.id)}
+                  />
+                  <span
+                    className={[
+                      "block min-h-[86px] rounded-[14px] border px-4 py-3 text-left transition-colors",
+                      "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] peer-focus-visible:outline-offset-2",
+                      selected
+                        ? "border-[var(--primary)] bg-[var(--panel)] shadow-[inset_0_0_0_1px_var(--primary)]"
+                        : "border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--primary)]",
+                    ].join(" ")}
+                  >
+                    <div className="text-[14px] font-bold text-[var(--text)]">
+                      {option.title}
+                    </div>
+                    <div className="mt-2 text-[12px] font-semibold leading-5 text-[var(--muted)]">
+                      {option.description}
+                    </div>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6">
           <div className="min-h-0 min-w-0 flex-1">
@@ -1117,7 +1125,7 @@ export function AddDeviceDialog({
                 {method === "web_serial" ? (
                   <div className="mt-8 grid gap-3">
                     <button
-                      className="btn h-12 justify-center"
+                      className="iso-button iso-button--primary h-12 justify-center"
                       type="button"
                       disabled={usbBusy || !isWebSerialSupported()}
                       onClick={() => void connectByWebSerial()}
@@ -1132,7 +1140,11 @@ export function AddDeviceDialog({
         </div>
 
         <div className="mt-6 flex items-center justify-end">
-          <button className="btn" type="button" onClick={onClose}>
+          <button
+            className="iso-button iso-button--ghost"
+            type="button"
+            onClick={onClose}
+          >
             Cancel
           </button>
         </div>

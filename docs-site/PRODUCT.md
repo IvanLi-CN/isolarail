@@ -6,7 +6,7 @@ brand
 
 ## Readers
 
-IsolaRail serves three adjacent reading contexts:
+IsolaRail docs-site serves three adjacent reading contexts:
 
 - Bench bring-up: toolchain, firmware build, flashing safety, and first hardware checks.
 - Engineering orientation: ESP32-S3 control plane, power sequencing, display behavior, and verification gates.

@@ -48,27 +48,52 @@ export function DeviceListPanel({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col px-6 py-6"
+      className="flex h-full min-h-0 flex-col px-4 py-4"
       data-testid="device-list"
     >
-      <div className="ml-2 flex items-center justify-between">
-        <h2 className="text-[16px] font-bold">Devices</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold tracking-[0.04em] text-[var(--primary)]">
+            Claimed benches
+          </div>
+          <h2 className="mt-2 text-[24px] font-black leading-[0.96] tracking-[-0.025em]">
+            Devices
+          </h2>
+          <div className="mt-2 text-[13px] font-medium leading-[1.55] text-[var(--muted)]">
+            Choose a route, then inspect rails and measured power state.
+          </div>
+        </div>
         <button
-          className="flex h-9 items-center justify-center rounded-[10px] bg-[var(--primary)] px-3 text-[12px] font-bold text-[var(--primary-text)]"
+          className="iso-button iso-button--primary shrink-0"
           type="button"
-          onClick={openAddDevice}
+          onClick={() => openAddDevice()}
         >
-          + Add
+          Add Device
         </button>
       </div>
 
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[12px] font-semibold text-[var(--muted)]">
+        <span>Route list</span>
+        <span>USB / serial / Wi-Fi</span>
+        <span>{devices.length} saved</span>
+      </div>
+
       {devices.length === 0 ? (
-        <div className="mt-4 text-[12px] font-semibold text-[var(--muted)]">
-          No devices yet.
+        <div className="iso-panel mt-4 px-4 py-4">
+          <div className="text-[12px] font-semibold text-[var(--muted)]">
+            Empty bench
+          </div>
+          <div className="mt-2 text-[14px] font-semibold text-[var(--text)]">
+            No devices claimed yet.
+          </div>
+          <div className="mt-2 text-[13px] font-medium leading-[1.55] text-[var(--muted)]">
+            Add a device to start route selection, telemetry, and per-port
+            control.
+          </div>
         </div>
       ) : (
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-          <div className="flex flex-col gap-[14px] pr-1">
+          <div className="flex flex-col gap-3 pr-1">
             {devices.map((d) => (
               <DeviceCard
                 key={d.id}

@@ -12,6 +12,13 @@ const demoDevice: StoredDevice = {
 const meta: Meta<typeof DeviceCard> = {
   title: "Cards/DeviceCard",
   component: DeviceCard,
+  decorators: [
+    (Story) => (
+      <div className="max-w-[340px]">
+        <Story />
+      </div>
+    ),
+  ],
   args: {
     device: demoDevice,
     status: "online",

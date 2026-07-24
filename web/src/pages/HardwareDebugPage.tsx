@@ -28,6 +28,7 @@ type LoadState =
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+type PortSnapshot = HardwareSnapshot["ports"][number];
 
 function formatTemp(sensor: SensorProbe): string {
   const milliC = sensor.reading?.temperature_milli_c;
@@ -549,41 +550,54 @@ export function HardwareDebugPage() {
 
           <div className="iso-card rounded-[18px] bg-[var(--panel)] p-5 shadow-[inset_0_0_0_1px_var(--border)]">
             <div className="text-[16px] font-bold">Output modules</div>
-            <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--border)]">
-              <div className="grid grid-cols-[56px_92px_minmax(220px,1fr)_minmax(220px,1fr)] gap-3 border-b border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[11px] font-bold uppercase text-[var(--muted)]">
-                <div>Port</div>
-                <div>State</div>
-                <div>INA226</div>
-                <div>TMP112</div>
-              </div>
-              <div className="divide-y divide-[var(--border)]">
-                {snapshot.ports.map((port) => (
-                  <div
-                    className="grid grid-cols-[56px_92px_minmax(220px,1fr)_minmax(220px,1fr)] gap-3 px-4 py-3 text-[12px] font-semibold"
-                    key={port.index}
-                  >
-                    <div className="font-mono">P{port.index}</div>
-                    <div>
-                      <StatusBadge state={port.state}>{port.state}</StatusBadge>
+            <div className="mt-4 grid gap-3 md:hidden">
+              {snapshot.ports.map((port) => (
+                <MobileOutputModuleCard
+                  key={port.index}
+                  port={port}
+                  onInspect={revealJsonPath}
+                />
+              ))}
+            </div>
+            <div className="mt-4 hidden overflow-x-auto rounded-[14px] border border-[var(--border)] md:block">
+              <div className="min-w-[588px]">
+                <div className="grid grid-cols-[56px_92px_minmax(220px,1fr)_minmax(220px,1fr)] gap-3 border-b border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[11px] font-bold text-[var(--muted)]">
+                  <div>Port</div>
+                  <div>State</div>
+                  <div>INA226</div>
+                  <div>TMP112</div>
+                </div>
+                <div className="divide-y divide-[var(--border)]">
+                  {snapshot.ports.map((port) => (
+                    <div
+                      className="grid grid-cols-[56px_92px_minmax(220px,1fr)_minmax(220px,1fr)] gap-3 px-4 py-3 text-[12px] font-semibold"
+                      key={port.index}
+                    >
+                      <div className="font-mono">P{port.index}</div>
+                      <div>
+                        <StatusBadge state={port.state}>
+                          {port.state}
+                        </StatusBadge>
+                      </div>
+                      <DeviceSensorCell
+                        address={port.sensors.ina226.address}
+                        label="INA"
+                        pathBase={jsonPath(port.index - 1, "ina226", "")}
+                        reading={formatInaReading(port.sensors.ina226)}
+                        sensor={port.sensors.ina226}
+                        onInspect={revealJsonPath}
+                      />
+                      <DeviceSensorCell
+                        address={port.sensors.tmp112.address}
+                        label="TMP"
+                        pathBase={jsonPath(port.index - 1, "tmp112", "")}
+                        reading={formatTemp(port.sensors.tmp112)}
+                        sensor={port.sensors.tmp112}
+                        onInspect={revealJsonPath}
+                      />
                     </div>
-                    <DeviceSensorCell
-                      address={port.sensors.ina226.address}
-                      label="INA"
-                      pathBase={jsonPath(port.index - 1, "ina226", "")}
-                      reading={formatInaReading(port.sensors.ina226)}
-                      sensor={port.sensors.ina226}
-                      onInspect={revealJsonPath}
-                    />
-                    <DeviceSensorCell
-                      address={port.sensors.tmp112.address}
-                      label="TMP"
-                      pathBase={jsonPath(port.index - 1, "tmp112", "")}
-                      reading={formatTemp(port.sensors.tmp112)}
-                      sensor={port.sensors.tmp112}
-                      onInspect={revealJsonPath}
-                    />
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -622,12 +636,14 @@ function DeviceSensorCell({
   return (
     <div className="min-w-0 font-mono text-[11px] leading-5">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <span className="font-bold text-[var(--ink)]">
+        <span className="font-bold text-[var(--text)]">
           {label} {address}
         </span>
         <span className="text-[var(--muted)]">{sensorState(sensor)}</span>
       </div>
-      <div className="truncate text-[var(--ink)]">{reading}</div>
+      <div className="break-words text-[var(--text)] sm:truncate">
+        {reading}
+      </div>
       <div className="mt-1 flex flex-wrap gap-1.5">
         <InspectButton
           label="Registers"
@@ -653,9 +669,7 @@ function PortControlsCard({
   ports: HardwareSnapshot["ports"];
   selectedPath: string;
 }) {
-  const controls: Array<
-    [string, (port: HardwareSnapshot["ports"][number]) => boolean]
-  > = [
+  const controls: Array<[string, (port: PortSnapshot) => boolean]> = [
     ["Manual", (port) => port.control?.manual_enabled ?? port.manual_enabled],
     [
       "PWREN",
@@ -672,58 +686,168 @@ function PortControlsCard({
       <div className="flex items-center justify-between gap-3">
         <div className="text-[16px] font-bold">Port controls</div>
         <button
-          className="rounded-[9px] border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-1 font-mono text-[10px] font-bold text-[var(--muted)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+          className="inline-flex min-h-[44px] items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 font-mono text-[11px] font-bold text-[var(--muted)] hover:border-[var(--primary)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
           type="button"
           onClick={() => onInspect("ports")}
         >
           ports
         </button>
       </div>
-      <div className="mt-4 overflow-hidden rounded-[14px] border border-[var(--border)]">
-        <div className="grid grid-cols-[72px_repeat(4,minmax(72px,1fr))] gap-2 border-b border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[11px] font-bold uppercase text-[var(--muted)]">
-          <div>Gate</div>
-          {ports.map((port) => (
-            <button
-              className="text-left hover:text-[var(--primary)]"
-              key={port.index}
-              type="button"
-              onClick={() => onInspect(`ports.${port.index - 1}.control`)}
-            >
-              P{port.index}
-            </button>
-          ))}
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {controls.map(([label, read]) => (
-            <div
-              className="grid grid-cols-[72px_repeat(4,minmax(72px,1fr))] gap-2 px-4 py-2.5 text-[11px] font-semibold"
-              key={label}
-            >
-              <div className="text-[var(--muted)]">{label}</div>
-              {ports.map((port) => {
-                const path = `ports.${port.index - 1}.control`;
-                return (
-                  <button
-                    className={[
-                      "min-w-0 rounded-[8px] border px-2 py-1 text-left font-mono transition",
-                      selectedPath === path
-                        ? "border-[var(--primary)] text-[var(--primary)]"
-                        : "border-[var(--border)] text-[var(--ink)] hover:border-[var(--primary)] hover:text-[var(--primary)]",
-                    ].join(" ")}
-                    key={port.index}
-                    type="button"
-                    onClick={() => onInspect(path)}
-                    title={displayPath(path)}
-                  >
-                    {String(read(port))}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+      <div className="mt-4 grid gap-3 md:hidden">
+        {ports.map((port) => (
+          <MobilePortControlCard
+            controls={controls}
+            key={port.index}
+            onInspect={onInspect}
+            port={port}
+            selected={selectedPath === `ports.${port.index - 1}.control`}
+          />
+        ))}
+      </div>
+      <div className="mt-4 hidden overflow-x-auto rounded-[14px] border border-[var(--border)] md:block">
+        <div className="min-w-[520px]">
+          <div className="grid grid-cols-[72px_repeat(4,minmax(92px,1fr))] gap-2 border-b border-[var(--border)] bg-[var(--panel-2)] px-4 py-3 text-[11px] font-bold text-[var(--muted)]">
+            <div>Gate</div>
+            {ports.map((port) => (
+              <button
+                className="min-h-[44px] rounded-[10px] px-2 text-left hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
+                key={port.index}
+                type="button"
+                onClick={() => onInspect(`ports.${port.index - 1}.control`)}
+              >
+                P{port.index}
+              </button>
+            ))}
+          </div>
+          <div className="divide-y divide-[var(--border)]">
+            {controls.map(([label, read]) => (
+              <div
+                className="grid grid-cols-[72px_repeat(4,minmax(92px,1fr))] gap-2 px-4 py-2.5 text-[11px] font-semibold"
+                key={label}
+              >
+                <div className="flex min-h-[44px] items-center text-[var(--muted)]">
+                  {label}
+                </div>
+                {ports.map((port) => {
+                  const path = `ports.${port.index - 1}.control`;
+                  return (
+                    <button
+                      className={[
+                        "min-h-[44px] min-w-0 rounded-[10px] border px-3 text-left font-mono text-[11px] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2",
+                        selectedPath === path
+                          ? "border-[var(--primary)] text-[var(--primary)]"
+                          : "border-[var(--border)] text-[var(--text)] hover:border-[var(--primary)] hover:text-[var(--primary)]",
+                      ].join(" ")}
+                      key={port.index}
+                      type="button"
+                      onClick={() => onInspect(path)}
+                      title={displayPath(path)}
+                      aria-label={`Inspect ${displayPath(path)}`}
+                    >
+                      {String(read(port))}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function MobilePortControlCard({
+  controls,
+  onInspect,
+  port,
+  selected,
+}: {
+  controls: Array<[string, (port: PortSnapshot) => boolean]>;
+  onInspect: (path: string) => void;
+  port: PortSnapshot;
+  selected: boolean;
+}) {
+  const path = `ports.${port.index - 1}.control`;
+
+  return (
+    <section
+      className={[
+        "rounded-[14px] border bg-[var(--panel-2)] px-4 py-4",
+        selected ? "border-[var(--primary)]" : "border-[var(--border)]",
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[14px] font-bold">Port {port.index}</div>
+          <div className="mt-1 text-[12px] font-semibold text-[var(--muted)]">
+            Control gating and readiness
+          </div>
+        </div>
+        <button
+          className="iso-button iso-button--ghost min-h-[40px] px-3 text-[11px]"
+          type="button"
+          onClick={() => onInspect(path)}
+          aria-label={`Inspect ${displayPath(path)}`}
+        >
+          Inspect
+        </button>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {controls.map(([label, read]) => (
+          <div
+            className="flex min-h-[44px] items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2"
+            key={label}
+          >
+            <span className="text-[12px] font-semibold text-[var(--muted)]">
+              {label}
+            </span>
+            <span className="font-mono text-[12px] font-semibold text-[var(--text)]">
+              {String(read(port))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MobileOutputModuleCard({
+  onInspect,
+  port,
+}: {
+  onInspect: (path: string) => void;
+  port: PortSnapshot;
+}) {
+  return (
+    <section className="rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[14px] font-bold">Port {port.index}</div>
+        <StatusBadge state={port.state}>{port.state}</StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-3">
+        <div className="rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-3">
+          <DeviceSensorCell
+            address={port.sensors.ina226.address}
+            label="INA226"
+            pathBase={jsonPath(port.index - 1, "ina226", "")}
+            reading={formatInaReading(port.sensors.ina226)}
+            sensor={port.sensors.ina226}
+            onInspect={onInspect}
+          />
+        </div>
+        <div className="rounded-[12px] border border-[var(--border)] bg-[var(--panel)] px-3 py-3">
+          <DeviceSensorCell
+            address={port.sensors.tmp112.address}
+            label="TMP112"
+            pathBase={jsonPath(port.index - 1, "tmp112", "")}
+            reading={formatTemp(port.sensors.tmp112)}
+            sensor={port.sensors.tmp112}
+            onInspect={onInspect}
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -738,10 +862,11 @@ function InspectButton({
 }) {
   return (
     <button
-      className="inline-flex h-6 items-center rounded-[8px] border border-[var(--border)] bg-[var(--panel-2)] px-2 font-mono text-[10px] font-bold text-[var(--muted)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+      className="inline-flex min-h-[44px] items-center rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 font-mono text-[11px] font-bold text-[var(--muted)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
       type="button"
       onClick={() => onInspect(path)}
       title={displayPath(path)}
+      aria-label={`Inspect ${displayPath(path)}`}
     >
       {label}
     </button>
@@ -768,6 +893,10 @@ function JsonInspector({
   const treeRef = useRef<HTMLDivElement>(null);
   const objectPaths = useMemo(() => buildObjectPathMap(value), [value]);
   const matches = useMemo(() => collectMatches(value, query), [value, query]);
+  const expandedPathsKey = useMemo(
+    () => Array.from(expandedPaths).sort().join("|"),
+    [expandedPaths],
+  );
   const activeMatch =
     matches.length > 0 ? matches[matchIndex % matches.length] : "";
   const activePath = activeMatch || selectedPath;
@@ -815,8 +944,16 @@ function JsonInspector({
     if (!root) {
       return;
     }
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const selectionVersion = expandedPathsKey;
+    root.dataset.jsonExpandState = selectionVersion;
 
     const applySelection = () => {
+      if (root.dataset.jsonExpandState !== selectionVersion) {
+        return;
+      }
       annotateJsonTree(root, value);
       root.querySelectorAll("[data-json-selected]").forEach((node) => {
         if (node instanceof HTMLElement) {
@@ -834,7 +971,10 @@ function JsonInspector({
       );
       if (selectedNode) {
         selectedNode.dataset.jsonSelected = "true";
-        selectedNode.scrollIntoView({ block: "center", behavior: "smooth" });
+        selectedNode.scrollIntoView({
+          block: "center",
+          behavior: prefersReducedMotion ? "auto" : "smooth",
+        });
       }
     };
 
@@ -842,10 +982,11 @@ function JsonInspector({
     const frame = requestAnimationFrame(applySelection);
     const timeout = window.setTimeout(applySelection, 80);
     return () => {
+      delete root.dataset.jsonExpandState;
       cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  });
+  }, [activePath, expandedPathsKey, value]);
 
   const revealPath = (path: string) => {
     onExpandedPathsChange(
@@ -874,7 +1015,7 @@ function JsonInspector({
           </div>
         </div>
         <button
-          className="btn btn-outline btn-sm min-h-9 gap-2"
+          className="iso-button iso-button--ghost gap-2"
           type="button"
           onClick={() => void navigator.clipboard?.writeText(jsonText)}
         >
@@ -883,46 +1024,52 @@ function JsonInspector({
         </button>
       </div>
 
-      <div className="mt-4 flex gap-2">
-        <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-semibold text-[var(--muted)] focus-within:border-[var(--primary)]">
-          <Search size={14} />
-          <input
-            className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
-            placeholder="Search path or value"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setMatchIndex(0);
-            }}
-          />
+      <div className="mt-4">
+        <label className="iso-field-label" htmlFor="hardware-json-search">
+          Search JSON explorer
         </label>
-        <button
-          className="btn btn-outline btn-sm min-h-9 px-2"
-          disabled={matches.length === 0}
-          type="button"
-          onClick={() => stepMatch(-1)}
-          title="Previous match"
-        >
-          <SkipBack size={14} />
-        </button>
-        <button
-          className="btn btn-outline btn-sm min-h-9 px-2"
-          disabled={matches.length === 0}
-          type="button"
-          onClick={() => stepMatch(1)}
-          title="Next match"
-        >
-          <SkipForward size={14} />
-        </button>
+        <div className="flex gap-2">
+          <label className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[12px] font-semibold text-[var(--muted)] focus-within:border-[var(--primary)] focus-within:outline focus-within:outline-2 focus-within:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-within:outline-offset-2">
+            <Search size={14} />
+            <input
+              className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-[var(--text)]"
+              id="hardware-json-search"
+              placeholder="Path or value"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setMatchIndex(0);
+              }}
+            />
+          </label>
+          <button
+            aria-label="Previous match"
+            className="iso-button iso-button--ghost px-3"
+            disabled={matches.length === 0}
+            type="button"
+            onClick={() => stepMatch(-1)}
+          >
+            <SkipBack size={14} />
+          </button>
+          <button
+            aria-label="Next match"
+            className="iso-button iso-button--ghost px-3"
+            disabled={matches.length === 0}
+            type="button"
+            onClick={() => stepMatch(1)}
+          >
+            <SkipForward size={14} />
+          </button>
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between font-mono text-[10px] font-bold text-[var(--muted)]">
         <span>{matches.length} matches</span>
         <button
-          className="rounded-[8px] px-2 py-1 hover:bg-[var(--panel-2)] hover:text-[var(--primary)]"
+          className="inline-flex min-h-[44px] items-center rounded-[10px] px-3 hover:bg-[var(--panel-2)] hover:text-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--primary)_72%,var(--trace))] focus-visible:outline-offset-2"
           type="button"
           onClick={() => onExpandedPathsChange(new Set([""]))}
         >
-          collapse all
+          Collapse all
         </button>
       </div>
 
@@ -946,7 +1093,7 @@ function JsonInspector({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
-      <div className="text-[11px] font-bold uppercase text-[var(--muted)]">
+      <div className="text-[11px] font-semibold text-[var(--muted)]">
         {label}
       </div>
       <div className="mt-1 truncate font-mono text-[13px] font-semibold">
@@ -1011,12 +1158,12 @@ function StatusBadge({
 }) {
   const className =
     state === "online"
-      ? "border-emerald-500/40 text-emerald-500"
+      ? "border-[color-mix(in_srgb,var(--success)_28%,var(--border))] bg-[color-mix(in_srgb,var(--success)_10%,var(--panel))] text-[var(--success)]"
       : state === "skipped"
-        ? "border-sky-500/40 text-sky-500"
+        ? "border-[color-mix(in_srgb,var(--trace)_28%,var(--border))] bg-[color-mix(in_srgb,var(--trace)_10%,var(--panel))] text-[var(--trace)]"
         : state === "offline"
-          ? "border-[var(--border)] text-[var(--muted)]"
-          : "border-[var(--warning)] text-[var(--warning)]";
+          ? "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"
+          : "border-[color-mix(in_srgb,var(--warning)_28%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,var(--panel))] text-[var(--warning)]";
 
   return (
     <span

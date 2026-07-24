@@ -13,6 +13,10 @@ const navTitleSource = readFileSync(
   new URL("./DocsNavTitle.tsx", import.meta.url),
   "utf8",
 );
+const figureSource = readFileSync(
+  new URL("./DocsThemeFigure.tsx", import.meta.url),
+  "utf8",
+);
 
 test("rspress routes internal theme imports through the local theme entry", () => {
   expect(configSource).toContain("builderConfig");
@@ -23,4 +27,9 @@ test("rspress routes internal theme imports through the local theme entry", () =
 test("local theme helpers use theme-original exports to avoid alias recursion", () => {
   expect(switchSource).toContain('@rspress/core/theme-original');
   expect(navTitleSource).toContain('@rspress/core/theme-original');
+});
+
+test("product hero assets are imported so Vite prefixes them with DOCS_BASE", () => {
+  expect(figureSource).toContain('import heroLight from "../docs/public/isolarail-docs-hero.jpg"');
+  expect(figureSource).toContain('import heroDark from "../docs/public/isolarail-docs-hero-dark.jpg"');
 });

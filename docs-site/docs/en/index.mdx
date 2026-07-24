@@ -4,6 +4,8 @@ description: Product entry, hardware topology, firmware runtime, and control-pla
 pageType: custom
 ---
 
+import { DocsThemeFigure } from '../../theme/DocsThemeFigure';
+
 <section className="docs-manual">
   <div className="docs-manual-copy">
     <div className="docs-brandline">
@@ -27,18 +29,11 @@ pageType: custom
       <span>public maintenance docs</span>
     </div>
   </div>
-  <figure className="docs-manual-figure">
-    <img
-      className="docs-theme-figure-image docs-theme-figure-image--light"
-      src="/isolarail-docs-hero.jpg"
-      alt="IsolaRail product scene showing the front panel, the control knob, and four controlled USB-C rails."
-    />
-    <img
-      className="docs-theme-figure-image docs-theme-figure-image--dark"
-      src="/isolarail-docs-hero-dark.jpg"
-      alt="IsolaRail dark product scene showing the black front panel, control knob, and four controlled USB-C rails."
-    />
-  </figure>
+  <DocsThemeFigure
+    className="docs-manual-figure"
+    lightAlt="IsolaRail product scene showing the front panel, the control knob, and four controlled USB-C rails."
+    darkAlt="IsolaRail dark product scene showing the black front panel, control knob, and four controlled USB-C rails."
+  />
 </section>
 
 <nav className="docs-manual-route" aria-label="Bench route">

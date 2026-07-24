@@ -4,19 +4,14 @@ description: Choose Chinese or English documentation.
 pageType: custom
 ---
 
+import { DocsThemeFigure } from '../theme/DocsThemeFigure';
+
 <section className="docs-switchboard">
-  <figure className="docs-switchboard-figure">
-    <img
-      className="docs-theme-figure-image docs-theme-figure-image--light"
-      src="/isolarail-docs-hero.jpg"
-      alt="IsolaRail product scene shared by both documentation languages."
-    />
-    <img
-      className="docs-theme-figure-image docs-theme-figure-image--dark"
-      src="/isolarail-docs-hero-dark.jpg"
-      alt="IsolaRail dark product scene shared by both documentation languages."
-    />
-  </figure>
+  <DocsThemeFigure
+    className="docs-switchboard-figure"
+    lightAlt="IsolaRail product scene shared by both documentation languages."
+    darkAlt="IsolaRail dark product scene shared by both documentation languages."
+  />
   <div className="docs-switchboard-intro">
     <div className="docs-brandline">
       <span className="docs-brand-mark" aria-hidden="true"></span>

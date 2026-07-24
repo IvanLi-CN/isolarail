@@ -59,14 +59,8 @@ describe("resolveAgentBaseUrl", () => {
 });
 
 describe("companionBootstrapUrls", () => {
-  test("uses same-origin bootstrap when no explicit origins are configured on a non-loopback host", () => {
-    expect(
-      companionBootstrapUrls("https://app.isolarail.dev/dashboard"),
-    ).toEqual(["/api/v1/bootstrap"]);
-  });
-
-  test("skips implicit bootstrap during loopback-only static preview", () => {
-    expect(companionBootstrapUrls("http://127.0.0.1:51340/")).toEqual([]);
+  test("uses same-origin bootstrap when no explicit origins are configured", () => {
+    expect(companionBootstrapUrls()).toEqual(["/api/v1/bootstrap"]);
   });
 
   test("uses explicitly configured origins in order", () => {

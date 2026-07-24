@@ -33,6 +33,8 @@ node_modules/
 **/node_modules/
 .impeccable/
 .codex-artifacts/
+output/imagegen/
+tmp/imagegen/
 docs/assets/*.ppm
 /tools/buzzer_audio_preview/out/
 docs-site/doc_build/

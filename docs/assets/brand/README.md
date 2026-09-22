@@ -19,6 +19,8 @@ The complete inventory, intended usage, dimensions, file sizes, and media previe
 - `isolarail-app-icon-light.png`: transparent-canvas app icon for light theme.
 - `isolarail-app-icon-dark.png`: transparent-canvas app icon for dark theme.
 - `isolarail-poster.png`: portrait poster image.
+- `isolarail-poster-light.png`: approved 4:5 light-theme poster.
+- `isolarail-poster-dark.png`: approved 4:5 dark-theme poster.
 - `isolarail-github-social-preview.png`: GitHub social preview image.
 - `isolarail-github-social-preview-variant.png`: alternate GitHub social preview image.
 - `isolarail-product-scene-portrait.png`: portrait product scene source for future HTML poster layouts.
@@ -29,6 +31,7 @@ The complete inventory, intended usage, dimensions, file sizes, and media previe
 Use the logo lockup as the primary identity mark on documentation and project pages.
 Use the app icon where a square icon is required.
 Use the light and dark theme assets for runtime favicon, touch icon, manifest icon, and themed UI exports.
+Use the light and dark poster assets for theme-specific portrait campaign materials.
 Use the GitHub social preview image for repository social cards.
 Use the GitHub social preview variant as an alternate social card or campaign preview.
 Use the product scene images as source visuals for generated or HTML-composed poster layouts.

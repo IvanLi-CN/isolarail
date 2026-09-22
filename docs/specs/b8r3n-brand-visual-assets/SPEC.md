@@ -13,7 +13,7 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 
 ### Goals
 
-- 固定 IsolaRail 当前选定的 Logo、App Icon、海报和 GitHub Social preview。
+- 固定 IsolaRail 当前选定的 Logo、App Icon、亮暗主题海报和 GitHub Social preview。
 - GitHub Social preview 必须有一个主图和一个变体，并都保存在项目内。
 - 保留后续 HTML 海报可复用的产品场景素材。
 - 在本 spec 内完整列出所有品牌资产、用途、尺寸、文件大小和预览图。
@@ -51,7 +51,9 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 - `isolarail-logo-lockup-light.png` 和 `isolarail-logo-lockup-dark.png` 是 Logo 的亮色/暗色主题运行时版本。
 - `isolarail-app-icon-light.svg` 和 `isolarail-app-icon-dark.svg` 是从已批准 App Icon 像素坐标还原的 1024 x 1024 SVG 主题源文件。
 - `isolarail-app-icon-light.png` 和 `isolarail-app-icon-dark.png` 是 App Icon 的亮色/暗色主题运行时版本。
-- `isolarail-poster.png` 是当前单张最终海报。
+- `isolarail-poster.png` 是旧版默认海报兼容资产。
+- `isolarail-poster-light.png` 是当前批准的亮色主题 4:5 海报。
+- `isolarail-poster-dark.png` 是当前批准的暗色主题 4:5 海报。
 - `isolarail-github-social-preview.png` 是 GitHub Social preview 主图。
 - `isolarail-github-social-preview-variant.png` 是 GitHub Social preview 变体。
 - 两张 GitHub Social preview 必须保持 2:1 附近画幅，并控制在 GitHub 上传限制内。
@@ -80,7 +82,9 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 | `docs/assets/brand/isolarail-app-icon-dark.svg` | App Icon 暗色 SVG 源 | 1024 x 1024 SVG | 1,018 bytes | dark App Icon 运行时导出源 |
 | `docs/assets/brand/isolarail-app-icon-light.png` | App Icon 亮色主题版 | 1024 x 1024 | 19,552 bytes | favicon、touch icon、manifest icon 源 |
 | `docs/assets/brand/isolarail-app-icon-dark.png` | App Icon 暗色主题版 | 1024 x 1024 | 19,327 bytes | dark favicon、dark manifest icon 源 |
-| `docs/assets/brand/isolarail-poster.png` | 最终海报 | 1024 x 1536 | 2,143,451 bytes | 单张品牌海报 |
+| `docs/assets/brand/isolarail-poster.png` | 旧版默认海报 | 1024 x 1536 | 2,143,451 bytes | 历史引用兼容 |
+| `docs/assets/brand/isolarail-poster-light.png` | 亮色主题海报 | 1122 x 1402 | 1,858,734 bytes | 4:5 亮色品牌海报 |
+| `docs/assets/brand/isolarail-poster-dark.png` | 暗色主题海报 | 1122 x 1402 | 1,749,213 bytes | 4:5 暗色品牌海报 |
 | `docs/assets/brand/isolarail-github-social-preview.png` | GitHub Social preview 主图 | 1774 x 887 | 147,506 bytes | Repository social card 主图 |
 | `docs/assets/brand/isolarail-github-social-preview-variant.png` | GitHub Social preview 变体 | 1774 x 887 | 379,129 bytes | 备用 social card / campaign variant |
 | `docs/assets/brand/isolarail-product-scene-portrait.png` | HTML 海报产品场景素材 | 1024 x 1536 | 2,118,932 bytes | 后续可复制 HTML 海报布局输入 |
@@ -116,7 +120,7 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 
 - GitHub Social preview 主图采用更扁平、正面/轻微俯视的产品表达，优先满足 GitHub 上传体积和远距离可读性。
 - GitHub Social preview 变体采用更写实、斜向产品表达，优先满足 campaign preview 的质感和空间感。
-- 海报是带 Logo、标题层级、产品主视觉和底部信息的最终海报，不是单纯产品场景图。
+- 亮色与暗色海报均是带 Logo、标题层级、产品主视觉和底部信息的 4:5 最终海报，不是单纯产品场景图。
 - 产品场景素材只作为后续 HTML 海报或 social layout 的输入图，不作为最终成品露出。
 - Runtime icon exports must use transparent canvases. The icon body may be a white or dark rounded tile, but the area outside the tile must remain transparent.
 - Runtime App Icon theme exports must be generated from the 1024 x 1024 SVG sources restored from the approved App Icon geometry.
@@ -130,6 +134,7 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 
 - Given 品牌资产被合入仓库，When 阅读 `docs/assets/brand/README.md`，Then 每个文件用途清晰且没有含糊的 social layout source 命名。
 - Given 阅读本 spec，When 查看 `## Visual Evidence`，Then 能直接预览 Logo、已批准的 App Icon 设计源图、海报、GitHub Social preview 主图、变体和产品场景素材。
+- Given 使用主题海报，When 检查 `isolarail-poster-light.png` 或 `isolarail-poster-dark.png`，Then 图像尺寸保持 4:5，且分别符合亮色或暗色产品渲染方向。
 - Given 上传 GitHub Social preview，When 使用 `isolarail-github-social-preview.png`，Then 文件大小低于 GitHub social preview 上传限制。
 - Given 需要替换 social preview，When 使用 `isolarail-github-social-preview-variant.png`，Then 该变体同样低于 GitHub social preview 上传限制。
 - Given 主人检查产品形体，When 查看两张 social preview，Then 产品外壳为常识正确的矩形盒体，不出现明显楔形尾部或不可能透视。
@@ -152,7 +157,7 @@ IsolaRail 需要一组可直接用于 README、GitHub repository social card、�
 - `cargo +esp check`
 - `cargo +esp build --release`
 
-### Visual Evidence
+## Visual Evidence
 
 Logo 主锁定图：
 
@@ -169,6 +174,14 @@ App Icon 设计源图（已批准）：
 最终海报：
 
 ![IsolaRail final poster](../../assets/brand/isolarail-poster.png)
+
+亮色主题海报：
+
+![IsolaRail light poster](../../assets/brand/isolarail-poster-light.png)
+
+暗色主题海报：
+
+![IsolaRail dark poster](../../assets/brand/isolarail-poster-dark.png)
 
 GitHub Social preview 主图：
 

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-品牌视觉资产已形成项目内成品集：Logo、App Icon、最终海报、GitHub Social preview 主图、GitHub Social preview 变体和产品场景素材。
+品牌视觉资产已形成项目内成品集：Logo、App Icon、亮暗主题最终海报、GitHub Social preview 主图、GitHub Social preview 变体和产品场景素材。
 
 ## Coverage
 
@@ -18,6 +18,8 @@
 - `docs/assets/brand/isolarail-app-icon-light.png`: App Icon 亮色主题运行时版本。
 - `docs/assets/brand/isolarail-app-icon-dark.png`: App Icon 暗色主题运行时版本。
 - `docs/assets/brand/isolarail-poster.png`: 当前最终海报。
+- `docs/assets/brand/isolarail-poster-light.png`: 当前批准的亮色主题 4:5 海报。
+- `docs/assets/brand/isolarail-poster-dark.png`: 当前批准的暗色主题 4:5 海报。
 - `docs/assets/brand/isolarail-github-social-preview.png`: GitHub Social preview 主图，低体积、正面产品表达。
 - `docs/assets/brand/isolarail-github-social-preview-variant.png`: GitHub Social preview 变体，写实斜向产品表达。
 - `docs/assets/brand/isolarail-product-scene-portrait.png`: 后续 HTML 海报产品场景素材。
@@ -43,6 +45,7 @@
 - 从 App Icon 和主 GitHub Social preview 派生 docs-site / web 运行时静态资产。
 - Runtime icon 改为透明画布上的圆角 tile，避免 favicon、touch icon 和 manifest icon 出现整块白色画布背景。
 - Logo 与 App Icon 均补齐 light / dark theme runtime exports。
+- 海报补齐亮色与暗色主题的 4:5 最终成品，并分别固定产品外壳与显示界面的主题渲染方向。
 - App Icon runtime exports 改为从 1024 x 1024 SVG 源导出，SVG 几何按已批准 App Icon 的像素坐标还原。
 - Logo 补齐 410 x 226 true SVG 几何版本，使用矩形轨道、矩形隔离符号和文字路径轮廓，不使用 raster 嵌入。
 - 文档站导航不再依赖同时渲染两张主题 Logo 图片，而是以内联向量 lockup 复用同一套几何，在主题切换时只改变颜色角色。
